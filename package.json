@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "build": "tsc",
+    "start:prod": "node build/app.js",
     "start": "npx tsc && nodemon build/app.js",
     "dev": "npx tsc && nodemon build/app.js",
     "test": "node scripts/run-tests.js",

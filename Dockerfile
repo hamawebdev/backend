@@ -61,4 +61,4 @@ ENV DRIZZLE_SCHEMA=src/infra/database/schemas
 EXPOSE 8080
 
 # Run migrations first, then start the server
-CMD ["sh", "-c", "npm start"]
+CMD ["sh", "-c", "npm run start:prod"]
