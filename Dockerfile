@@ -50,22 +50,14 @@ COPY --from=builder /app/build ./build
 # Copy Prisma schema for runtime client generation
 COPY --from=builder /app/prisma ./prisma
 
-# Copy source migrations and config so Drizzle can generate meta
-COPY --from=builder /app/src/infra/database/migrations ./src/infra/database/migrations
-COPY --from=builder /app/src/infra/database/config ./src/infra/database/config
-
 # Copy package.json to install production deps
 COPY --from=builder /app/package*.json ./
 
-# Install production dependencies + drizzle-kit globally
-RUN npm install --omit=dev && npm install -g drizzle-kit
+# Install production dependencies
+RUN npm install --omit=dev
 
 # Generate Prisma client for runtime
 RUN npx prisma generate
-
-# Environment variables for Drizzle
-ENV DRIZZLE_OUT=src/infra/database/migrations
-ENV DRIZZLE_SCHEMA=src/infra/database/schemas
 
 EXPOSE 8080
 
