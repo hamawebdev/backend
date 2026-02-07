@@ -1701,9 +1701,11 @@ let AdminService = class AdminService {
                         data: {
                             title: data.title,
                             description: data.description,
+                            moduleId: data.moduleId,
                             universityId: data.universityId,
                             yearLevel: data.yearLevel,
                             examYear: new Date(data.examYear),
+                            year: data.year,
                             createdById
                         }
                     });

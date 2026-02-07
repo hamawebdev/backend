@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { TransactionClient } from '../../types/prisma.types';
 import { inject, injectable } from 'tsyringe';
 import PrismaService from '../../config/db';
 
@@ -182,7 +183,7 @@ export class PaymentsService {
       const subscriptionId = Number(metadata.subscriptionId);
       const paymentDurationMonths = Number(metadata.paymentDurationMonths) || 1;
 
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: TransactionClient) => {
         // Calculate the actual end date based on payment duration from metadata
         const now = new Date();
         const endDate = new Date(now);

@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { TransactionClient } from "../../../types/prisma.types";
 import { inject, injectable } from "tsyringe";
 import { AppError } from "../../../core/errors/AppError";
 import PrismaService from "../../../config/db";
@@ -152,7 +153,7 @@ export class CodeRedemptionService {
       }
 
       // Start transaction for redemption
-      const result = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx: TransactionClient) => {
         // Create subscriptions for each study pack
         const subscriptions = [];
         const startDate = new Date();

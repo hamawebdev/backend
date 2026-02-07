@@ -19,6 +19,7 @@ import {
   QuizType,
   SubscriptionStatus
 } from "@prisma/client";
+import { TransactionClient } from "../../types/prisma.types";
 import PrismaService from "../../config/db";
 import bcrypt from "bcrypt";
 import { InternalServerError, NotFoundError, BadRequestError } from "../../core/errors/AppError";
@@ -1641,7 +1642,7 @@ export default class AdminService {
       // Validate references before attempting to create
       await this.validateQuizReferences(data, createdById);
 
-      const result = await this.prisma.$transaction(async (tx: any) => {
+      const result = await this.prisma.$transaction(async (tx: TransactionClient) => {
         // Create the quiz
         const quiz = await tx.quiz.create({
           data: {
@@ -1882,15 +1883,17 @@ export default class AdminService {
       // Validate references before attempting to create
       await this.validateExamReferences(data, createdById);
 
-      const result = await this.prisma.$transaction(async (tx: any) => {
+      const result = await this.prisma.$transaction(async (tx: TransactionClient) => {
         // Create the exam
         const exam = await tx.exam.create({
           data: {
             title: data.title,
             description: data.description,
+            moduleId: data.moduleId,
             universityId: data.universityId,
             yearLevel: data.yearLevel,
             examYear: new Date(data.examYear),
+            year: data.year,
             createdById
           }
         });
@@ -3436,7 +3439,7 @@ export default class AdminService {
     }
 
     // Update question and answers in a transaction
-    const question = await this.prisma.$transaction(async (tx) => {
+    const question = await this.prisma.$transaction(async (tx: TransactionClient) => {
       // Update answers if provided
       if (data.questionAnswers) {
         // Delete existing answers
@@ -3552,7 +3555,7 @@ export default class AdminService {
     }
 
     // Create all questions in a transaction
-    const createdQuestions = await this.prisma.$transaction(async (tx) => {
+    const createdQuestions = await this.prisma.$transaction(async (tx: TransactionClient) => {
       const results = [];
 
       for (const q of questions) {
@@ -3687,7 +3690,7 @@ export default class AdminService {
     }
 
     // Create all books in a transaction
-    const createdBooks = await this.prisma.$transaction(async (tx) => {
+    const createdBooks = await this.prisma.$transaction(async (tx: TransactionClient) => {
       const results = [];
 
       for (const book of books) {

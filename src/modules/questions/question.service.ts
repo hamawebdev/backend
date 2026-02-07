@@ -1,4 +1,5 @@
 import { Question, QuestionType, YearLevel, PrismaClient } from "@prisma/client";
+import { TransactionClient } from "../../types/prisma.types";
 import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
 import {
@@ -17,7 +18,7 @@ import { BadRequestError, NotFoundError } from "../../core/errors/AppError";
 
 @injectable()
 export default class QuestionService {
-  constructor(@inject("db") private prismaService: PrismaService) {}
+  constructor(@inject("db") private prismaService: PrismaService) { }
 
   private get prisma(): PrismaClient {
     return this.prismaService.getClient();
@@ -245,7 +246,7 @@ export default class QuestionService {
     }
 
     // Update question explanation and handle images in transaction
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx: TransactionClient) => {
       // Update the question explanation
       const question = await tx.question.update({
         where: { id: questionId },
@@ -346,7 +347,7 @@ export default class QuestionService {
     // If answers provided, we will upsert minimal fields
     const answersUpdate = Array.isArray(update.answers) ? update.answers : [];
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx: TransactionClient) => {
       // Build update data object
       const updateData: any = {
         updatedAt: new Date()
@@ -420,7 +421,7 @@ export default class QuestionService {
       throw new NotFoundError(`Question with ID ${questionId} not found`);
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: TransactionClient) => {
       await tx.explanationImage.deleteMany({
         where: { answer: { questionId } }
       });
