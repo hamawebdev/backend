@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+when add new or update API endpoint : 
+- update postman file 
+- use roleCheck middlware

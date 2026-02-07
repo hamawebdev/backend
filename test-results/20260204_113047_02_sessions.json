@@ -1,0 +1,179 @@
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "data": {
+      "sessions": [
+        {
+          "id": 224,
+          "title": "Basic Anatomy Workout 62",
+          "type": "PRACTICE",
+          "status": "COMPLETED",
+          "score": 0.3333333333333333,
+          "percentage": 8.33,
+          "questionsCount": 4,
+          "answersCount": 2,
+          "startedAt": "2026-02-04T09:57:37.643Z",
+          "completedAt": "2026-02-04T09:57:56.187Z",
+          "createdAt": "2026-02-04T09:57:36.769Z",
+          "quiz": null,
+          "exam": null
+        },
+        {
+          "id": 223,
+          "title": "Basic Anatomy Drill 73 - Retake - Retake",
+          "type": "PRACTICE",
+          "status": "COMPLETED",
+          "score": 0,
+          "percentage": 0,
+          "questionsCount": 3,
+          "answersCount": 2,
+          "startedAt": "2026-02-04T09:50:24.794Z",
+          "completedAt": "2026-02-04T09:50:34.627Z",
+          "createdAt": "2026-02-04T09:50:24.170Z",
+          "quiz": null,
+          "exam": null
+        },
+        {
+          "id": 222,
+          "title": "Basic Anatomy Drill 73 - Retake",
+          "type": "PRACTICE",
+          "status": "COMPLETED",
+          "score": 0,
+          "percentage": 0,
+          "questionsCount": 3,
+          "answersCount": 2,
+          "startedAt": "2026-02-04T09:49:31.702Z",
+          "completedAt": "2026-02-04T09:49:48.089Z",
+          "createdAt": "2026-02-04T09:49:30.736Z",
+          "quiz": null,
+          "exam": null
+        },
+        {
+          "id": 221,
+          "title": "Basic Anatomy Drill 73",
+          "type": "PRACTICE",
+          "status": "COMPLETED",
+          "score": 0,
+          "percentage": 0,
+          "questionsCount": 3,
+          "answersCount": 2,
+          "startedAt": "2026-02-04T09:26:04.242Z",
+          "completedAt": "2026-02-04T09:26:50.608Z",
+          "createdAt": "2026-02-04T09:25:58.409Z",
+          "quiz": null,
+          "exam": null
+        },
+        {
+          "id": 220,
+          "title": "Basic Anatomy Training 98 - Retake",
+          "type": "PRACTICE",
+          "status": "IN_PROGRESS",
+          "score": 0,
+          "percentage": 0,
+          "questionsCount": 3,
+          "answersCount": 0,
+          "startedAt": "2026-02-04T09:11:28.325Z",
+          "completedAt": null,
+          "createdAt": "2026-02-04T09:11:27.236Z",
+          "quiz": null,
+          "exam": null
+        },
+        {
+          "id": 219,
+          "title": "Basic Anatomy Training 98",
+          "type": "PRACTICE",
+          "status": "COMPLETED",
+          "score": 0,
+          "percentage": 0,
+          "questionsCount": 3,
+          "answersCount": 0,
+          "startedAt": "2026-02-04T08:56:43.868Z",
+          "completedAt": "2026-02-04T08:57:45.730Z",
+          "createdAt": "2026-02-04T08:56:37.729Z",
+          "quiz": null,
+          "exam": null
+        },
+        {
+          "id": 218,
+          "title": "Basic Anatomy Drill 28",
+          "type": "PRACTICE",
+          "status": "COMPLETED",
+          "score": 0,
+          "percentage": 0,
+          "questionsCount": 3,
+          "answersCount": 0,
+          "startedAt": "2026-02-04T08:07:21.577Z",
+          "completedAt": "2026-02-04T08:22:51.588Z",
+          "createdAt": "2026-02-04T08:07:15.276Z",
+          "quiz": null,
+          "exam": null
+        },
+        {
+          "id": 198,
+          "title": "Session 190: Quiz 58: Anatomy - Advanced Concepts",
+          "type": "REMEDIAL",
+          "status": "COMPLETED",
+          "score": 17,
+          "percentage": 17,
+          "questionsCount": 0,
+          "answersCount": 0,
+          "startedAt": "2026-01-22T06:09:37.562Z",
+          "completedAt": "2026-01-22T07:09:37.562Z",
+          "createdAt": "2026-02-02T06:09:37.563Z",
+          "quiz": {
+            "id": 65,
+            "title": "Quiz 58: Anatomy - Advanced Concepts"
+          },
+          "exam": null
+        },
+        {
+          "id": 156,
+          "title": "Session 148: Exam 30: Pharmacology - 2024",
+          "type": "EXAM",
+          "status": "IN_PROGRESS",
+          "score": 0,
+          "percentage": 0,
+          "questionsCount": 0,
+          "answersCount": 0,
+          "startedAt": "2026-01-29T06:09:36.390Z",
+          "completedAt": null,
+          "createdAt": "2026-02-02T06:09:36.392Z",
+          "quiz": null,
+          "exam": {
+            "id": 32,
+            "title": "Exam 30: Pharmacology - 2024"
+          }
+        },
+        {
+          "id": 131,
+          "title": "Session 123: Quiz 80: Pharmacology - Introduction",
+          "type": "EXAM",
+          "status": "IN_PROGRESS",
+          "score": 0,
+          "percentage": 0,
+          "questionsCount": 0,
+          "answersCount": 0,
+          "startedAt": "2026-01-16T06:09:35.751Z",
+          "completedAt": null,
+          "createdAt": "2026-02-02T06:09:35.752Z",
+          "quiz": {
+            "id": 87,
+            "title": "Quiz 80: Pharmacology - Introduction"
+          },
+          "exam": null
+        }
+      ],
+      "pagination": {
+        "currentPage": 1,
+        "totalPages": 2,
+        "total": 13,
+        "limit": 10
+      }
+    }
+  },
+  "meta": {
+    "timestamp": "2026-02-04T10:30:47.677Z",
+    "requestId": "v2pwpefyqv"
+  }
+}

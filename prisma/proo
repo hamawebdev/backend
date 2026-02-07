@@ -1,0 +1,349 @@
+
+ Integrate Chargily Pay v2 (Checkout + Webhooks) with Subscriptions & Activation Codes
+
+## Objective
+
+Implement end-to-end payments with **Chargily Pay v2** using hosted **Checkout** and **Webhooks** to provision user **Subscription** access . Use **Express + TypeScript + Prisma**. Must be safe, idempotent, and testable in **Test mode**; then switchable to **Live**.
+
+## References (read & follow)
+
+* API Keys + Base URLs (test vs live). ([dev.chargily.com][1])
+* Create Checkout (request/response fields incl. `checkout_url`, `payment_method`, `webhook_endpoint`, fees allocation, discounts, metadata, locales). ([dev.chargily.com][2])
+* Webhooks (event types like `checkout.paid`, raw payload HMAC SHA-256 signature in `signature` header, example payload, correct verification steps). ([dev.chargily.com][3])
+* Test/Live modes explanation. ([dev.chargily.com][4])
+* Intro/overview + payment methods (EDAHABIA, CIB; “chargily\_app” and QR code note). ([dev.chargily.com][5])
+
+---
+
+## Deliverables
+
+1. **Backend (Express + TS)**
+
+   * `POST /api/payments/checkouts` → creates Chargily Checkout and returns `checkout_url` for redirect.
+   * `POST /api/payments/webhook` → receives Chargily webhooks; verify HMAC signature; on `checkout.paid`, mark subscription active.
+   * Environment-driven config for Test/Live.
+
+2. **Database (Prisma)**
+
+   * Use provided models `Subscription`
+   * Add a minimal **Payment Log** table for idempotency (e.g., `PaymentEvent(id TEXT PK, type TEXT, checkoutId TEXT, processedAt DATETIME)`).
+
+
+4. **Tests**
+
+   * Unit tests for signature verification and idempotency.
+   * Manual test script using Test mode that prints a test checkout URL.
+
+---
+
+## Env & Config
+
+Create `.env` keys:
+
+```
+CHARGILY_SECRET_KEY=...
+CHARGILY_MODE=test        # "test" | "live"
+PAYMENTS_SUCCESS_PATH=/payments/success
+PAYMENTS_FAILURE_PATH=/payments/failure
+WEBHOOK_PUBLIC_URL=https://your-site.com/api/payments/webhook
+```
+
+Compute Base URL:
+
+* If `CHARGILY_MODE=test` → `https://pay.chargily.net/test/api/v2`
+* Else → `https://pay.chargily.net/api/v2` ([dev.chargily.com][1])
+
+---
+
+## Checkout Creation (Backend)
+
+**Goal:** return a hosted URL the client can open.
+
+**Request body (our API):**
+
+```ts
+type CreateCheckoutInput = {
+  userId: number
+  studyPackId: number
+  amountDzd: number         // integer, in DZD “minor unit” (DA has no decimals, still use integer)
+  locale?: 'ar'|'en'|'fr'
+  paymentMethod?: 'edahabia'|'cib'|'chargily_app'
+  activationCode?: string   // optional; if present, pre-validate but redeem only on webhook paid
+};
+```
+
+**Steps:**
+
+
+2. Create a **PENDING Subscription** row (status `PENDING`) with `startDate=now`, `endDate=now + durationMonths` (derive from study pack or — if using code — from code’s `durationMonths`), set `amountPaid = amountDzd`, save `payment_method = input.paymentMethod` if provided.
+3. Call Chargily **Create Checkout**:
+
+   * POST `/{base}/checkouts`
+   * Body minimal fields:
+
+     * `amount`: `amountDzd`
+     * `currency`: `"dzd"`
+     * `payment_method`: input or default (`edahabia`)
+     * `success_url`: `${APP_BASE_URL}${PAYMENTS_SUCCESS_PATH}`
+     * `failure_url`: `${APP_BASE_URL}${PAYMENTS_FAILURE_PATH}`
+     * `webhook_endpoint`: `${WEBHOOK_PUBLIC_URL}`  (can also be configured in dashboard) ([dev.chargily.com][2])
+     * `locale`: `'ar'|'en'|'fr'`
+     * `chargily_pay_fees_allocation`: `"customer"` (or `"merchant"`/`"split"` per business decision) ([dev.chargily.com][2])
+     * `metadata`: include `{ subscriptionId, userId, studyPackId }` so webhook can correlate. (Metadata is allowed key-value storage.) ([dev.chargily.com][2])
+   * Auth header: `Authorization: Bearer ${CHARGILY_SECRET_KEY}`. ([dev.chargily.com][6])
+4. Return `{ checkoutUrl: response.checkout_url }` to the frontend. ([dev.chargily.com][2])
+
+**Note:** You may also build Product/Price and pass `items` instead of raw `amount`, but raw `amount/currency` is fine for this use case. ([dev.chargily.com][2])
+
+---
+
+## Webhook Handling (Backend)
+
+**Route:** `POST /api/payments/webhook`
+**Middleware:** must read the **raw body** (no JSON parser before verification). Use `express.raw({ type: 'application/json' })`.
+
+**Verify signature:**
+
+* Get `signature` header.
+* Compute `hex = HMAC_SHA256(secret = CHARGILY_SECRET_KEY, message = rawBody)`.
+* Compare using constant-time comparison.
+* If missing/mismatch → 400/403. ([dev.chargily.com][3])
+
+**Process events:**
+
+* Parse JSON after verifying signature.
+* Switch on `event.type`:
+
+  * `checkout.paid` → mark the related Subscription as `ACTIVE`, save `payment_reference = checkout.id` and any `fees` reported. If `activationCode` provided in `metadata`, **redeem** it transactionally:
+
+    
+  * `checkout.failed` → set subscription `status = CANCELED` or keep `PENDING` and audit log.
+* **Idempotency:** Before applying, upsert a record into `PaymentEvent` by the event `id`. If exists → no-op. (Event payload example includes top-level `id`.) ([dev.chargily.com][3])
+* Always respond **200 OK** after successful handling. ([dev.chargily.com][3])
+
+---
+
+## Example Code (Express + TS)
+
+**1) Router & body parsers**
+
+```ts
+// app.ts
+import express from 'express';
+const app = express();
+
+// Non-webhook routes can use JSON:
+app.use('/api', express.json());
+
+// Webhook must capture raw body:
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), webhookHandler);
+
+export default app;
+```
+
+**2) Checkout creation**
+
+```ts
+// payments.controller.ts
+import type { Request, Response } from 'express';
+import crypto from 'crypto';
+import { prisma } from '../prisma';
+
+const base = process.env.CHARGILY_MODE === 'live'
+  ? 'https://pay.chargily.net/api/v2'
+  : 'https://pay.chargily.net/test/api/v2';
+
+export async function createCheckout(req: Request, res: Response) {
+  const { userId, studyPackId, amountDzd, locale = 'ar', activationCode, paymentMethod = 'edahabia' } = req.body;
+
+  // (Optional) pre-validate activation code (no mutation)
+  if (activationCode) {
+    const code = await prisma.activationCode.findUnique({ where: { code: activationCode } });
+    if (!code || !code.isActive || code.expiresAt < new Date() || code.currentUses >= code.maxUses) {
+      return res.status(400).json({ error: 'Invalid or expired activation code' });
+    }
+  }
+
+  // Create pending subscription
+  const now = new Date();
+  const months = 1; // or derive from studyPack, or from activationCode.durationMonths if supplied
+  const end = new Date(now);
+  end.setMonth(end.getMonth() + months);
+
+  const subscription = await prisma.subscription.create({
+    data: {
+      userId,
+      studyPackId,
+      status: 'PENDING',
+      startDate: now,
+      endDate: end,
+      amountPaid: amountDzd,
+      paymentMethod,
+    }
+  });
+
+  // Build checkout payload
+  const payload = {
+    amount: amountDzd,
+    currency: 'dzd',
+    payment_method: paymentMethod,                  // 'edahabia' | 'cib' | 'chargily_app'
+    success_url: `${process.env.APP_BASE_URL}${process.env.PAYMENTS_SUCCESS_PATH}`,
+    failure_url: `${process.env.APP_BASE_URL}${process.env.PAYMENTS_FAILURE_PATH}`,
+    webhook_endpoint: process.env.WEBHOOK_PUBLIC_URL,
+    locale,
+    chargily_pay_fees_allocation: 'customer',       // business choice
+    metadata: {
+      subscriptionId: String(subscription.id),
+      userId: String(userId),
+      studyPackId: String(studyPackId),
+      ...(activationCode ? { activationCode } : {})
+    }
+  };
+
+  const resp = await fetch(`${base}/checkouts`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.CHARGILY_SECRET_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    return res.status(502).json({ error: 'Chargily create checkout failed', details: err });
+  }
+
+  const data = await resp.json(); // includes checkout_url
+  return res.json({ checkoutUrl: data.checkout_url, checkoutId: data.id });
+}
+```
+
+**3) Webhook handler**
+
+```ts
+// webhook.controller.ts
+import type { Request, Response } from 'express';
+import crypto from 'crypto';
+import { prisma } from '../prisma';
+
+export async function webhookHandler(req: Request, res: Response) {
+  const signature = req.header('signature');
+  const raw = (req as any).body?.toString?.() ?? ''; // because express.raw
+  if (!signature || !raw) return res.sendStatus(400);
+
+  const h = crypto.createHmac('sha256', process.env.CHARGILY_SECRET_KEY!);
+  h.update(raw, 'utf8');
+  const computed = h.digest('hex');
+
+  // constant-time compare
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(computed))) {
+    return res.sendStatus(403);
+  }
+
+  const event = JSON.parse(raw) as {
+    id: string;
+    type: 'checkout.paid' | 'checkout.failed';
+    data: any;
+  };
+
+  // idempotency
+  try {
+    await prisma.paymentEvent.create({ data: { id: event.id, type: event.type, checkoutId: event.data?.id || null } });
+  } catch {
+    return res.sendStatus(200); // already processed
+  }
+
+  if (event.type === 'checkout.paid') {
+    const m = event.data?.metadata || {};
+    const subscriptionId = Number(m.subscriptionId);
+    const activationCode = m.activationCode as string | undefined;
+
+    await prisma.$transaction(async (tx) => {
+      // activate subscription
+      await tx.subscription.update({ where: { id: subscriptionId }, data: {
+        status: 'ACTIVE',
+        paymentReference: event.data?.id ?? null,
+        paymentMethod: event.data?.payment_method ?? undefined,
+        amountPaid: event.data?.amount ?? undefined,
+      }});
+
+      if (activationCode) {
+        const code = await tx.activationCode.findUnique({ where: { code: activationCode }, lock: { mode: 'ForUpdate' } });
+        if (!code || !code.isActive || code.expiresAt < new Date() || code.currentUses >= code.maxUses) return;
+        await tx.activationCode.update({
+          where: { code: activationCode },
+          data: { currentUses: { increment: 1 }, isActive: code.currentUses + 1 < code.maxUses ? code.isActive : false }
+        });
+        await tx.codeRedemption.create({
+          data: { activationCodeId: code.id, userId: event.data?.customer_id ? Number(m.userId) : Number(m.userId), subscriptionId }
+        });
+      }
+    });
+  }
+
+  if (event.type === 'checkout.failed') {
+    const subscriptionId = Number(event.data?.metadata?.subscriptionId);
+    if (Number.isFinite(subscriptionId)) {
+      await prisma.subscription.update({ where: { id: subscriptionId }, data: { status: 'CANCELED' } });
+    }
+  }
+
+  return res.sendStatus(200);
+}
+```
+
+---
+
+## Security & Correctness Notes
+
+* **Never** grant access on `success_url` alone. Only the **webhook** (after signature verification) authorizes access. ([dev.chargily.com][3])
+* Use **raw body** for HMAC; JSON middleware breaks signatures. ([dev.chargily.com][3])
+* Prefer **metadata** to correlate events with your DB (subscriptionId, userId, etc.). ([dev.chargily.com][2])
+* Choose appropriate **fees allocation** (`customer`/`merchant`/`split`) per your pricing. ([dev.chargily.com][2])
+* In Test mode use `https://pay.chargily.net/test/api/v2`; in Live switch to `https://pay.chargily.net/api/v2`. ([dev.chargily.com][1])
+* Supported payment methods include `edahabia`, `cib`, and `chargily_app` (QR flow returns `qr_code_url`). ([dev.chargily.com][2])
+
+---
+
+## Happy-Path Flow
+
+1. User clicks “Buy” → frontend calls `/api/payments/checkouts`.
+2. Backend creates **PENDING** subscription, posts to Chargily, returns `checkout_url`.
+3. dont forgot handle months or year  numbers  calculate total in the backend (get the price from study pack selected by user , exisat monthly price and yearly price )
+4. On payment:
+
+   * Chargily sends **webhook** with `type=checkout.paid` and `data` (includes `id`, `amount`, `status`, `metadata`, etc.). ([dev.chargily.com][3])
+   * Backend verifies signature, activates subscription, redeems activation code if supplied, and records event idempotently.
+
+
+
+
+---
+
+## Test Plan (Test Mode)
+
+* Create checkout with a small amount (e.g., 2000 DZD). Confirm response contains `checkout_url`. ([dev.chargily.com][2])
+* Complete a **test** payment flow; verify webhook fires with `checkout.paid`. ([dev.chargily.com][4])
+* Assert DB:
+
+  * `PaymentEvent` has `event.id`.
+  * `Subscription.status` becomes `ACTIVE`.
+
+* Re-deliver the same webhook (or send duplicate) → handler stays idempotent.
+* Switch to Live by toggling `CHARGILY_MODE=live` and replacing keys.
+
+
+
+---
+
+### Done.
+
+If you want, I can tailor the code to your exact folder structure (e.g., your current Express/Prisma setup) or add a ready-to-run Postman collection.
+
+[1]: https://dev.chargily.com/pay-v2/api-keys?utm_source=chatgpt.com "API keys - Chargily Pay Documentation"
+[2]: https://dev.chargily.com/pay-v2/api-reference/checkouts/create "Create a checkout - Chargily Pay Documentation"
+[3]: https://dev.chargily.com/pay-v2/webhooks "Webhooks - Chargily Pay Documentation"
+[4]: https://dev.chargily.com/pay-v2/test-and-live-mode?utm_source=chatgpt.com "Test and Live modes - Chargily Pay Documentation"
+[5]: https://dev.chargily.com/?utm_source=chatgpt.com "Chargily Pay Documentation: Introduction"
+[6]: https://dev.chargily.com/pay-v2/before-you-start?utm_source=chatgpt.com "Before you start - Introduction - Chargily Pay Documentation"
