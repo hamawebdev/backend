@@ -14,10 +14,13 @@
     "test:student": "jest tests/features/student --verbose",
     "test:scenarios": "jest tests/features/student.scenarios.test.ts --verbose",
     "test:integration": "jest tests/features/student.integration.test.ts --verbose",
-    "prisma:seed": "npx tsc && node build/seed.js",
-    "prisma:performance-seed": "npx tsc && node build/performance-seed.js",
+    "prisma:seed": "node build/seed.js",
+    "prisma:performance-seed": "node build/performance-seed.js",
     "prisma:verify-data": "node scripts/verify-performance-data.js",
     "test:payments": "node build/scripts/test-chargily-payments.js"
+  },
+  "prisma": {
+    "seed": "node build/seed.js"
   },
   "keywords": [],
   "author": "",
