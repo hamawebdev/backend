@@ -5,7 +5,7 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Install build dependencies for Prisma/Node
-RUN apk add --no-cache openssl libc6-compat
+RUN apk add --no-cache openssl libc6-compat bash
 
 COPY package*.json ./
 RUN npm install
