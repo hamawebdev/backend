@@ -13,7 +13,7 @@ API_URL=https://med-adn.com/api/v1/
 5. [Module Creation Endpoint](#module-creation-endpoint)
 6. [Course Creation Endpoint](#course-creation-endpoint)
 7. [Logo Upload Endpoint](#logo-upload-endpoint)
-8. [QROC Question Creation Endpoint](#qroc-question-creation-endpoint)
+9. [Residency Questions Endpoint](#residency-questions-endpoint)
 
 ---
 
@@ -207,167 +207,7 @@ When some questions fail to create, the `questionIds` array uses `null` to maint
 }
 ```
 
----
 
-## QROC Question Creation Endpoint
-
-Create a QROC (Question with Open Response) question. QROC questions are open-ended questions where students provide a text answer instead of selecting from multiple choices.
-
-**Endpoint:** `POST /api/v1/admin/questions`
-
-**Authentication:** Required (Admin or Employee role)
-
-### Request Headers
-| Header | Value |
-|--------|-------|
-| Content-Type | application/json |
-| Authorization | Bearer {token} |
-
-### Request Body
-
-```json
-{
-  "questionText": "Describe the process of cellular respiration.",
-  "explanation": "Cellular respiration is a series of metabolic reactions...",
-  "questionType": "QROC",
-  "courseId": 1,
-  "examId": 1,
-  "sourceId": 1,
-  "universityId": 1,
-  "yearLevel": "FIRST_YEAR",
-  "examYear": 2024,
-  "questionImages": [
-    {
-      "imagePath": "/uploads/questions/cell-diagram.jpg",
-      "altText": "Cell diagram showing mitochondria"
-    }
-  ],
-  "explanationImages": [
-    {
-      "imagePath": "/uploads/explanations/respiration-flowchart.jpg",
-      "altText": "Flowchart of cellular respiration steps"
-    }
-  ],
-  "answers": []
-}
-```
-
-### Field Descriptions
-
-| Field | Type | Required | Validation | Description |
-|-------|------|----------|------------|-------------|
-| `questionText` | string | Yes | Min 5 characters | The question text |
-| `explanation` | string | No | Max 5000 characters | Explanation of the expected answer |
-| `questionType` | string | Yes | Must be "QROC" | Type of question (case-sensitive) |
-| `courseId` | number | No | Positive integer | ID of the associated course |
-| `examId` | number | No | Positive integer | ID of the associated exam |
-| `sourceId` | number | No | Positive integer | ID of the question source |
-| `universityId` | number | No | Positive integer | ID of the university |
-| `yearLevel` | string | No | FIRST_YEAR, SECOND_YEAR, etc. | Year level |
-| `examYear` | number | No | 2000-2100 | Year of the exam |
-| `questionImages` | array | No | Max 10 images | Images associated with the question stem |
-| `explanationImages` | array | No | Max 10 images | Images for the explanation |
-| `answers` | array | Yes | Empty array required | QROC questions must have no answer choices |
-
-### QROC Validation Rules
-
-| Rule | Description |
-|------|-------------|
-| `questionType` | Must be "QROC" (case-sensitive) |
-| `answers` | Must be an empty array `[]` |
-| `questionText` | Minimum 5 characters required |
-
-### Example Response
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": 201,
-    "questionText": "Describe the process of cellular respiration.",
-    "questionType": "QROC",
-    "courseId": 1,
-    "explanation": "Cellular respiration is a series of metabolic reactions...",
-    "answers": [],
-    "questionImages": [
-      {
-        "id": 101,
-        "imagePath": "/uploads/questions/cell-diagram.jpg",
-        "altText": "Cell diagram showing mitochondria"
-      }
-    ],
-    "explanationImages": [
-      {
-        "id": 201,
-        "imagePath": "/uploads/explanations/respiration-flowchart.jpg",
-        "altText": "Flowchart of cellular respiration steps"
-      }
-    ],
-    "createdAt": "2024-01-15T10:30:00Z"
-  },
-  "message": "Question created successfully"
-}
-```
-
-### Response Field Descriptions
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | number | ID of the created question |
-| `questionText` | string | The question text |
-| `questionType` | string | Type of question (QROC) |
-| `courseId` | number | ID of the associated course (if provided) |
-| `explanation` | string | Explanation of the expected answer (if provided) |
-| `answers` | array | Empty array for QROC questions |
-| `questionImages` | array | Array of question image objects |
-| `explanationImages` | array | Array of explanation image objects |
-| `createdAt` | string | ISO 8601 timestamp of creation |
-
-### Error Responses
-
-**400 Bad Request (Invalid question type):**
-```json
-{
-  "success": false,
-  "message": "Request validation failed",
-  "errors": [
-    {
-      "field": "questionType",
-      "message": "Invalid enum value. Expected 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'QROC'"
-    }
-  ]
-}
-```
-
-**400 Bad Request (Non-empty answers):**
-```json
-{
-  "success": false,
-  "message": "Request validation failed",
-  "errors": [
-    {
-      "field": "answers",
-      "message": "At least 2 answers are required"
-    }
-  ]
-}
-```
-
-**401 Unauthorized:**
-```json
-{
-  "success": false,
-  "message": "Authentication required"
-}
-```
-
-**403 Forbidden:**
-```json
-{
-  "success": false,
-  "message": "Admin or Employee access required"
-}
-```
 
 ---
 
@@ -877,4 +717,122 @@ curl -X PUT "https://api.example.com/api/v1/admin/image/123/explanation-images" 
   -H "Authorization: Bearer {token}" \
   -F "explanationImages=@explanation1.jpg" \
   -F "explanationImages=@explanation2.png"
+```
+
+---
+
+## Residency Questions Endpoint
+
+Create a new residency question with support for tags and repetition tracking.
+
+**Endpoint:** `POST /api/v1/admin/residency-questions`
+
+**Authentication:** Required (Admin or Employee role)
+
+### Request Headers
+
+| Header | Value |
+|--------|-------|
+| Content-Type | application/json |
+| Authorization | Bearer {token} |
+
+### Request Body
+
+```json
+{
+  "questionText": "What is the primary treatment for...?",
+  "part": "PART_1",
+  "explanation": "The primary treatment is...",
+  "examYear": 2024,
+  "universityId": 1,
+  "tags": ["cardiology", "treatment", "urgent"],
+  "repetitionCount": 5,
+  "repetitionYears": [2020, 2021, 2022],
+  "questionAnswers": [
+    {
+      "answerText": "Option A",
+      "isCorrect": true
+    },
+    {
+      "answerText": "Option B",
+      "isCorrect": false
+    }
+  ]
+}
+```
+
+### Field Descriptions
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| `questionText` | string | Yes | Min 1 character | The question text |
+| `part` | string | Yes | "PART_1" or "PART_2" | Part of the residency exam |
+| `explanation` | string | No | - | Explanation of the correct answer |
+| `examYear` | number | No | Positive integer | Year of the exam |
+| `universityId` | number | No | Positive integer | ID of the university |
+| `tags` | string[] | No | Array of strings | Tags for categorization |
+| `repetitionCount` | number | No | Min 0 | Number of times question appeared |
+| `repetitionYears` | number[] | No | Array of integers | Years question appeared |
+| `questionAnswers` | array | Yes | Min 1 answer | Array of answer objects |
+
+#### Answer Object
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `answerText` | string | Yes | Text of the answer |
+| `isCorrect` | boolean | Yes | Whether this is a correct answer |
+
+### Example Response
+
+```json
+{
+  "id": 47,
+  "questionText": "What is the primary treatment for...?",
+  "part": "PART_1",
+  "explanation": "The primary treatment is...",
+  "examYear": 2024,
+  "universityId": 1,
+  "tags": ["cardiology", "treatment", "urgent"],
+  "repetitionCount": 5,
+  "repetitionYears": [2020, 2021, 2022],
+  "questionAnswers": [
+    {
+      "id": 101,
+      "answerText": "Option A",
+      "isCorrect": true
+    },
+    {
+      "id": 102,
+      "answerText": "Option B",
+      "isCorrect": false
+    }
+  ],
+  "questionImages": [],
+  "questionExplanationImages": [],
+  "createdAt": "2026-02-12T20:19:06.785Z"
+}
+```
+
+### Error Responses
+
+**400 Bad Request (Validation):**
+```json
+{
+  "success": false,
+  "message": "Request validation failed",
+  "errors": [
+    {
+      "field": "part",
+      "message": "Part must be PART_1 or PART_2"
+    }
+  ]
+}
+```
+
+**404 Not Found:**
+```json
+{
+  "success": false,
+  "message": "University not found"
+}
 ```

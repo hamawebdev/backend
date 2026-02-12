@@ -1,65 +1,55 @@
-#12 1.856    Creating an optimized production build ...
-#12 40.17 Failed to compile.
-#12 40.17
-#12 40.17 ./src/app/payments/success/page.tsx
-#12 40.17 Error:   x Expected a semicolon
-#12 40.17     ,-[/app/src/app/payments/success/page.tsx:55:1]
-#12 40.17  52 |             console.error('❌ PaymentSuccess: Token refresh failed:', error);
-#12 40.17  53 |
-#12 40.17  54 |             // Default user-facing message per requirements
-#12 40.17  55 |             let errorMessage = 'Impossible d'actualiser la session.Veuillez réessayer.';
-#12 40.17     :                                              ^^^^^^^^^^
-#12 40.17  56 |
-#12 40.17  57 |             // Increment retry counter (manual retries only)
-#12 40.17  58 |             setRetryCount(prev => prev + 1);
-#12 40.17     `----
-#12 40.17   x Unterminated string constant
-#12 40.17     ,-[/app/src/app/payments/success/page.tsx:55:1]
-#12 40.17  52 |             console.error('❌ PaymentSuccess: Token refresh failed:', error);
-#12 40.17  53 |
-#12 40.17  54 |             // Default user-facing message per requirements
-#12 40.17  55 |             let errorMessage = 'Impossible d'actualiser la session.Veuillez réessayer.';
-#12 40.17     :                                                                                       ^^
-#12 40.17  56 |
-#12 40.17  57 |             // Increment retry counter (manual retries only)
-#12 40.17  58 |             setRetryCount(prev => prev + 1);
-#12 40.17     `----
-#12 40.17
-#12 40.17 Caused by:
-#12 40.17     Syntax Error
-#12 40.17
-#12 40.17 Import trace for requested module:
-#12 40.17 ./src/app/payments/success/page.tsx
-#12 40.17
-#12 40.17
-#12 40.17 > Build failed because of webpack errors
-#12 40.19 npm notice
-#12 40.19 npm notice New major version of npm available! 10.9.4 -> 11.9.0
-#12 40.19 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.9.0
-#12 40.19 npm notice To update run: npm install -g npm@11.9.0
-#12 40.19 npm notice
-#12 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
-------
-> [builder 5/5] RUN npm run build:
-40.17 Import trace for requested module:
-40.17 ./src/app/payments/success/page.tsx
-40.17
-40.17
-40.17 > Build failed because of webpack errors
-40.19 npm notice
-40.19 npm notice New major version of npm available! 10.9.4 -> 11.9.0
-40.19 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.9.0
-40.19 npm notice To update run: npm install -g npm@11.9.0
-40.19 npm notice
-------
-Dockerfile:24
---------------------
-|     ENV NEXT_TELEMETRY_DISABLED=1
-|
-| >>> RUN npm run build
-|
-|     # Stage 3: Production runner
---------------------
-failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
-Error: ❌ Docker command failed
-Error occurred ❌, check the logs for details.
+## Residency Question Creation Endpoint Structure
+
+**Endpoint:** `POST /api/v1/admin/residency-questions`
+
+**Authentication:** Required (Admin or Employee role)
+
+### Request Body Schema
+
+```json
+{
+  "questionText": "string",
+  "part": "PART_1 | PART_2",
+  "explanation": "string (optional)",
+  "examYear": "number (optional)",
+  "universityId": "number (optional)",
+  "metadata": "string (optional)",
+  "questionAnswers": [
+    {
+      "answerText": "string",
+      "isCorrect": "boolean"
+    }
+  ]
+}
+```
+
+### Field Descriptions
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| `questionText` | string | Yes | Min 1 char | The question text |
+| `part` | enum | Yes | PART_1 or PART_2 | Exam part |
+| `explanation` | string | No | Markdown sanitized | Explanation of the correct answer |
+| `examYear` | number | No | Positive integer | Year of the residency exam |
+| `universityId` | number | No | Positive integer | ID of the university |
+| `metadata` | string | No | - | Additional metadata |
+| `questionAnswers` | array | Yes | Min 1 answer, at least 1 must be correct | Array of answer objects |
+
+### Answer Object Schema
+
+```json
+{
+  "answerText": "string",
+  "isCorrect": "boolean"
+}
+```
+
+### Validation Rules
+
+1. At least one answer is required in `questionAnswers`
+2. At least one answer must have `isCorrect: true`
+3. `part` must be either `PART_1` or `PART_2`
+
+### Bulk Creation Endpoint
+
+There's also a **`POST /api/v1/admin/residency-questions/bulk`** endpoint for creating multiple residency questions in a single request.

@@ -133,6 +133,9 @@ interface CreateResidencyQuestionData {
   examYear?: number;
   universityId?: number;
   metadata?: string;
+  tags?: string[];
+  repetitionCount?: number;
+  repetitionYears?: number[];
   questionAnswers: {
     answerText: string;
     isCorrect: boolean;
@@ -146,6 +149,9 @@ interface UpdateResidencyQuestionData {
   examYear?: number;
   universityId?: number;
   metadata?: string;
+  tags?: string[];
+  repetitionCount?: number;
+  repetitionYears?: number[];
   questionAnswers?: {
     answerText: string;
     isCorrect: boolean;
@@ -3348,6 +3354,9 @@ export default class AdminService {
         examYear: data.examYear,
         universityId: data.universityId,
         metadata,
+        tags: data.tags ? JSON.stringify(data.tags) : undefined,
+        repetitionCount: data.repetitionCount,
+        repetitionYears: data.repetitionYears ? JSON.stringify(data.repetitionYears) : undefined,
         createdById,
         questionAnswers: {
           create: data.questionAnswers.map(answer => ({
@@ -3388,6 +3397,9 @@ export default class AdminService {
       explanation: question.explanation,
       examYear: question.examYear,
       universityId: question.universityId,
+      tags: data.tags,
+      repetitionCount: question.repetitionCount,
+      repetitionYears: data.repetitionYears,
       questionAnswers: question.questionAnswers,
       questionImages: question.questionImages,
       questionExplanationImages: question.questionExplanationImages,
@@ -3429,6 +3441,9 @@ export default class AdminService {
     if (data.explanation !== undefined) updateData.explanation = data.explanation;
     if (data.examYear !== undefined) updateData.examYear = data.examYear;
     if (data.universityId !== undefined) updateData.universityId = data.universityId;
+    if (data.tags !== undefined) updateData.tags = JSON.stringify(data.tags);
+    if (data.repetitionCount !== undefined) updateData.repetitionCount = data.repetitionCount;
+    if (data.repetitionYears !== undefined) updateData.repetitionYears = JSON.stringify(data.repetitionYears);
 
     // Handle part in metadata
     if (data.part !== undefined) {
@@ -3494,6 +3509,9 @@ export default class AdminService {
       explanation: question.explanation,
       examYear: question.examYear,
       universityId: question.universityId,
+      tags: question.tags ? JSON.parse(question.tags) : [],
+      repetitionCount: question.repetitionCount,
+      repetitionYears: question.repetitionYears ? JSON.parse(question.repetitionYears) : [],
       questionAnswers: question.questionAnswers,
       questionImages: question.questionImages,
       questionExplanationImages: question.questionExplanationImages,

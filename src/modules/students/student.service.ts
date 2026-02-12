@@ -2909,11 +2909,18 @@ export default class StudentService {
     currentStreak: number;
     todosCompleted: number;
     todosPending: number;
+    answersLast7Days: Array<{ date: string; correct: number; incorrect: number; total: number }>;
   }> {
     const userId = user.user_data.id;
 
-    // Get session counts
-    const [activeSessions, completedSessions, completedTodos, pendingTodos, recentSessions] = await Promise.all([
+    // Date range: last 7 days (start of day 7 days ago to now)
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
+    sevenDaysAgo.setUTCHours(0, 0, 0, 0);
+
+    // Get session counts + recent sessions + last 7 days attempts
+    const [activeSessions, completedSessions, completedTodos, pendingTodos, recentSessions, singleChoiceAttempts, multipleChoiceAttempts] = await Promise.all([
       this.prisma.quizSession.count({
         where: { userId, status: 'IN_PROGRESS' }
       }),
@@ -2931,6 +2938,22 @@ export default class StudentService {
         orderBy: { completedAt: 'desc' },
         take: 30,
         select: { completedAt: true, startedAt: true }
+      }),
+      // Single-choice attempts in last 7 days
+      this.prisma.quizAttempt.findMany({
+        where: {
+          session: { userId },
+          answeredAt: { gte: sevenDaysAgo, lte: now }
+        },
+        select: { answeredAt: true, isCorrect: true }
+      }),
+      // Multiple-choice attempts in last 7 days
+      this.prisma.multipleChoiceAttempt.findMany({
+        where: {
+          session: { userId },
+          answeredAt: { gte: sevenDaysAgo, lte: now }
+        },
+        select: { answeredAt: true, isCorrect: true }
       })
     ]);
 
@@ -2947,13 +2970,53 @@ export default class StudentService {
     // Calculate streak
     const currentStreak = this.calculateStudyStreak(recentSessions as any[]);
 
+    // Build answersLast7Days: group all attempts by date
+    const dayMap = new Map<string, { correct: number; incorrect: number; total: number }>();
+
+    // Initialize all 7 days so every day appears even if no activity
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sevenDaysAgo);
+      d.setUTCDate(d.getUTCDate() + i);
+      const key = d.toISOString().split('T')[0];
+      dayMap.set(key, { correct: 0, incorrect: 0, total: 0 });
+    }
+
+    // Aggregate single-choice attempts
+    for (const attempt of singleChoiceAttempts) {
+      if (!attempt.answeredAt) continue;
+      const key = new Date(attempt.answeredAt).toISOString().split('T')[0];
+      const entry = dayMap.get(key);
+      if (entry) {
+        entry.total += 1;
+        if (attempt.isCorrect === true) entry.correct += 1;
+        else if (attempt.isCorrect === false) entry.incorrect += 1;
+      }
+    }
+
+    // Aggregate multiple-choice attempts
+    for (const attempt of multipleChoiceAttempts) {
+      if (!attempt.answeredAt) continue;
+      const key = new Date(attempt.answeredAt).toISOString().split('T')[0];
+      const entry = dayMap.get(key);
+      if (entry) {
+        entry.total += 1;
+        if (attempt.isCorrect === true) entry.correct += 1;
+        else if (attempt.isCorrect === false) entry.incorrect += 1;
+      }
+    }
+
+    const answersLast7Days = Array.from(dayMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, stats]) => ({ date, ...stats }));
+
     return {
       activeSessions,
       completedSessions,
       totalStudyTime,
       currentStreak,
       todosCompleted: completedTodos,
-      todosPending: pendingTodos
+      todosPending: pendingTodos,
+      answersLast7Days
     };
   }
 

@@ -532,6 +532,9 @@ export const createResidencyQuestionSchema = z.object({
   examYear: z.number().int().positive().optional(),
   universityId: z.number().int().positive().optional(),
   metadata: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  repetitionCount: z.number().int().min(0).optional(),
+  repetitionYears: z.array(z.number().int()).optional(),
   questionAnswers: z.array(residencyQuestionAnswerSchema)
     .min(1, 'At least one answer is required')
     .refine(
@@ -548,6 +551,9 @@ export const updateResidencyQuestionSchema = z.object({
   examYear: z.number().int().positive().optional(),
   universityId: z.number().int().positive().optional(),
   metadata: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  repetitionCount: z.number().int().min(0).optional(),
+  repetitionYears: z.array(z.number().int()).optional(),
   questionAnswers: z.array(residencyQuestionAnswerSchema)
     .min(1)
     .refine(
