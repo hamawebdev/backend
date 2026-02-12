@@ -126,17 +126,20 @@ let QuestionService = class QuestionService {
     }
     /**
      * Create multiple questions with shared metadata
-     * Returns canonical format: {created, failed, errors[]}
+     * Returns canonical format: {created, failed, questionIds[], errors[]}
+     * questionIds[n] corresponds to request.questions[n], null if creation failed
      */
     createQuestionsInBulk(bulkData, createdById) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const { metadata, questions } = bulkData;
             // Validate shared metadata references
             yield this.validateReferences(metadata);
             let created = 0;
             let failed = 0;
             const errors = [];
-            // Process each question individually to track errors
+            const questionIds = [];
+            // Process each question individually to track errors and preserve order
             for (let index = 0; index < questions.length; index++) {
                 const questionData = questions[index];
                 try {
@@ -148,12 +151,15 @@ let QuestionService = class QuestionService {
                     if (questionData.questionType === client_1.QuestionType.MULTIPLE_CHOICE && correctAnswersCount < 2) {
                         throw new Error("Multiple choice questions must have at least two correct answers");
                     }
-                    // Create the question
-                    yield this.prisma.question.create({
+                    // Create the question and capture the returned ID
+                    const createdQuestion = yield this.prisma.question.create({
                         data: {
                             questionText: questionData.questionText,
                             explanation: questionData.explanation,
                             questionType: questionData.questionType || client_1.QuestionType.SINGLE_CHOICE,
+                            tags: JSON.stringify(questionData.questionTags || []),
+                            repetitionCount: (_a = questionData.repetitionCount) !== null && _a !== void 0 ? _a : 0,
+                            repetitionYears: JSON.stringify(questionData.repetitionYears || []),
                             courseId: metadata.courseId,
                             examId: metadata.examId,
                             sourceId: metadata.sourceId,
@@ -187,11 +193,16 @@ let QuestionService = class QuestionService {
                                     } : undefined
                                 }))
                             }
-                        }
+                        },
+                        select: { id: true }
                     });
+                    // Store the created question ID at the corresponding index
+                    questionIds.push(createdQuestion.id);
                     created++;
                 }
                 catch (error) {
+                    // Store null for failed entries to maintain index alignment
+                    questionIds.push(null);
                     failed++;
                     errors.push({
                         index,
@@ -204,6 +215,7 @@ let QuestionService = class QuestionService {
                 data: {
                     created,
                     failed,
+                    questionIds,
                     errors
                 },
                 message: `Created ${created} questions, ${failed} failed`

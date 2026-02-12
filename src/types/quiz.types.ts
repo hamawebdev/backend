@@ -30,6 +30,8 @@ export interface QuizSessionFilters {
   questionTypes?: QuestionType[]; // New field for question type filtering
   examYears?: number[]; // New field for exam year filtering
   questionSourceIds?: number[]; // New field for question source filtering
+  repetitionCountMin?: number; // Filter questions with repetitionCount >= value
+  repetitionYears?: number[]; // Filter questions where repetitionYears contains any of these years
 }
 
 // New types for student session result filtering
@@ -279,6 +281,7 @@ export interface QuizSessionQuestion {
   questionText: string;
   questionType?: QuestionType;
   explanation?: string;
+  tags?: string[];
   yearLevel?: YearLevel;
   examYear?: number;
   metadata?: string;
@@ -288,6 +291,8 @@ export interface QuizSessionQuestion {
   course?: EnhancedCourse;
   source?: EnhancedQuestionSource;
   questionAnswers: QuizSessionAnswer[];
+  repetitionCount: number;
+  repetitionYears: number[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -577,8 +582,11 @@ export interface BulkCreateQuestionsDto {
     questionText: string;
     explanation?: string;
     questionType?: QuestionType;
+    questionTags?: string[];
     questionImages?: CreateQuestionImageDto[];
     explanationImages?: CreateQuestionExplanationImageDto[];
+    repetitionCount?: number;
+    repetitionYears?: number[];
     answers: CreateQuestionAnswerDto[];
   }[];
 }
@@ -606,6 +614,7 @@ export interface BulkCreateQuestionsResponse {
   data: {
     created: number;
     failed: number;
+    questionIds: (number | null)[]; // ID at index n corresponds to request.questions[n], null if failed
     errors: { index: number; error: string }[];
   };
   message: string;

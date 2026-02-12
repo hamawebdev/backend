@@ -806,6 +806,39 @@ let StudentRepository = class StudentRepository {
                                 }
                             }
                         }
+                    },
+                    question: {
+                        include: {
+                            questionImages: true,
+                            questionExplanationImages: true,
+                            questionAnswers: {
+                                include: {
+                                    explanationImages: true
+                                }
+                            },
+                            university: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    country: true
+                                }
+                            },
+                            course: {
+                                include: {
+                                    module: {
+                                        include: {
+                                            unite: true
+                                        }
+                                    }
+                                }
+                            },
+                            source: {
+                                select: {
+                                    id: true,
+                                    name: true
+                                }
+                            }
+                        }
                     }
                 },
                 orderBy: {

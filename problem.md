@@ -1,24 +1,65 @@
-POST
-	https://med-adn.com/api/v1/payments/checkouts
-Status
-500
-
-
-request :
-```json
-{"studyPackId":7,"paymentDuration":{"type":"yearly","years":1},"locale":"en","paymentMethod":"edahabia"}
-```
-
-response :
-```json
-{"success":false,"error":{"type":"InternalServerError","message":"Chargily create checkout failed: {\"message\":\"Invalid success_url, it must begin with http or https. (and 2 more errors)\",\"errors\":{\"success_url\":[\"Invalid success_url, it must begin with http or https.\"],\"failure_url\":[\"The failure url field must be a valid URL.\"],\"webhook_endpoint\":[\"The webhook endpoint field must be a valid URL.\"]}}","timestamp":"2026-02-08T07:39:09.400Z","requestId":"p1tywnpnr1"}}
-```
-
-
-Refine the Chargily checkout logic to prevent 'Invalid URL' errors.
-
-    Apply .trim() to APP_BASE_URL, WEBHOOK_PUBLIC_URL, and all success/failure paths to remove hidden spaces or newline characters from the environment variables.
-
-    Ensure the success_url and failure_url are constructed as valid, absolute URLs without double slashes.
-
-    Add a console.log right before the Chargily API call that outputs the final webhook_endpoint, success_url, and the exact character length of the webhook URL so I can debug hidden characters in the logs.
+#12 1.856    Creating an optimized production build ...
+#12 40.17 Failed to compile.
+#12 40.17
+#12 40.17 ./src/app/payments/success/page.tsx
+#12 40.17 Error:   x Expected a semicolon
+#12 40.17     ,-[/app/src/app/payments/success/page.tsx:55:1]
+#12 40.17  52 |             console.error('❌ PaymentSuccess: Token refresh failed:', error);
+#12 40.17  53 |
+#12 40.17  54 |             // Default user-facing message per requirements
+#12 40.17  55 |             let errorMessage = 'Impossible d'actualiser la session.Veuillez réessayer.';
+#12 40.17     :                                              ^^^^^^^^^^
+#12 40.17  56 |
+#12 40.17  57 |             // Increment retry counter (manual retries only)
+#12 40.17  58 |             setRetryCount(prev => prev + 1);
+#12 40.17     `----
+#12 40.17   x Unterminated string constant
+#12 40.17     ,-[/app/src/app/payments/success/page.tsx:55:1]
+#12 40.17  52 |             console.error('❌ PaymentSuccess: Token refresh failed:', error);
+#12 40.17  53 |
+#12 40.17  54 |             // Default user-facing message per requirements
+#12 40.17  55 |             let errorMessage = 'Impossible d'actualiser la session.Veuillez réessayer.';
+#12 40.17     :                                                                                       ^^
+#12 40.17  56 |
+#12 40.17  57 |             // Increment retry counter (manual retries only)
+#12 40.17  58 |             setRetryCount(prev => prev + 1);
+#12 40.17     `----
+#12 40.17
+#12 40.17 Caused by:
+#12 40.17     Syntax Error
+#12 40.17
+#12 40.17 Import trace for requested module:
+#12 40.17 ./src/app/payments/success/page.tsx
+#12 40.17
+#12 40.17
+#12 40.17 > Build failed because of webpack errors
+#12 40.19 npm notice
+#12 40.19 npm notice New major version of npm available! 10.9.4 -> 11.9.0
+#12 40.19 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.9.0
+#12 40.19 npm notice To update run: npm install -g npm@11.9.0
+#12 40.19 npm notice
+#12 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+------
+> [builder 5/5] RUN npm run build:
+40.17 Import trace for requested module:
+40.17 ./src/app/payments/success/page.tsx
+40.17
+40.17
+40.17 > Build failed because of webpack errors
+40.19 npm notice
+40.19 npm notice New major version of npm available! 10.9.4 -> 11.9.0
+40.19 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.9.0
+40.19 npm notice To update run: npm install -g npm@11.9.0
+40.19 npm notice
+------
+Dockerfile:24
+--------------------
+|     ENV NEXT_TELEMETRY_DISABLED=1
+|
+| >>> RUN npm run build
+|
+|     # Stage 3: Production runner
+--------------------
+failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+Error: ❌ Docker command failed
+Error occurred ❌, check the logs for details.

@@ -373,6 +373,9 @@ model Question {
   yearLevel   YearLevel? @map("year_level")
   examYear    Int?     @map("exam_year")  // NEW: Unified exam year field
   metadata    String?  @map("metadata")   // NEW: Optional metadata field for additional question information
+  tags        String   @default("[]")        // NEW: Array of tag strings for categorization (JSON string)
+  repetitionCount Int  @default(0) @map("repetition_count")  // Number of times this question has appeared in exams
+  repetitionYears String @default("[]") @map("repetition_years") // Years in which this question has appeared (JSON string)
   createdById Int      @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -402,6 +405,7 @@ model Question {
   @@index([questionType])
   @@index([examYear])
   @@index([universityId, examYear])
+  @@index([repetitionCount])
 }
 
 model QuizQuestion {

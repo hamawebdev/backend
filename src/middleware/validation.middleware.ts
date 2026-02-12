@@ -163,7 +163,9 @@ export const canonicalQuestionCountSchema = z.object({
   years: z.array(z.number().int().positive()).optional(),
   rotations: z.array(z.enum(["R1", "R2", "R3", "R4"])).optional(),
   universityIds: z.array(z.number().int().positive()).optional(),
-  questionSourceIds: z.array(z.number().int().positive()).optional()
+  questionSourceIds: z.array(z.number().int().positive()).optional(),
+  repetitionCountMin: z.number().int().min(0, "Repetition count must be non-negative").optional(),
+  repetitionYears: z.array(z.number().int().positive()).optional()
 });
 
 // Canonical spec: POST /quizzes/sessions
@@ -176,7 +178,9 @@ export const canonicalCreateSessionSchema = z.object({
   years: z.array(z.number().int().positive()).optional(),
   rotations: z.array(z.enum(["R1", "R2", "R3", "R4"])).optional(),
   universityIds: z.array(z.number().int().positive()).optional(),
-  questionSourceIds: z.array(z.number().int().positive()).optional()
+  questionSourceIds: z.array(z.number().int().positive()).optional(),
+  repetitionCountMin: z.number().int().min(0, "Repetition count must be non-negative").optional(),
+  repetitionYears: z.array(z.number().int().positive()).optional()
 });
 
 export const submitAnswersSchema = z.object({

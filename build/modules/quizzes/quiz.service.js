@@ -197,48 +197,54 @@ let QuizService = class QuizService {
             }
             // Transform session data to response format with comprehensive question data
             const sessionWithIncludes = session;
-            const questions = sessionWithIncludes.sessionQuestions.map((sq) => ({
-                id: sq.question.id,
-                questionText: sq.question.questionText,
-                questionType: sq.question.questionType || 'SINGLE_CHOICE',
-                explanation: sq.question.explanation || undefined,
-                yearLevel: sq.question.yearLevel,
-                examYear: sq.question.examYear,
-                metadata: sq.question.metadata,
-                questionImages: sq.question.questionImages || [],
-                questionExplanationImages: sq.question.questionExplanationImages || [],
-                university: sq.question.university ? {
-                    id: sq.question.university.id,
-                    name: sq.question.university.name,
-                    country: sq.question.university.country
-                } : undefined,
-                course: sq.question.course ? {
-                    id: sq.question.course.id,
-                    name: sq.question.course.name,
-                    description: sq.question.course.description,
-                    module: sq.question.course.module ? {
-                        id: sq.question.course.module.id,
-                        name: sq.question.course.module.name
-                    } : undefined
-                } : undefined,
-                source: sq.question.source ? {
-                    id: sq.question.source.id,
-                    name: sq.question.source.name
-                } : undefined,
-                questionAnswers: sq.question.questionAnswers.map((qa) => ({
-                    id: qa.id,
-                    answerText: qa.answerText,
-                    isCorrect: qa.isCorrect,
-                    explanation: qa.explanation || undefined,
-                    explanationImages: qa.explanationImages.map((img) => ({
-                        id: img.id,
-                        imagePath: img.imagePath,
-                        altText: img.altText || undefined
-                    }))
-                })),
-                createdAt: sq.question.createdAt,
-                updatedAt: sq.question.updatedAt
-            }));
+            const questions = sessionWithIncludes.sessionQuestions.map((sq) => {
+                var _a;
+                return ({
+                    id: sq.question.id,
+                    questionText: sq.question.questionText,
+                    questionType: sq.question.questionType || 'SINGLE_CHOICE',
+                    explanation: sq.question.explanation || undefined,
+                    tags: typeof sq.question.tags === 'string' ? JSON.parse(sq.question.tags || '[]') : (sq.question.tags || []),
+                    yearLevel: sq.question.yearLevel,
+                    examYear: sq.question.examYear,
+                    metadata: sq.question.metadata,
+                    questionImages: sq.question.questionImages || [],
+                    questionExplanationImages: sq.question.questionExplanationImages || [],
+                    university: sq.question.university ? {
+                        id: sq.question.university.id,
+                        name: sq.question.university.name,
+                        country: sq.question.university.country
+                    } : undefined,
+                    course: sq.question.course ? {
+                        id: sq.question.course.id,
+                        name: sq.question.course.name,
+                        description: sq.question.course.description,
+                        module: sq.question.course.module ? {
+                            id: sq.question.course.module.id,
+                            name: sq.question.course.module.name
+                        } : undefined
+                    } : undefined,
+                    source: sq.question.source ? {
+                        id: sq.question.source.id,
+                        name: sq.question.source.name
+                    } : undefined,
+                    questionAnswers: sq.question.questionAnswers.map((qa) => ({
+                        id: qa.id,
+                        answerText: qa.answerText,
+                        isCorrect: qa.isCorrect,
+                        explanation: qa.explanation || undefined,
+                        explanationImages: qa.explanationImages.map((img) => ({
+                            id: img.id,
+                            imagePath: img.imagePath,
+                            altText: img.altText || undefined
+                        }))
+                    })),
+                    repetitionCount: (_a = sq.question.repetitionCount) !== null && _a !== void 0 ? _a : 0,
+                    repetitionYears: typeof sq.question.repetitionYears === 'string' ? JSON.parse(sq.question.repetitionYears || '[]') : (sq.question.repetitionYears || []),
+                    createdAt: sq.question.createdAt,
+                    updatedAt: sq.question.updatedAt
+                });
+            });
             // Combine single choice and multiple choice attempts
             const singleChoiceAnswers = sessionWithIncludes.quizAttempts.map((attempt) => ({
                 questionId: attempt.questionId,
@@ -910,7 +916,9 @@ let QuizService = class QuizService {
                 questionTypes: dto.questionTypes,
                 years: dto.years,
                 universityIds: dto.universityIds,
-                questionSourceIds: dto.questionSourceIds
+                questionSourceIds: dto.questionSourceIds,
+                repetitionCountMin: dto.repetitionCountMin,
+                repetitionYears: dto.repetitionYears
             }, dto.questionCount);
             if (questions.length === 0) {
                 throw new QuizErrors_1.NoQuestionsFoundError({ courseIds: dto.courseIds });

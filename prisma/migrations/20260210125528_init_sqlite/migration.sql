@@ -88,6 +88,18 @@ CREATE TABLE "modules" (
 );
 
 -- CreateTable
+CREATE TABLE "module_books" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "module_id" INTEGER NOT NULL,
+    "name" TEXT NOT NULL,
+    "cover_path" TEXT,
+    "view_url" TEXT NOT NULL,
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL,
+    CONSTRAINT "module_books_module_id_fkey" FOREIGN KEY ("module_id") REFERENCES "modules" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
 CREATE TABLE "courses" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "module_id" INTEGER NOT NULL,
@@ -216,6 +228,9 @@ CREATE TABLE "questions" (
     "year_level" TEXT,
     "exam_year" INTEGER,
     "metadata" TEXT,
+    "tags" TEXT NOT NULL DEFAULT '[]',
+    "repetition_count" INTEGER NOT NULL DEFAULT 0,
+    "repetition_years" TEXT NOT NULL DEFAULT '[]',
     "created_by" INTEGER NOT NULL,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" DATETIME NOT NULL,
@@ -357,7 +372,9 @@ CREATE TABLE "quiz_attempts" (
     "session_id" INTEGER NOT NULL,
     "question_id" INTEGER NOT NULL,
     "selected_answer_id" INTEGER,
+    "text_answer" TEXT,
     "isCorrect" BOOLEAN,
+    "user_manual_correction" BOOLEAN,
     "answered_at" DATETIME,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "quiz_attempts_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "quiz_sessions" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
@@ -386,6 +403,8 @@ CREATE TABLE "activation_codes" (
     "hashed_code" TEXT NOT NULL,
     "description" TEXT,
     "duration_months" INTEGER NOT NULL,
+    "duration_days" INTEGER,
+    "duration_type" TEXT NOT NULL DEFAULT 'MONTHS',
     "max_uses" INTEGER NOT NULL DEFAULT 1,
     "current_uses" INTEGER NOT NULL DEFAULT 0,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -610,6 +629,9 @@ CREATE INDEX "study_packs_year_number_idx" ON "study_packs"("year_number");
 CREATE INDEX "study_packs_is_active_idx" ON "study_packs"("is_active");
 
 -- CreateIndex
+CREATE INDEX "module_books_module_id_idx" ON "module_books"("module_id");
+
+-- CreateIndex
 CREATE INDEX "course_layers_course_id_student_id_idx" ON "course_layers"("course_id", "student_id");
 
 -- CreateIndex
@@ -692,6 +714,9 @@ CREATE INDEX "questions_exam_year_idx" ON "questions"("exam_year");
 
 -- CreateIndex
 CREATE INDEX "questions_university_id_exam_year_idx" ON "questions"("university_id", "exam_year");
+
+-- CreateIndex
+CREATE INDEX "questions_repetition_count_idx" ON "questions"("repetition_count");
 
 -- CreateIndex
 CREATE INDEX "quiz_questions_quiz_id_idx" ON "quiz_questions"("quiz_id");

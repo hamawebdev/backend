@@ -1568,6 +1568,15 @@ let QuizRepository = class QuizRepository {
             if (filters.questionSourceIds && filters.questionSourceIds.length > 0) {
                 whereClause.sourceId = { in: filters.questionSourceIds };
             }
+            // Repetition count filter: questions with count >= provided value
+            if (filters.repetitionCountMin !== undefined && filters.repetitionCountMin > 0) {
+                whereClause.repetitionCount = { gte: filters.repetitionCountMin };
+            }
+            if (filters.repetitionYears && filters.repetitionYears.length > 0) {
+                whereClause.OR = filters.repetitionYears.map(year => ({
+                    repetitionYears: { contains: String(year) }
+                }));
+            }
             // Total question count (all questions matching filters)
             const totalQuestionCount = yield this.prisma.question.count({
                 where: whereClause
@@ -1706,6 +1715,16 @@ let QuizRepository = class QuizRepository {
             }
             if (filters.questionSourceIds && filters.questionSourceIds.length > 0) {
                 whereClause.sourceId = { in: filters.questionSourceIds };
+            }
+            // Repetition count filter: questions with count >= provided value
+            if (filters.repetitionCountMin !== undefined && filters.repetitionCountMin > 0) {
+                whereClause.repetitionCount = { gte: filters.repetitionCountMin };
+            }
+            // Repetition years filter: questions that appeared in at least one of the provided years (hasSome)
+            if (filters.repetitionYears && filters.repetitionYears.length > 0) {
+                whereClause.OR = filters.repetitionYears.map(year => ({
+                    repetitionYears: { contains: String(year) }
+                }));
             }
             // If questionCount is specified, fetch all matching questions and randomly select
             if (questionCount && questionCount > 0) {

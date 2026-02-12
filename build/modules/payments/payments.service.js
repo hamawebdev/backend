@@ -100,14 +100,39 @@ let PaymentsService = class PaymentsService {
             const base = process.env.CHARGILY_MODE === 'live'
                 ? 'https://pay.chargily.net/api/v2'
                 : 'https://pay.chargily.net/test/api/v2';
+            // Helper function to join URL parts without double slashes
+            const joinUrl = (baseUrl, path) => {
+                const trimmedBase = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+                const trimmedPath = path.replace(/^\/+/, ''); // Remove leading slashes
+                return trimmedPath ? `${trimmedBase}/${trimmedPath}` : trimmedBase;
+            };
+            // Trim environment variables to remove hidden spaces/newlines
+            const appBaseUrl = (process.env.APP_BASE_URL || 'https://med-adn.com').trim();
+            const webhookUrl = (process.env.WEBHOOK_PUBLIC_URL || '').trim();
+            const successPath = (process.env.PAYMENTS_SUCCESS_PATH || '').trim();
+            const failurePath = (process.env.PAYMENTS_FAILURE_PATH || '').trim();
+            // Construct valid absolute URLs
+            const successUrl = joinUrl(appBaseUrl, successPath);
+            const failureUrl = joinUrl(appBaseUrl, failurePath);
+            const webhookEndpoint = webhookUrl || 'https://med-adn.com/api/v1/payments/webhook';
+            // Debug logging for URL values and character lengths
+            console.log('=== Chargily URL Debug Info ===');
+            console.log('APP_BASE_URL raw:', JSON.stringify(process.env.APP_BASE_URL));
+            console.log('APP_BASE_URL trimmed:', appBaseUrl, '| Length:', appBaseUrl.length);
+            console.log('WEBHOOK_PUBLIC_URL raw:', JSON.stringify(process.env.WEBHOOK_PUBLIC_URL));
+            console.log('WEBHOOK_PUBLIC_URL trimmed:', webhookUrl, '| Length:', webhookUrl.length);
+            console.log('success_url:', successUrl, '| Length:', successUrl.length);
+            console.log('failure_url:', failureUrl, '| Length:', failureUrl.length);
+            console.log('webhook_endpoint:', webhookEndpoint, '| Length:', webhookEndpoint.length);
+            console.log('===============================');
             // Build checkout payload
             const payload = {
                 amount: amountDzd,
                 currency: 'dzd',
                 payment_method: paymentMethod,
-                success_url: `${process.env.APP_BASE_URL}`,
-                failure_url: `${process.env.APP_BASE_URL}`,
-                webhook_endpoint: 'https://srv953380.hstgr.cloud/api/v1/payments/webhook', // Using production domain
+                success_url: successUrl,
+                failure_url: failureUrl,
+                webhook_endpoint: webhookEndpoint,
                 locale,
                 chargily_pay_fees_allocation: 'customer',
                 metadata: {

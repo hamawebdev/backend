@@ -121,8 +121,11 @@ const bulkCreateQuestionsSchema = zod_1.z.object({
         questionText: zod_1.z.string().min(5, "Question text must be at least 5 characters"),
         explanation: zod_1.z.string().optional(),
         questionType: zod_1.z.nativeEnum(client_1.QuestionType).optional(),
+        questionTags: zod_1.z.array(zod_1.z.string().trim().min(1).max(50)).max(20).optional(),
         questionImages: zod_1.z.array(imageSchema).max(10).optional(),
         explanationImages: zod_1.z.array(imageSchema).max(10).optional(),
+        repetitionCount: zod_1.z.number().int().min(0).optional(),
+        repetitionYears: zod_1.z.array(zod_1.z.number().int().min(2000).max(2100)).optional(),
         answers: zod_1.z.array(zod_1.z.object({
             answerText: zod_1.z.string().min(1, "Answer text is required"),
             isCorrect: zod_1.z.boolean(),

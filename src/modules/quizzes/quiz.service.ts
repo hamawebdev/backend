@@ -253,6 +253,7 @@ export default class QuizService {
       questionText: sq.question.questionText,
       questionType: sq.question.questionType || 'SINGLE_CHOICE',
       explanation: sq.question.explanation || undefined,
+      tags: typeof sq.question.tags === 'string' ? JSON.parse(sq.question.tags || '[]') : (sq.question.tags || []),
       yearLevel: sq.question.yearLevel,
       examYear: sq.question.examYear,
       metadata: sq.question.metadata,
@@ -287,6 +288,8 @@ export default class QuizService {
           altText: img.altText || undefined
         }))
       })),
+      repetitionCount: sq.question.repetitionCount ?? 0,
+      repetitionYears: typeof sq.question.repetitionYears === 'string' ? JSON.parse(sq.question.repetitionYears || '[]') : (sq.question.repetitionYears || []),
       createdAt: sq.question.createdAt,
       updatedAt: sq.question.updatedAt
     }));
@@ -1134,6 +1137,8 @@ export default class QuizService {
       rotations?: string[];
       universityIds?: number[];
       questionSourceIds?: number[];
+      repetitionCountMin?: number;
+      repetitionYears?: number[];
     }
   ): Promise<{ totalQuestionCount: number; accessibleQuestionCount: number }> {
     if (!user.has_active_subscription) {
@@ -1194,6 +1199,8 @@ export default class QuizService {
       rotations?: string[];
       universityIds?: number[];
       questionSourceIds?: number[];
+      repetitionCountMin?: number;
+      repetitionYears?: number[];
     },
     user: TJwtPayload
   ): Promise<{ sessionId: number }> {
@@ -1220,7 +1227,9 @@ export default class QuizService {
       questionTypes: dto.questionTypes,
       years: dto.years,
       universityIds: dto.universityIds,
-      questionSourceIds: dto.questionSourceIds
+      questionSourceIds: dto.questionSourceIds,
+      repetitionCountMin: dto.repetitionCountMin,
+      repetitionYears: dto.repetitionYears
     }, dto.questionCount);
 
     if (questions.length === 0) {

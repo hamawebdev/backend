@@ -132,8 +132,11 @@ const bulkCreateQuestionsSchema = z.object({
     questionText: z.string().min(5, "Question text must be at least 5 characters"),
     explanation: z.string().optional(),
     questionType: z.nativeEnum(QuestionType).optional(),
+    questionTags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
     questionImages: z.array(imageSchema).max(10).optional(),
     explanationImages: z.array(imageSchema).max(10).optional(),
+    repetitionCount: z.number().int().min(0).optional(),
+    repetitionYears: z.array(z.number().int().min(2000).max(2100)).optional(),
     answers: z.array(z.object({
       answerText: z.string().min(1, "Answer text is required"),
       isCorrect: z.boolean(),

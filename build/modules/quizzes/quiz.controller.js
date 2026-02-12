@@ -154,8 +154,12 @@ let QuizController = class QuizController {
     // Returns totalQuestionCount and accessibleQuestionCount
     getQuestionCountPost(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
+                console.log("[DEBUG] question-count POST body:", JSON.stringify(req.body));
+                console.log("[DEBUG] user study packs:", (_a = req.user) === null || _a === void 0 ? void 0 : _a.accessible_study_packs);
                 const result = yield this.quizService.getQuestionCountCanonical(req.user, req.body);
+                console.log("[DEBUG] question-count result:", JSON.stringify(result));
                 this.responseUtils.sendSuccessResponse(res, result);
             }
             catch (error) {

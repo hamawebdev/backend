@@ -959,6 +959,7 @@ export default class StudentService {
         id: nl.label.id,
         name: nl.label.name
       })) || [],
+      question: note.question,
       createdAt: note.createdAt,
       updatedAt: note.updatedAt
     }));

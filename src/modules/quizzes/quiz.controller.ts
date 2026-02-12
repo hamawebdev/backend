@@ -134,7 +134,10 @@ export default class QuizController {
   // Returns totalQuestionCount and accessibleQuestionCount
   async getQuestionCountPost(req: RequestWithUser, res: Response): Promise<void> {
     try {
+      console.log("[DEBUG] question-count POST body:", JSON.stringify(req.body));
+      console.log("[DEBUG] user study packs:", req.user?.accessible_study_packs);
       const result = await this.quizService.getQuestionCountCanonical(req.user!, req.body);
+      console.log("[DEBUG] question-count result:", JSON.stringify(result));
       this.responseUtils.sendSuccessResponse(res, result);
     } catch (error) {
       console.error("Error getting question count:", error);

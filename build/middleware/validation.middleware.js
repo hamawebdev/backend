@@ -152,7 +152,9 @@ exports.canonicalQuestionCountSchema = zod_1.z.object({
     years: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
     rotations: zod_1.z.array(zod_1.z.enum(["R1", "R2", "R3", "R4"])).optional(),
     universityIds: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
-    questionSourceIds: zod_1.z.array(zod_1.z.number().int().positive()).optional()
+    questionSourceIds: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
+    repetitionCountMin: zod_1.z.number().int().min(0, "Repetition count must be non-negative").optional(),
+    repetitionYears: zod_1.z.array(zod_1.z.number().int().positive()).optional()
 });
 // Canonical spec: POST /quizzes/sessions
 exports.canonicalCreateSessionSchema = zod_1.z.object({
@@ -164,7 +166,9 @@ exports.canonicalCreateSessionSchema = zod_1.z.object({
     years: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
     rotations: zod_1.z.array(zod_1.z.enum(["R1", "R2", "R3", "R4"])).optional(),
     universityIds: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
-    questionSourceIds: zod_1.z.array(zod_1.z.number().int().positive()).optional()
+    questionSourceIds: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
+    repetitionCountMin: zod_1.z.number().int().min(0, "Repetition count must be non-negative").optional(),
+    repetitionYears: zod_1.z.array(zod_1.z.number().int().positive()).optional()
 });
 exports.submitAnswersSchema = zod_1.z.object({
     answers: zod_1.z.array(zod_1.z.object({

@@ -121,7 +121,8 @@ export default class QuestionService {
 
   /**
    * Create multiple questions with shared metadata
-   * Returns canonical format: {created, failed, errors[]}
+   * Returns canonical format: {created, failed, questionIds[], errors[]}
+   * questionIds[n] corresponds to request.questions[n], null if creation failed
    */
   async createQuestionsInBulk(
     bulkData: BulkCreateQuestionsDto,
@@ -135,8 +136,9 @@ export default class QuestionService {
     let created = 0;
     let failed = 0;
     const errors: Array<{ index: number; error: string }> = [];
+    const questionIds: (number | null)[] = [];
 
-    // Process each question individually to track errors
+    // Process each question individually to track errors and preserve order
     for (let index = 0; index < questions.length; index++) {
       const questionData = questions[index];
 
@@ -152,12 +154,15 @@ export default class QuestionService {
           throw new Error("Multiple choice questions must have at least two correct answers");
         }
 
-        // Create the question
-        await this.prisma.question.create({
+        // Create the question and capture the returned ID
+        const createdQuestion = await this.prisma.question.create({
           data: {
             questionText: questionData.questionText,
             explanation: questionData.explanation,
             questionType: questionData.questionType || QuestionType.SINGLE_CHOICE,
+            tags: JSON.stringify(questionData.questionTags || []),
+            repetitionCount: questionData.repetitionCount ?? 0,
+            repetitionYears: JSON.stringify(questionData.repetitionYears || []),
             courseId: metadata.courseId,
             examId: metadata.examId,
             sourceId: metadata.sourceId,
@@ -191,11 +196,16 @@ export default class QuestionService {
                 } : undefined
               }))
             }
-          }
+          },
+          select: { id: true }
         });
 
+        // Store the created question ID at the corresponding index
+        questionIds.push(createdQuestion.id);
         created++;
       } catch (error: any) {
+        // Store null for failed entries to maintain index alignment
+        questionIds.push(null);
         failed++;
         errors.push({
           index,
@@ -209,6 +219,7 @@ export default class QuestionService {
       data: {
         created,
         failed,
+        questionIds,
         errors
       },
       message: `Created ${created} questions, ${failed} failed`
