@@ -487,6 +487,9 @@ exports.createResidencyQuestionSchema = zod_1.z.object({
     examYear: zod_1.z.number().int().positive().optional(),
     universityId: zod_1.z.number().int().positive().optional(),
     metadata: zod_1.z.string().optional(),
+    tags: zod_1.z.array(zod_1.z.string()).optional(),
+    repetitionCount: zod_1.z.number().int().min(0).optional(),
+    repetitionYears: zod_1.z.array(zod_1.z.number().int()).optional(),
     questionAnswers: zod_1.z.array(residencyQuestionAnswerSchema)
         .min(1, 'At least one answer is required')
         .refine((answers) => answers.some(a => a.isCorrect), { message: 'At least one answer must be marked as correct' })
@@ -499,6 +502,9 @@ exports.updateResidencyQuestionSchema = zod_1.z.object({
     examYear: zod_1.z.number().int().positive().optional(),
     universityId: zod_1.z.number().int().positive().optional(),
     metadata: zod_1.z.string().optional(),
+    tags: zod_1.z.array(zod_1.z.string()).optional(),
+    repetitionCount: zod_1.z.number().int().min(0).optional(),
+    repetitionYears: zod_1.z.array(zod_1.z.number().int()).optional(),
     questionAnswers: zod_1.z.array(residencyQuestionAnswerSchema)
         .min(1)
         .refine((answers) => answers.some(a => a.isCorrect), { message: 'At least one answer must be marked as correct' })

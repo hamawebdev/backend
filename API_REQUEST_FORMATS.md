@@ -6,14 +6,136 @@ API_URL=https://med-adn.com/api/v1/
 
 
 ## Table of Contents
-1. [Questions Bulk Endpoint](#questions-bulk-endpoint)
-2. [Question Images Upload Endpoint](#question-images-upload-endpoint)
-3. [Question Explanation Images Upload Endpoint](#question-explanation-images-upload-endpoint)
-4. [Unit Creation Endpoint](#unit-creation-endpoint)
-5. [Module Creation Endpoint](#module-creation-endpoint)
-6. [Course Creation Endpoint](#course-creation-endpoint)
-7. [Logo Upload Endpoint](#logo-upload-endpoint)
+1. [Login Endpoint](#login-endpoint)
+2. [Questions Bulk Endpoint](#questions-bulk-endpoint)
+3. [Question Images Upload Endpoint](#question-images-upload-endpoint)
+4. [Question Explanation Images Upload Endpoint](#question-explanation-images-upload-endpoint)
+5. [Unit Creation Endpoint](#unit-creation-endpoint)
+6. [Module Creation Endpoint](#module-creation-endpoint)
+7. [Course Creation Endpoint](#course-creation-endpoint)
+8. [Unit and Module Image Upload Endpoint](#unit-and-module-image-upload-endpoint)
 9. [Residency Questions Endpoint](#residency-questions-endpoint)
+
+---
+
+## Login Endpoint
+
+Authenticate a user and receive access and refresh tokens.
+
+**Endpoint:** `POST /api/v1/auth/login`
+
+**Authentication:** None (Public endpoint)
+
+### Request Headers
+| Header | Value |
+|--------|-------|
+| Content-Type | application/json |
+
+### Request Body
+
+```json
+{
+  "email": "user@example.com",
+  "password": "userpassword123",
+  "deviceFingerprint": "optional-device-fingerprint"
+}
+```
+
+### Field Descriptions
+
+| Field | Type | Required | Validation | Description |
+|-------|------|----------|------------|-------------|
+| `email` | string | Yes | Valid email format | User's email address |
+| `password` | string | Yes | Min 1 character | User's password |
+| `deviceFingerprint` | string | No | Max 255 characters | Optional device identifier for security tracking |
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+  }
+}
+```
+
+### Field Descriptions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `accessToken` | string | JWT token for authenticating subsequent API requests (expires in 1 hour) |
+| `refreshToken` | string | JWT token for obtaining new access tokens when expired |
+
+### JWT Token Payload Structure
+
+The access token contains the following claims:
+
+```json
+{
+  "user_data": {
+    "id": 1,
+    "email": "user@example.com",
+    "fullName": "John Doe",
+    "role": "STUDENT",
+    "universityId": 1,
+    "specialtyId": 1,
+    "currentYear": "ONE",
+    "emailVerified": true,
+    "isActive": true
+  },
+  "subscriptions": [
+    {
+      "id": 1,
+      "study_pack_id": 1,
+      "pack_name": "Med Year 1",
+      "pack_type": "YEARLY",
+      "year_number": "ONE",
+      "end_date": "2025-12-31T23:59:59Z",
+      "days_remaining": 180,
+      "accessible_year_levels": ["ONE", "TWO"]
+    }
+  ],
+  "payment_status": "active",
+  "has_active_subscription": true,
+  "accessible_study_packs": [1, 2]
+}
+```
+
+### Error Responses
+
+**400 Bad Request (Validation):**
+```json
+{
+  "success": false,
+  "message": "Request validation failed",
+  "errors": [
+    {
+      "field": "email",
+      "message": "A valid email is required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized:**
+```json
+{
+  "success": false,
+  "message": "Invalid email or password"
+}
+```
+
+**403 Forbidden:**
+```json
+{
+  "success": false,
+  "message": "Account is deactivated. Please contact support."
+}
+```
 
 ---
 
@@ -462,7 +584,7 @@ Create a new unit (Unite) within a study pack.
 
 ## Module Creation Endpoint
 
-Create a new module within a unit.
+Create a new module. Modules can be created either within a Unit (standard module) or directly within a Study Pack (independent module).
 
 **Endpoint:** `POST /api/v1/admin/content/modules`
 
@@ -474,7 +596,7 @@ Create a new module within a unit.
 | Content-Type | application/json |
 | Authorization | Bearer {token} |
 
-### Request Body
+### Request Body (Standard Module)
 
 ```json
 {
@@ -484,13 +606,26 @@ Create a new module within a unit.
 }
 ```
 
+### Request Body (Independent Module)
+
+```json
+{
+  "studyPackId": 5,
+  "name": "Independent Topic",
+  "description": "A standalone module not attached to any unit"
+}
+```
+
 ### Field Descriptions
 
 | Field | Type | Required | Validation | Description |
 |-------|------|----------|------------|-------------|
-| `uniteId` | number | Yes | Positive integer | ID of the parent unit |
+| `uniteId` | number | Conditional | Positive integer | ID of the parent unit. Required for standard modules. |
+| `studyPackId` | number | Conditional | Positive integer | ID of the parent study pack. Required for independent modules. |
 | `name` | string | Yes | Min 2 characters | Name of the module |
 | `description` | string | No | Max 5000 characters | Description of the module |
+
+**Note:** You must provide either `uniteId` OR `studyPackId`, but not both.
 
 ### Example Response
 
@@ -591,6 +726,207 @@ Create a new course within a module.
 {
   "success": false,
   "message": "Module not found"
+}
+```
+
+
+---
+
+## Unit and Module Image Upload Endpoint
+
+Upload images for units (logos) and modules (content images).
+
+### Unit Logo Upload
+
+Upload the logo image for a unit. The returned URL should be used in the Unit Creation/Update request.
+
+**Endpoint:** `POST /api/v1/admin/upload/logo`
+
+**Authentication:** Required (Admin or Employee role)
+
+#### Request Headers
+| Header | Value |
+|--------|-------|
+| Content-Type | multipart/form-data |
+| Authorization | Bearer {token} |
+
+#### Request Body (form-data)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `logo` | File | Yes | Logo image file (max 5MB) |
+
+#### File Requirements
+
+| Requirement | Value |
+|-------------|-------|
+| Max file size | 5MB |
+| Allowed types | JPEG, PNG, GIF, WebP, SVG |
+
+#### Example Response
+
+```json
+{
+  "uploadedFiles": [
+    {
+      "filename": "logos_1707768291234.png",
+      "path": "/uploads/logos/logos_1707768291234.png",
+      "size": 10240,
+      "url": "/api/media/logos/logos_1707768291234.png"
+    }
+  ]
+}
+```
+
+### General Image Upload (Modules)
+
+Upload generic images to be used in module descriptions or other content areas where an image URL is needed.
+
+**Endpoint:** `POST /api/v1/admin/upload/image`
+
+**Authentication:** Required (Admin or Employee role)
+
+#### Request Headers
+| Header | Value |
+|--------|-------|
+| Content-Type | multipart/form-data |
+| Authorization | Bearer {token} |
+
+#### Request Body (form-data)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `images` | File[] | Yes | Array of image files (max 10) |
+
+#### File Requirements
+
+| Requirement | Value |
+|-------------|-------|
+| Max files | 10 |
+| Max file size | 10MB per file |
+| Allowed types | JPEG, PNG, GIF, BMP, TIFF, WebP, SVG |
+
+#### Example Response
+
+```json
+{
+  "uploadedFiles": [
+    {
+      "filename": "images_1707768291234.jpg",
+      "path": "/uploads/images/images_1707768291234.jpg",
+      "size": 54321,
+      "url": "/api/media/images/images_1707768291234.jpg"
+    }
+  ]
+}
+```
+
+### Error Responses
+
+**400 Bad Request:**
+```json
+{
+  "success": false,
+  "message": "No logo file uploaded"
+}
+```
+
+**400 Bad Request (Validation):**
+```json
+{
+  "success": false,
+  "message": "File exceeds maximum size of 5MB"
+}
+```
+
+
+
+---
+
+## Unit and Module Update Endpoints (Images)
+
+**Important:** Updating the image (logo) of a unit is a **two-step process**:
+1. **Upload** the image file using the **POST** endpoint (multipart/form-data).
+2. **Update** the Unit record with the returned image URL using the **PUT** endpoint (application/json).
+
+There is **no direct PUT endpoint** for uploading unit/module images as files. You must use the upload endpoint first.
+
+### Step 1: Upload Image (Form-Data)
+Use the [Unit Logo Upload Endpoint](#unit-logo-upload) (`POST /api/v1/admin/upload/logo`) defined above.
+
+### Step 2: Link Image to Unit (JSON)
+
+After uploading, you will receive a URL (e.g., `/api/media/logos/logo_123.png`). Use this URL to update the Unit.
+
+**Endpoint:** `PUT /api/v1/admin/content/unites/:unitId`
+
+**Authentication:** Required (Admin only)
+
+#### Request Headers
+| Header | Value |
+|--------|-------|
+| Content-Type | application/json |
+| Authorization | Bearer {token} |
+
+#### Request Body
+```json
+{
+  "name": "Cell Biology",
+  "logoUrl": "/api/media/logos/logos_1707768291234.png"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | No | Name of the unit (optional if only updating logo) |
+| `logoUrl` | string | No | URL of the logo image (obtained from Step 1) |
+
+#### Example Response
+```json
+{
+  "id": 5,
+  "name": "Cell Biology",
+  "logoUrl": "/api/media/logos/logos_1707768291234.png",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-02-13T16:20:00.000Z"
+}
+```
+
+### Module Update
+
+Update module details. While modules do not have a dedicated logo field in the database, you can update the description which may contain image URLs.
+
+**Endpoint:** `PUT /api/v1/admin/content/modules/:moduleId`
+
+**Authentication:** Required (Admin only)
+
+#### Request Headers
+| Header | Value |
+|--------|-------|
+| Content-Type | application/json |
+| Authorization | Bearer {token} |
+
+#### Request Body
+```json
+{
+  "name": "New Module Name",
+  "description": "Updated description with ![Image](/api/media/images/img.jpg)"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | No | Name of the module |
+| `description` | string | No | Description of the module |
+
+#### Example Response
+```json
+{
+  "id": 10,
+  "name": "New Module Name",
+  "uniteId": 1,
+  "createdAt": "2024-01-15T10:35:00.000Z",
+  "updatedAt": "2024-02-13T16:25:00.000Z"
 }
 ```
 
