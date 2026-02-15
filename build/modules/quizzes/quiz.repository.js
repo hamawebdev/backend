@@ -47,11 +47,13 @@ let QuizRepository = class QuizRepository {
             }
             else {
                 // If no specific courses, filter by accessible study packs
+                // Include both modules with a unite (study pack check) and independent modules (no unite)
                 whereConditions.course = {
                     module: {
-                        unite: {
-                            studyPackId: { in: accessibleStudyPackIds }
-                        }
+                        OR: [
+                            { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+                            { uniteId: null }
+                        ]
                     }
                 };
             }
@@ -511,9 +513,10 @@ let QuizRepository = class QuizRepository {
                 where: {
                     course: {
                         module: {
-                            unite: {
-                                studyPackId: { in: accessibleStudyPackIds }
-                            }
+                            OR: [
+                                { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+                                { uniteId: null }
+                            ]
                         }
                     }
                 },
@@ -527,9 +530,10 @@ let QuizRepository = class QuizRepository {
             const questionTypeCountsWhere = {
                 course: {
                     module: {
-                        unite: {
-                            studyPackId: { in: accessibleStudyPackIds }
-                        }
+                        OR: [
+                            { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+                            { uniteId: null }
+                        ]
                     }
                 }
             };
@@ -571,9 +575,10 @@ let QuizRepository = class QuizRepository {
             const courseQuestionTypeCountsWhere = {
                 course: {
                     module: {
-                        unite: {
-                            studyPackId: { in: accessibleStudyPackIds }
-                        }
+                        OR: [
+                            { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+                            { uniteId: null }
+                        ]
                     }
                 }
             };
@@ -879,9 +884,10 @@ let QuizRepository = class QuizRepository {
                 where: {
                     course: {
                         module: {
-                            unite: {
-                                studyPackId: { in: accessibleStudyPackIds }
-                            }
+                            OR: [
+                                { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+                                { uniteId: null }
+                            ]
                         }
                     },
                     universityId: { not: null } // Only include questions with university
@@ -1617,9 +1623,10 @@ let QuizRepository = class QuizRepository {
             const whereClause = {
                 course: {
                     module: {
-                        unite: {
-                            studyPackId: { in: studyPackIds }
-                        }
+                        OR: [
+                            { unite: { studyPackId: { in: studyPackIds } } },
+                            { uniteId: null }
+                        ]
                     }
                 }
             };

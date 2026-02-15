@@ -39,11 +39,13 @@ export default class QuizRepository {
       whereConditions.courseId = { in: filters.courseIds };
     } else {
       // If no specific courses, filter by accessible study packs
+      // Include both modules with a unite (study pack check) and independent modules (no unite)
       whereConditions.course = {
         module: {
-          unite: {
-            studyPackId: { in: accessibleStudyPackIds }
-          }
+          OR: [
+            { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+            { uniteId: null }
+          ]
         }
       };
     }
@@ -621,10 +623,11 @@ export default class QuizRepository {
       where: {
         course: {
           module: {
-            unite: {
-              studyPackId: { in: accessibleStudyPackIds }
-            }
-          }
+            OR: [
+              { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+              { uniteId: null }
+            ]
+          } as any
         }
       },
       select: { yearLevel: true },
@@ -639,9 +642,10 @@ export default class QuizRepository {
     const questionTypeCountsWhere: any = {
       course: {
         module: {
-          unite: {
-            studyPackId: { in: accessibleStudyPackIds }
-          }
+          OR: [
+            { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+            { uniteId: null }
+          ]
         }
       }
     };
@@ -688,9 +692,10 @@ export default class QuizRepository {
     const courseQuestionTypeCountsWhere: any = {
       course: {
         module: {
-          unite: {
-            studyPackId: { in: accessibleStudyPackIds }
-          }
+          OR: [
+            { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+            { uniteId: null }
+          ]
         }
       }
     };
@@ -1082,10 +1087,11 @@ export default class QuizRepository {
       where: {
         course: {
           module: {
-            unite: {
-              studyPackId: { in: accessibleStudyPackIds }
-            }
-          }
+            OR: [
+              { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+              { uniteId: null }
+            ]
+          } as any
         },
         universityId: { not: null } // Only include questions with university
         // Note: We now include questions without examYear and handle them with a default year
@@ -1972,9 +1978,10 @@ export default class QuizRepository {
     const whereClause: any = {
       course: {
         module: {
-          unite: {
-            studyPackId: { in: studyPackIds }
-          }
+          OR: [
+            { unite: { studyPackId: { in: studyPackIds } } },
+            { uniteId: null }
+          ]
         }
       }
     };
