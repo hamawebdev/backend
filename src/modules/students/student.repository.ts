@@ -645,8 +645,6 @@ export default class StudentRepository {
   /**
    * Get content filters with hierarchical structure (unites and independent modules)
    * For GET /students/content/filters
-   * Note: Current schema doesn't support independent modules (uniteId is required),
-   * so independentModules will always be an empty array until schema is updated
    */
   async getContentFilters(yearLevel?: string): Promise<{
     unites: any[];
@@ -669,10 +667,19 @@ export default class StudentRepository {
       }
     });
 
-    // Note: Current schema has uniteId as required, so no independent modules exist
-    // This is here for future compatibility when schema supports nullable uniteId
-    // For now, return empty array
-    const independentModules: any[] = [];
+    // Query modules that have no parent unite (independent modules)
+    const independentModulesRaw = await this.prisma.module.findMany({
+      where: { uniteId: null } as any,
+      include: {
+        courses: {
+          select: {
+            id: true,
+            name: true,
+            description: true
+          }
+        }
+      }
+    });
 
     return {
       unites: unites.map(unite => ({
@@ -682,11 +689,14 @@ export default class StudentRepository {
         modules: unite.modules.map(module => ({
           id: module.id,
           name: module.name,
-          // Module doesn't have logoUrl in current schema
           courses: module.courses
         }))
       })),
-      independentModules
+      independentModules: independentModulesRaw.map((module: any) => ({
+        id: module.id,
+        name: module.name,
+        courses: module.courses
+      }))
     };
   }
 
@@ -2785,12 +2795,17 @@ export default class StudentRepository {
       }
     });
 
-    // Get session counts by module for the user
-    const sessionCounts = await this.prisma.quizSession.groupBy({
-      by: ['id'],
-      where: {
-        userId,
-        type: sessionType === 'PRACTICE' ? 'PRACTICE' : 'EXAM'
+    // Query modules that have no parent unite (independent modules)
+    const independentModulesRaw = await this.prisma.module.findMany({
+      where: { uniteId: null } as any,
+      include: {
+        courses: {
+          select: {
+            id: true,
+            name: true,
+            description: true
+          }
+        }
       }
     });
 
@@ -2849,7 +2864,16 @@ export default class StudentRepository {
 
     return {
       unites: unitesResult,
-      independentModules: [] // No independent modules in current schema
+      independentModules: independentModulesRaw.map((module: any) => ({
+        id: module.id,
+        name: module.name,
+        sessionsCount: moduleSessionCounts[module.id] || 0,
+        courses: module.courses.map((course: any) => ({
+          id: course.id,
+          name: course.name,
+          description: course.description
+        }))
+      }))
     };
   }
 
