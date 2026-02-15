@@ -1348,9 +1348,13 @@ let AdminService = class AdminService {
                     where: Object.keys(studyPackWhere).length > 0 ? {
                         studyPack: studyPackWhere
                     } : undefined,
-                    include: {
+                    select: {
+                        id: true,
+                        name: true,
                         modules: {
-                            include: {
+                            select: {
+                                id: true,
+                                name: true,
                                 courses: {
                                     select: {
                                         id: true,
