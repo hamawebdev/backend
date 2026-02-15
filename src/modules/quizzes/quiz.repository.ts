@@ -1978,8 +1978,6 @@ export default class QuizRepository {
       }
     });
 
-    console.log("[DIAG question-count] accessibleQuestionCount:", accessibleQuestionCount);
-
     return { totalQuestionCount, accessibleQuestionCount };
   }
 

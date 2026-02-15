@@ -171,6 +171,8 @@ Create multiple questions in a single request with shared metadata.
       "explanation": "The mitochondria is known as the powerhouse of the cell...",
       "questionType": "SINGLE_CHOICE",
       "questionTags": ["cell-biology", "energy", "mitochondria"],
+      "repetitionCount": 3,
+      "repetitionYears": [2021, 2022, 2023],
       "questionImages": [
         {
           "imagePath": "/uploads/questions/img1.jpg",
@@ -227,6 +229,9 @@ Create multiple questions in a single request with shared metadata.
 | `questionText` | string | Yes | Min 5 characters | The question text |
 | `explanation` | string | No | Max 5000 characters | Explanation of the correct answer |
 | `questionType` | string | No | SINGLE_CHOICE, MULTIPLE_CHOICE, QROC | Type of question |
+| `questionTags` | array | No | Max 20 tags | Tags for categorization |
+| `repetitionCount` | number | No | Min 0 | Number of times the question appeared |
+| `repetitionYears` | array | No | Years 2000-2100 | Array of years the question appeared |
 | `questionImages` | array | No | Max 10 images | Images associated with the question |
 | `explanationImages` | array | No | Max 10 images | Images for the explanation |
 | `answers` | array | Yes | Min 0 for QROC | Array of answer objects |
