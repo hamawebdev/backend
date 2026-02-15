@@ -58,7 +58,7 @@ export default class StudentRepository {
         moduleId: progress.course.moduleId,
         moduleName: progress.course.module.name,
         uniteId: progress.course.module.uniteId,
-        uniteName: progress.course.module.unite.name,
+        uniteName: progress.course.module.unite?.name ?? 'Unknown',
         layer1Completed: progress.layer1Completed,
         layer2Completed: progress.layer2Completed,
         layer3Completed: progress.layer3Completed,

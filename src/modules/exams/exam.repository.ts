@@ -1,16 +1,16 @@
-import { 
-  Exam, 
-  YearLevel, 
+import {
+  Exam,
+  YearLevel,
   PackType,
   SessionType,
-  PrismaClient 
+  PrismaClient
 } from "@prisma/client";
 import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
 
 @injectable()
 export default class ExamRepository {
-  constructor(@inject("db") private prismaService: PrismaService) {}
+  constructor(@inject("db") private prismaService: PrismaService) { }
 
   private get prisma(): PrismaClient {
     return this.prismaService.getClient();
@@ -66,7 +66,7 @@ export default class ExamRepository {
     };
   }> {
     let targetYear: number;
-    
+
     if (year) {
       targetYear = parseInt(year);
     } else {
@@ -75,7 +75,7 @@ export default class ExamRepository {
         orderBy: { examYear: 'desc' },
         select: { examYear: true }
       });
-      
+
       if (mostRecentExam) {
         targetYear = mostRecentExam.examYear.getFullYear();
       } else {
@@ -146,9 +146,9 @@ export default class ExamRepository {
           id: exam.module.id,
           name: exam.module.name,
           unite: {
-            name: exam.module.unite.name,
+            name: exam.module.unite?.name ?? 'Unknown',
             studyPack: {
-              name: exam.module.unite.studyPack.name
+              name: exam.module.unite?.studyPack?.name ?? 'Unknown'
             }
           }
         },
@@ -232,9 +232,9 @@ export default class ExamRepository {
             id: exam.module.id,
             name: exam.module.name,
             unite: {
-              name: exam.module.unite.name,
+              name: exam.module.unite?.name ?? 'Unknown',
               studyPack: {
-                name: exam.module.unite.studyPack.name
+                name: exam.module.unite?.studyPack?.name ?? 'Unknown'
               }
             }
           },

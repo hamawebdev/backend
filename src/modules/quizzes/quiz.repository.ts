@@ -1146,7 +1146,7 @@ export default class QuizRepository {
     questions.forEach(question => {
       if (!question.course) return; // Skip if course is null
 
-      const uniteId = question.course.module.unite.id;
+      const uniteId = question.course.module.unite?.id ?? 0;
       const moduleId = question.course.module.id;
       const universityId = question.universityId!;
       // Use examYear if available, otherwise use a default year (e.g., 9999 for "No Year Specified")
@@ -1156,7 +1156,7 @@ export default class QuizRepository {
       if (!uniteMap.has(uniteId)) {
         uniteMap.set(uniteId, {
           id: uniteId,
-          title: question.course.module.unite.name,
+          title: question.course.module.unite?.name ?? 'Unknown',
           modules: new Map()
         });
       }
@@ -1542,7 +1542,7 @@ export default class QuizRepository {
 
     // Check which questions are not accessible (not in user's study packs)
     const inaccessibleIds = existingQuestions
-      .filter(q => q.course && !accessibleStudyPackIds.includes(q.course.module.unite.studyPackId))
+      .filter(q => q.course && q.course.module.unite && !accessibleStudyPackIds.includes(q.course.module.unite.studyPackId))
       .map(q => q.id);
 
     return {

@@ -313,7 +313,7 @@ export interface CourseProgress {
   courseName: string;
   moduleId: number;
   moduleName: string;
-  uniteId: number;
+  uniteId: number | null;
   uniteName: string;
   layer1Completed: boolean;
   layer2Completed: boolean;
