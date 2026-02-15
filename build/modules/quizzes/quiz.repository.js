@@ -1354,19 +1354,27 @@ let QuizRepository = class QuizRepository {
     getQuestionCount(accessibleStudyPackIds, filters) {
         return __awaiter(this, void 0, void 0, function* () {
             // Build the where clause based on filters
+            // Handle both modules with a unite (study pack access) and independent modules (no unite)
             const whereClause = {
                 course: {
                     module: {
-                        unite: {
-                            studyPackId: { in: accessibleStudyPackIds }
-                        }
+                        OR: [
+                            { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+                            { uniteId: null }
+                        ]
                     }
                 },
                 universityId: { not: null } // Only include questions with university
             };
             // Apply filters if provided
             if (filters.unite) {
-                whereClause.course.module.unite.id = filters.unite;
+                // When filtering by unite, only match modules with that specific unite
+                whereClause.course.module = {
+                    unite: {
+                        id: filters.unite,
+                        studyPackId: { in: accessibleStudyPackIds }
+                    }
+                };
             }
             if (filters.module) {
                 whereClause.course.module.id = filters.module;
@@ -1404,9 +1412,10 @@ let QuizRepository = class QuizRepository {
             const baseWhere = {
                 course: {
                     module: {
-                        unite: {
-                            studyPackId: { in: studyPackIds }
-                        }
+                        OR: [
+                            { unite: { studyPackId: { in: studyPackIds } } },
+                            { uniteId: null }
+                        ]
                     }
                 }
             };
@@ -1583,12 +1592,16 @@ let QuizRepository = class QuizRepository {
                 where: whereClause
             });
             // Accessible question count (questions in accessible study packs)
+            // Must handle both: modules linked to a unite (with studyPack), and independent modules (no unite)
             const accessibleQuestionCount = yield this.prisma.question.count({
                 where: Object.assign(Object.assign({}, whereClause), { course: {
                         module: {
-                            unite: {
-                                studyPackId: { in: studyPackIds }
-                            }
+                            OR: [
+                                // Modules that belong to a unite with an accessible study pack
+                                { unite: { studyPackId: { in: studyPackIds } } },
+                                // Independent modules (no unite) — no ACL path, so consider accessible
+                                { uniteId: null }
+                            ]
                         }
                     } })
             });
@@ -1699,9 +1712,10 @@ let QuizRepository = class QuizRepository {
                 courseId: { in: filters.courseIds },
                 course: {
                     module: {
-                        unite: {
-                            studyPackId: { in: studyPackIds }
-                        }
+                        OR: [
+                            { unite: { studyPackId: { in: studyPackIds } } },
+                            { uniteId: null }
+                        ]
                     }
                 }
             };
