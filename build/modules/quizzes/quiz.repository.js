@@ -1593,10 +1593,23 @@ let QuizRepository = class QuizRepository {
                     repetitionYears: { contains: String(year) }
                 }));
             }
+            // === DIAGNOSTIC LOGGING ===
+            // Raw sanity check: how many questions exist in DB at all?
+            const rawTotal = yield this.prisma.question.count();
+            // Count with just courseId filter (no universityId etc)
+            const courseOnly = yield this.prisma.question.count({
+                where: { courseId: { in: filters.courseIds } }
+            });
+            console.log("[DIAG question-count] whereClause:", JSON.stringify(whereClause));
+            console.log("[DIAG question-count] rawTotal (all questions in DB):", rawTotal);
+            console.log("[DIAG question-count] courseOnly (courseId IN filter only):", courseOnly);
+            console.log("[DIAG question-count] studyPackIds:", JSON.stringify(studyPackIds));
+            // === END DIAGNOSTIC ===
             // Total question count (all questions matching filters)
             const totalQuestionCount = yield this.prisma.question.count({
                 where: whereClause
             });
+            console.log("[DIAG question-count] totalQuestionCount:", totalQuestionCount);
             // Accessible question count (questions in accessible study packs)
             // Must handle both: modules linked to a unite (with studyPack), and independent modules (no unite)
             const accessibleQuestionCount = yield this.prisma.question.count({
@@ -1611,6 +1624,7 @@ let QuizRepository = class QuizRepository {
                         }
                     } })
             });
+            console.log("[DIAG question-count] accessibleQuestionCount:", accessibleQuestionCount);
             return { totalQuestionCount, accessibleQuestionCount };
         });
     }
