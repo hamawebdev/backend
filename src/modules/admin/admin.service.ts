@@ -1357,16 +1357,18 @@ export default class AdminService {
    */
   async createModuleCanonical(data: any, createdById: number) {
     try {
-      // Validate unite exists
-      const unite = await this.prisma.unite.findUnique({ where: { id: data.uniteId } });
-      if (!unite) {
-        throw new NotFoundError("Unite");
+      // Validate unite exists if provided
+      if (data.uniteId) {
+        const unite = await this.prisma.unite.findUnique({ where: { id: data.uniteId } });
+        if (!unite) {
+          throw new NotFoundError("Unite");
+        }
       }
 
       const module = await this.prisma.module.create({
         data: {
           name: data.name,
-          uniteId: data.uniteId
+          ...(data.uniteId && { uniteId: data.uniteId })
         }
       });
 

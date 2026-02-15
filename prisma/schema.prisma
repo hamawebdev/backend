@@ -147,13 +147,13 @@ model Unite {
 
 model Module {
   id        Int      @id @default(autoincrement())
-  uniteId   Int      @map("unite_id")
+  uniteId   Int?     @map("unite_id")
   name      String
   description String?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  unite      Unite    @relation(fields: [uniteId], references: [id], onDelete: Cascade)
+  unite      Unite?   @relation(fields: [uniteId], references: [id], onDelete: Cascade)
   courses    Course[]
   exams      Exam[]
   books      ModuleBook[]

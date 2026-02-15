@@ -70,7 +70,7 @@ export const createUniteSchema = z.object({
 });
 
 export const createModuleSchema = z.object({
-  uniteId: z.number().int().positive(),
+  uniteId: z.number().int().positive().optional(),
   name: z.string().min(2),
   description: z.string().optional(),
 });

@@ -584,7 +584,7 @@ Create a new unit (Unite) within a study pack.
 
 ## Module Creation Endpoint
 
-Create a new module. Modules can be created either within a Unit (standard module) or directly within a Study Pack (independent module).
+Create a new module within a Unit.
 
 **Endpoint:** `POST /api/v1/admin/content/modules`
 
@@ -596,7 +596,7 @@ Create a new module. Modules can be created either within a Unit (standard modul
 | Content-Type | application/json |
 | Authorization | Bearer {token} |
 
-### Request Body (Standard Module)
+### Request Body
 
 ```json
 {
@@ -606,26 +606,13 @@ Create a new module. Modules can be created either within a Unit (standard modul
 }
 ```
 
-### Request Body (Independent Module)
-
-```json
-{
-  "studyPackId": 5,
-  "name": "Independent Topic",
-  "description": "A standalone module not attached to any unit"
-}
-```
-
 ### Field Descriptions
 
 | Field | Type | Required | Validation | Description |
 |-------|------|----------|------------|-------------|
-| `uniteId` | number | Conditional | Positive integer | ID of the parent unit. Required for standard modules. |
-| `studyPackId` | number | Conditional | Positive integer | ID of the parent study pack. Required for independent modules. |
+| `uniteId` | number | No | Positive integer | ID of the parent unit (optional) |
 | `name` | string | Yes | Min 2 characters | Name of the module |
 | `description` | string | No | Max 5000 characters | Description of the module |
-
-**Note:** You must provide either `uniteId` OR `studyPackId`, but not both.
 
 ### Example Response
 
@@ -649,7 +636,7 @@ Create a new module. Modules can be created either within a Unit (standard modul
 ```json
 {
   "success": false,
-  "message": "Request validation failed: uniteId: Required, name: Min 2 characters"
+  "message": "Request validation failed: name: Min 2 characters"
 }
 ```
 
