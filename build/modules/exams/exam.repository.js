@@ -100,6 +100,7 @@ let ExamRepository = class ExamRepository {
             });
             // Group exams by year
             const examsByYear = exams.reduce((acc, exam) => {
+                var _a, _b, _c, _d, _e;
                 const examYear = exam.examYear.getFullYear().toString();
                 const existingYear = acc.find(item => item.year === examYear);
                 const examData = {
@@ -111,9 +112,9 @@ let ExamRepository = class ExamRepository {
                         id: exam.module.id,
                         name: exam.module.name,
                         unite: {
-                            name: exam.module.unite.name,
+                            name: (_b = (_a = exam.module.unite) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : 'Unknown',
                             studyPack: {
-                                name: exam.module.unite.studyPack.name
+                                name: (_e = (_d = (_c = exam.module.unite) === null || _c === void 0 ? void 0 : _c.studyPack) === null || _d === void 0 ? void 0 : _d.name) !== null && _e !== void 0 ? _e : 'Unknown'
                             }
                         }
                     },
@@ -165,23 +166,26 @@ let ExamRepository = class ExamRepository {
                 residencyExams = {
                     available: true,
                     yearsAvailable: availableYears,
-                    exams: residencyExamResults.map(exam => ({
-                        id: exam.id,
-                        title: exam.title,
-                        university: "Residency Program", // Default university for residency exams
-                        yearLevel: exam.yearLevel,
-                        module: {
-                            id: exam.module.id,
-                            name: exam.module.name,
-                            unite: {
-                                name: exam.module.unite.name,
-                                studyPack: {
-                                    name: exam.module.unite.studyPack.name
+                    exams: residencyExamResults.map(exam => {
+                        var _a, _b, _c, _d, _e;
+                        return ({
+                            id: exam.id,
+                            title: exam.title,
+                            university: "Residency Program", // Default university for residency exams
+                            yearLevel: exam.yearLevel,
+                            module: {
+                                id: exam.module.id,
+                                name: exam.module.name,
+                                unite: {
+                                    name: (_b = (_a = exam.module.unite) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : 'Unknown',
+                                    studyPack: {
+                                        name: (_e = (_d = (_c = exam.module.unite) === null || _c === void 0 ? void 0 : _c.studyPack) === null || _d === void 0 ? void 0 : _d.name) !== null && _e !== void 0 ? _e : 'Unknown'
+                                    }
                                 }
-                            }
-                        },
-                        year: exam.year
-                    }))
+                            },
+                            year: exam.year
+                        });
+                    })
                 };
             }
             return {

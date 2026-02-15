@@ -52,6 +52,7 @@ let StudentRepository = class StudentRepository {
                 }
             });
             const completedCourses = courseProgressData.map(progress => {
+                var _a, _b;
                 const layersCompleted = [
                     progress.layer1Completed,
                     progress.layer2Completed,
@@ -64,7 +65,7 @@ let StudentRepository = class StudentRepository {
                     moduleId: progress.course.moduleId,
                     moduleName: progress.course.module.name,
                     uniteId: progress.course.module.uniteId,
-                    uniteName: progress.course.module.unite.name,
+                    uniteName: (_b = (_a = progress.course.module.unite) === null || _a === void 0 ? void 0 : _a.name) !== null && _b !== void 0 ? _b : 'Unknown',
                     layer1Completed: progress.layer1Completed,
                     layer2Completed: progress.layer2Completed,
                     layer3Completed: progress.layer3Completed,
@@ -529,8 +530,6 @@ let StudentRepository = class StudentRepository {
     /**
      * Get content filters with hierarchical structure (unites and independent modules)
      * For GET /students/content/filters
-     * Note: Current schema doesn't support independent modules (uniteId is required),
-     * so independentModules will always be an empty array until schema is updated
      */
     getContentFilters(yearLevel) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -550,10 +549,19 @@ let StudentRepository = class StudentRepository {
                     }
                 }
             });
-            // Note: Current schema has uniteId as required, so no independent modules exist
-            // This is here for future compatibility when schema supports nullable uniteId
-            // For now, return empty array
-            const independentModules = [];
+            // Query modules that have no parent unite (independent modules)
+            const independentModulesRaw = yield this.prisma.module.findMany({
+                where: { uniteId: null },
+                include: {
+                    courses: {
+                        select: {
+                            id: true,
+                            name: true,
+                            description: true
+                        }
+                    }
+                }
+            });
             return {
                 unites: unites.map(unite => ({
                     id: unite.id,
@@ -562,11 +570,14 @@ let StudentRepository = class StudentRepository {
                     modules: unite.modules.map(module => ({
                         id: module.id,
                         name: module.name,
-                        // Module doesn't have logoUrl in current schema
                         courses: module.courses
                     }))
                 })),
-                independentModules
+                independentModules: independentModulesRaw.map((module) => ({
+                    id: module.id,
+                    name: module.name,
+                    courses: module.courses
+                }))
             };
         });
     }
@@ -2499,12 +2510,17 @@ let StudentRepository = class StudentRepository {
                     }
                 }
             });
-            // Get session counts by module for the user
-            const sessionCounts = yield this.prisma.quizSession.groupBy({
-                by: ['id'],
-                where: {
-                    userId,
-                    type: sessionType === 'PRACTICE' ? 'PRACTICE' : 'EXAM'
+            // Query modules that have no parent unite (independent modules)
+            const independentModulesRaw = yield this.prisma.module.findMany({
+                where: { uniteId: null },
+                include: {
+                    courses: {
+                        select: {
+                            id: true,
+                            name: true,
+                            description: true
+                        }
+                    }
                 }
             });
             // Get session-question mappings to determine modules
@@ -2559,7 +2575,16 @@ let StudentRepository = class StudentRepository {
             }));
             return {
                 unites: unitesResult,
-                independentModules: [] // No independent modules in current schema
+                independentModules: independentModulesRaw.map((module) => ({
+                    id: module.id,
+                    name: module.name,
+                    sessionsCount: moduleSessionCounts[module.id] || 0,
+                    courses: module.courses.map((course) => ({
+                        id: course.id,
+                        name: course.name,
+                        description: course.description
+                    }))
+                }))
             };
         });
     }

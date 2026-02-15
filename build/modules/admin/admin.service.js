@@ -1177,16 +1177,15 @@ let AdminService = class AdminService {
     createModuleCanonical(data, createdById) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // Validate unite exists
-                const unite = yield this.prisma.unite.findUnique({ where: { id: data.uniteId } });
-                if (!unite) {
-                    throw new AppError_1.NotFoundError("Unite");
+                // Validate unite exists if provided
+                if (data.uniteId) {
+                    const unite = yield this.prisma.unite.findUnique({ where: { id: data.uniteId } });
+                    if (!unite) {
+                        throw new AppError_1.NotFoundError("Unite");
+                    }
                 }
                 const module = yield this.prisma.module.create({
-                    data: {
-                        name: data.name,
-                        uniteId: data.uniteId
-                    }
+                    data: Object.assign({ name: data.name }, (data.uniteId && { uniteId: data.uniteId }))
                 });
                 // Log activity
                 try {

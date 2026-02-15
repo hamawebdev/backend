@@ -1639,12 +1639,14 @@ export default class QuizRepository {
     }
   ): Promise<number> {
     // Build the where clause based on filters
+    // Handle both modules with a unite (study pack access) and independent modules (no unite)
     const whereClause: any = {
       course: {
         module: {
-          unite: {
-            studyPackId: { in: accessibleStudyPackIds }
-          }
+          OR: [
+            { unite: { studyPackId: { in: accessibleStudyPackIds } } },
+            { uniteId: null }
+          ]
         }
       },
       universityId: { not: null } // Only include questions with university
@@ -1652,7 +1654,13 @@ export default class QuizRepository {
 
     // Apply filters if provided
     if (filters.unite) {
-      whereClause.course.module.unite.id = filters.unite;
+      // When filtering by unite, only match modules with that specific unite
+      whereClause.course.module = {
+        unite: {
+          id: filters.unite,
+          studyPackId: { in: accessibleStudyPackIds }
+        }
+      };
     }
 
     if (filters.module) {
@@ -1710,9 +1718,10 @@ export default class QuizRepository {
     const baseWhere: any = {
       course: {
         module: {
-          unite: {
-            studyPackId: { in: studyPackIds }
-          }
+          OR: [
+            { unite: { studyPackId: { in: studyPackIds } } },
+            { uniteId: null }
+          ]
         }
       }
     };
@@ -1931,14 +1940,18 @@ export default class QuizRepository {
     });
 
     // Accessible question count (questions in accessible study packs)
+    // Must handle both: modules linked to a unite (with studyPack), and independent modules (no unite)
     const accessibleQuestionCount = await this.prisma.question.count({
       where: {
         ...whereClause,
         course: {
           module: {
-            unite: {
-              studyPackId: { in: studyPackIds }
-            }
+            OR: [
+              // Modules that belong to a unite with an accessible study pack
+              { unite: { studyPackId: { in: studyPackIds } } },
+              // Independent modules (no unite) — no ACL path, so consider accessible
+              { uniteId: null }
+            ]
           }
         }
       }
@@ -2069,9 +2082,10 @@ export default class QuizRepository {
       courseId: { in: filters.courseIds },
       course: {
         module: {
-          unite: {
-            studyPackId: { in: studyPackIds }
-          }
+          OR: [
+            { unite: { studyPackId: { in: studyPackIds } } },
+            { uniteId: null }
+          ]
         }
       }
     };

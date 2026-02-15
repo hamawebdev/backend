@@ -921,9 +921,10 @@ let QuizRepository = class QuizRepository {
             // Group questions hierarchically
             const uniteMap = new Map();
             questions.forEach(question => {
+                var _a, _b, _c, _d;
                 if (!question.course)
                     return; // Skip if course is null
-                const uniteId = question.course.module.unite.id;
+                const uniteId = (_b = (_a = question.course.module.unite) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : 0;
                 const moduleId = question.course.module.id;
                 const universityId = question.universityId;
                 // Use examYear if available, otherwise use a default year (e.g., 9999 for "No Year Specified")
@@ -932,7 +933,7 @@ let QuizRepository = class QuizRepository {
                 if (!uniteMap.has(uniteId)) {
                     uniteMap.set(uniteId, {
                         id: uniteId,
-                        title: question.course.module.unite.name,
+                        title: (_d = (_c = question.course.module.unite) === null || _c === void 0 ? void 0 : _c.name) !== null && _d !== void 0 ? _d : 'Unknown',
                         modules: new Map()
                     });
                 }
@@ -1268,7 +1269,7 @@ let QuizRepository = class QuizRepository {
             const invalidIds = questionIds.filter(id => !existingIds.includes(id));
             // Check which questions are not accessible (not in user's study packs)
             const inaccessibleIds = existingQuestions
-                .filter(q => q.course && !accessibleStudyPackIds.includes(q.course.module.unite.studyPackId))
+                .filter(q => q.course && q.course.module.unite && !accessibleStudyPackIds.includes(q.course.module.unite.studyPackId))
                 .map(q => q.id);
             return {
                 existingQuestions,

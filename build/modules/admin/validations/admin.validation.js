@@ -65,7 +65,7 @@ exports.createUniteSchema = zod_1.z.object({
     logoUrl: zod_1.z.string().url().optional(),
 });
 exports.createModuleSchema = zod_1.z.object({
-    uniteId: zod_1.z.number().int().positive(),
+    uniteId: zod_1.z.number().int().positive().optional(),
     name: zod_1.z.string().min(2),
     description: zod_1.z.string().optional(),
 });
