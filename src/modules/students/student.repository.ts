@@ -678,21 +678,24 @@ export default class StudentRepository {
     });
 
     // Independent modules (uniteId: null) don't belong to any StudyPack.
-    // Only include them when no yearLevel filter is applied (full access view).
-    const independentModulesRaw = yearLevel
-      ? []
-      : await this.prisma.module.findMany({
-        where: { uniteId: null } as any,
-        include: {
-          courses: {
-            select: {
-              id: true,
-              name: true,
-              description: true
-            }
+    // Filter them by yearLevel through their exams (Exam has moduleId + yearLevel).
+    const independentModulesWhere: any = { uniteId: null };
+    if (yearLevel) {
+      independentModulesWhere.exams = { some: { yearLevel: yearLevel } };
+    }
+
+    const independentModulesRaw = await this.prisma.module.findMany({
+      where: independentModulesWhere as any,
+      include: {
+        courses: {
+          select: {
+            id: true,
+            name: true,
+            description: true
           }
         }
-      });
+      }
+    });
 
     return {
       unites: unites.map(unite => ({
@@ -2821,21 +2824,24 @@ export default class StudentRepository {
     });
 
     // Independent modules (uniteId: null) don't belong to any StudyPack.
-    // Only include them when no yearLevel filter is applied.
-    const independentModulesRaw = yearLevel
-      ? []
-      : await this.prisma.module.findMany({
-        where: { uniteId: null } as any,
-        include: {
-          courses: {
-            select: {
-              id: true,
-              name: true,
-              description: true
-            }
+    // Filter them by yearLevel through their exams (Exam has moduleId + yearLevel).
+    const independentModulesWhere: any = { uniteId: null };
+    if (yearLevel) {
+      independentModulesWhere.exams = { some: { yearLevel: yearLevel } };
+    }
+
+    const independentModulesRaw = await this.prisma.module.findMany({
+      where: independentModulesWhere as any,
+      include: {
+        courses: {
+          select: {
+            id: true,
+            name: true,
+            description: true
           }
         }
-      });
+      }
+    });
 
     // Get session-question mappings to determine modules
     const sessionsWithModules = await this.prisma.quizSession.findMany({
