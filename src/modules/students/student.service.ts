@@ -2562,7 +2562,8 @@ export default class StudentService {
    */
   async getSessionsFilters(
     user: TJwtPayload,
-    sessionType: 'PRACTICE' | 'EXAM'
+    sessionType: 'PRACTICE' | 'EXAM',
+    yearLevel?: string
   ): Promise<{
     unites: Array<{
       id: number;
@@ -2582,9 +2583,34 @@ export default class StudentService {
       courses: Array<{ id: number; name: string; description: string | null }>;
     }>;
   }> {
+    // Determine studyPackIds from user access (same logic as getContentFilters)
+    const isAdminOrEmployee = user.user_data.role === 'ADMIN' || user.user_data.role === 'EMPLOYEE';
+    const hasResidencyAccess = user.subscriptions?.some(
+      (sub: any) => sub.pack_type === 'residency' || sub.pack_type === 'RESIDENCY'
+    ) || false;
+
+    let studyPackIds: number[] | undefined;
+
+    if (isAdminOrEmployee || hasResidencyAccess) {
+      if (yearLevel) {
+        const matchingPacks = await this.prisma.studyPack.findMany({
+          where: { yearNumber: yearLevel },
+          select: { id: true }
+        });
+        studyPackIds = matchingPacks.map((p: any) => p.id);
+      } else {
+        // No yearLevel filter: pass undefined to not restrict unites
+        studyPackIds = undefined;
+      }
+    } else {
+      studyPackIds = user.accessible_study_packs || [];
+    }
+
     return await this.studentRepository.getSessionsFiltersCanonical(
       user.user_data.id,
-      sessionType
+      sessionType,
+      studyPackIds,
+      yearLevel
     );
   }
 

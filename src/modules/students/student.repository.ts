@@ -677,19 +677,22 @@ export default class StudentRepository {
       }
     });
 
-    // Query modules that have no parent unite (independent modules)
-    const independentModulesRaw = await this.prisma.module.findMany({
-      where: { uniteId: null } as any,
-      include: {
-        courses: {
-          select: {
-            id: true,
-            name: true,
-            description: true
+    // Independent modules (uniteId: null) don't belong to any StudyPack.
+    // Only include them when no yearLevel filter is applied (full access view).
+    const independentModulesRaw = yearLevel
+      ? []
+      : await this.prisma.module.findMany({
+        where: { uniteId: null } as any,
+        include: {
+          courses: {
+            select: {
+              id: true,
+              name: true,
+              description: true
+            }
           }
         }
-      }
-    });
+      });
 
     return {
       unites: unites.map(unite => ({
@@ -2768,7 +2771,9 @@ export default class StudentRepository {
    */
   async getSessionsFiltersCanonical(
     userId: number,
-    sessionType: 'PRACTICE' | 'EXAM'
+    sessionType: 'PRACTICE' | 'EXAM',
+    studyPackIds?: number[],
+    yearLevel?: string
   ): Promise<{
     unites: Array<{
       id: number;
@@ -2788,8 +2793,18 @@ export default class StudentRepository {
       courses: Array<{ id: number; name: string; description: string | null }>;
     }>;
   }> {
-    // Get all unites with their modules and courses
+    // Build where clause for unites: filter by studyPackIds if provided
+    const uniteWhere: any = {};
+    if (studyPackIds && studyPackIds.length > 0) {
+      uniteWhere.studyPackId = { in: studyPackIds };
+    }
+    if (yearLevel) {
+      uniteWhere.studyPack = { yearNumber: yearLevel };
+    }
+
+    // Get unites filtered by accessible study packs (and optionally yearLevel)
     const unites = await this.prisma.unite.findMany({
+      where: Object.keys(uniteWhere).length > 0 ? uniteWhere : undefined,
       include: {
         modules: {
           include: {
@@ -2805,19 +2820,22 @@ export default class StudentRepository {
       }
     });
 
-    // Query modules that have no parent unite (independent modules)
-    const independentModulesRaw = await this.prisma.module.findMany({
-      where: { uniteId: null } as any,
-      include: {
-        courses: {
-          select: {
-            id: true,
-            name: true,
-            description: true
+    // Independent modules (uniteId: null) don't belong to any StudyPack.
+    // Only include them when no yearLevel filter is applied.
+    const independentModulesRaw = yearLevel
+      ? []
+      : await this.prisma.module.findMany({
+        where: { uniteId: null } as any,
+        include: {
+          courses: {
+            select: {
+              id: true,
+              name: true,
+              description: true
+            }
           }
         }
-      }
-    });
+      });
 
     // Get session-question mappings to determine modules
     const sessionsWithModules = await this.prisma.quizSession.findMany({

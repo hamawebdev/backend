@@ -1123,6 +1123,7 @@ export default class StudentController {
   async getSessionsFilters(req: RequestWithUser, res: Response): Promise<void> {
     try {
       const sessionType = req.query.sessionType as string;
+      const yearLevel = req.query.yearLevel as string | undefined;
 
       if (!sessionType || !['PRACTICE', 'EXAM'].includes(sessionType)) {
         this.responseUtils.sendBadRequestResponse(res, "sessionType is required and must be PRACTICE or EXAM");
@@ -1131,7 +1132,8 @@ export default class StudentController {
 
       const result = await this.studentService.getSessionsFilters(
         req.user!,
-        sessionType as 'PRACTICE' | 'EXAM'
+        sessionType as 'PRACTICE' | 'EXAM',
+        yearLevel
       );
 
       this.responseUtils.sendSuccessResponse(res, result);
