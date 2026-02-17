@@ -378,7 +378,8 @@ export default class StudentService {
     unites: any[];
     independentModules: any[];
   }> {
-    const data = await this.studentRepository.getContentFilters(yearLevel);
+    const studyPackIds = user.accessible_study_packs || [];
+    const data = await this.studentRepository.getContentFilters(studyPackIds, yearLevel);
     return data;
   }
 

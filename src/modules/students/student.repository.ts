@@ -646,12 +646,15 @@ export default class StudentRepository {
    * Get content filters with hierarchical structure (unites and independent modules)
    * For GET /students/content/filters
    */
-  async getContentFilters(yearLevel?: string): Promise<{
+  async getContentFilters(studyPackIds: number[], yearLevel?: string): Promise<{
     unites: any[];
     independentModules: any[];
   }> {
-    // Get unites with their modules and courses
+    // Get unites filtered by accessible study packs
     const unites = await this.prisma.unite.findMany({
+      where: {
+        studyPackId: { in: studyPackIds }
+      },
       include: {
         modules: {
           include: {

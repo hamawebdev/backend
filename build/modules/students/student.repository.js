@@ -531,10 +531,13 @@ let StudentRepository = class StudentRepository {
      * Get content filters with hierarchical structure (unites and independent modules)
      * For GET /students/content/filters
      */
-    getContentFilters(yearLevel) {
+    getContentFilters(studyPackIds, yearLevel) {
         return __awaiter(this, void 0, void 0, function* () {
-            // Get unites with their modules and courses
+            // Get unites filtered by accessible study packs
             const unites = yield this.prisma.unite.findMany({
+                where: {
+                    studyPackId: { in: studyPackIds }
+                },
                 include: {
                     modules: {
                         include: {

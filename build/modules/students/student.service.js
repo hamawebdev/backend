@@ -232,7 +232,8 @@ let StudentService = class StudentService {
      */
     getContentFilters(user, yearLevel) {
         return __awaiter(this, void 0, void 0, function* () {
-            const data = yield this.studentRepository.getContentFilters(yearLevel);
+            const studyPackIds = user.accessible_study_packs || [];
+            const data = yield this.studentRepository.getContentFilters(studyPackIds, yearLevel);
             return data;
         });
     }
