@@ -232,7 +232,32 @@ let StudentService = class StudentService {
      */
     getContentFilters(user, yearLevel) {
         return __awaiter(this, void 0, void 0, function* () {
-            const studyPackIds = user.accessible_study_packs || [];
+            var _a;
+            // Determine if user has residency or admin/employee access
+            const isAdminOrEmployee = user.user_data.role === 'ADMIN' || user.user_data.role === 'EMPLOYEE';
+            const hasResidencyAccess = ((_a = user.subscriptions) === null || _a === void 0 ? void 0 : _a.some((sub) => sub.pack_type === 'residency' || sub.pack_type === 'RESIDENCY')) || false;
+            let studyPackIds;
+            if (isAdminOrEmployee || hasResidencyAccess) {
+                if (yearLevel) {
+                    // Residency/admin + yearLevel: get study packs matching that year
+                    const matchingPacks = yield this.prisma.studyPack.findMany({
+                        where: { yearNumber: yearLevel },
+                        select: { id: true }
+                    });
+                    studyPackIds = matchingPacks.map((p) => p.id);
+                }
+                else {
+                    // Residency/admin without yearLevel: get ALL study packs
+                    const allPacks = yield this.prisma.studyPack.findMany({
+                        select: { id: true }
+                    });
+                    studyPackIds = allPacks.map((p) => p.id);
+                }
+            }
+            else {
+                // Regular user: use their accessible study packs from JWT
+                studyPackIds = user.accessible_study_packs || [];
+            }
             const data = yield this.studentRepository.getContentFilters(studyPackIds, yearLevel);
             return data;
         });
