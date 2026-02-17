@@ -650,11 +650,18 @@ export default class StudentRepository {
     unites: any[];
     independentModules: any[];
   }> {
-    // Get unites filtered by accessible study packs
+    // Build where clause: always filter by accessible study packs,
+    // and optionally narrow down by yearLevel (maps to studyPack.yearNumber)
+    const uniteWhere: any = {
+      studyPackId: { in: studyPackIds }
+    };
+    if (yearLevel) {
+      uniteWhere.studyPack = { yearNumber: yearLevel };
+    }
+
+    // Get unites filtered by accessible study packs (and optionally yearLevel)
     const unites = await this.prisma.unite.findMany({
-      where: {
-        studyPackId: { in: studyPackIds }
-      },
+      where: uniteWhere,
       include: {
         modules: {
           include: {

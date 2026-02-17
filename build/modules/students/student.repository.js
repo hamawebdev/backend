@@ -533,11 +533,17 @@ let StudentRepository = class StudentRepository {
      */
     getContentFilters(studyPackIds, yearLevel) {
         return __awaiter(this, void 0, void 0, function* () {
-            // Get unites filtered by accessible study packs
+            // Build where clause: always filter by accessible study packs,
+            // and optionally narrow down by yearLevel (maps to studyPack.yearNumber)
+            const uniteWhere = {
+                studyPackId: { in: studyPackIds }
+            };
+            if (yearLevel) {
+                uniteWhere.studyPack = { yearNumber: yearLevel };
+            }
+            // Get unites filtered by accessible study packs (and optionally yearLevel)
             const unites = yield this.prisma.unite.findMany({
-                where: {
-                    studyPackId: { in: studyPackIds }
-                },
+                where: uniteWhere,
                 include: {
                     modules: {
                         include: {
