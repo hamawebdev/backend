@@ -558,9 +558,34 @@ let StudentRepository = class StudentRepository {
                     }
                 }
             });
-            // Query modules that have no parent unite (independent modules)
+            // Independent modules (uniteId: null) don't belong to any StudyPack directly.
+            // Filter them by year level: StudyPack.yearNumber → Module.courses.questions.yearLevel
+            const independentModulesWhere = { uniteId: null };
+            // Determine which yearNumbers to filter by
+            let effectiveYearNumbers = [];
+            if (yearLevel) {
+                effectiveYearNumbers = [yearLevel];
+            }
+            else if (studyPackIds.length > 0) {
+                const packs = yield this.prisma.studyPack.findMany({
+                    where: { id: { in: studyPackIds } },
+                    select: { yearNumber: true }
+                });
+                effectiveYearNumbers = packs.map((p) => p.yearNumber).filter(Boolean);
+            }
+            if (effectiveYearNumbers.length > 0) {
+                independentModulesWhere.courses = {
+                    some: {
+                        questions: {
+                            some: {
+                                yearLevel: { in: effectiveYearNumbers }
+                            }
+                        }
+                    }
+                };
+            }
             const independentModulesRaw = yield this.prisma.module.findMany({
-                where: { uniteId: null },
+                where: independentModulesWhere,
                 include: {
                     courses: {
                         select: {
@@ -2500,11 +2525,20 @@ let StudentRepository = class StudentRepository {
      * GET /students/sessions/filters - Canonical spec
      * Returns filter options for sessions by type
      */
-    getSessionsFiltersCanonical(userId, sessionType) {
+    getSessionsFiltersCanonical(userId, sessionType, studyPackIds, yearLevel) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b;
-            // Get all unites with their modules and courses
+            // Build where clause for unites: filter by studyPackIds if provided
+            const uniteWhere = {};
+            if (studyPackIds && studyPackIds.length > 0) {
+                uniteWhere.studyPackId = { in: studyPackIds };
+            }
+            if (yearLevel) {
+                uniteWhere.studyPack = { yearNumber: yearLevel };
+            }
+            // Get unites filtered by accessible study packs (and optionally yearLevel)
             const unites = yield this.prisma.unite.findMany({
+                where: Object.keys(uniteWhere).length > 0 ? uniteWhere : undefined,
                 include: {
                     modules: {
                         include: {
@@ -2519,9 +2553,34 @@ let StudentRepository = class StudentRepository {
                     }
                 }
             });
-            // Query modules that have no parent unite (independent modules)
+            // Independent modules (uniteId: null) don't belong to any StudyPack directly.
+            // Filter them by year level: StudyPack.yearNumber → Module.courses.questions.yearLevel
+            const independentModulesWhere = { uniteId: null };
+            // Determine which yearNumbers to filter by
+            let effectiveYearNumbers = [];
+            if (yearLevel) {
+                effectiveYearNumbers = [yearLevel];
+            }
+            else if (studyPackIds && studyPackIds.length > 0) {
+                const packs = yield this.prisma.studyPack.findMany({
+                    where: { id: { in: studyPackIds } },
+                    select: { yearNumber: true }
+                });
+                effectiveYearNumbers = packs.map((p) => p.yearNumber).filter(Boolean);
+            }
+            if (effectiveYearNumbers.length > 0) {
+                independentModulesWhere.courses = {
+                    some: {
+                        questions: {
+                            some: {
+                                yearLevel: { in: effectiveYearNumbers }
+                            }
+                        }
+                    }
+                };
+            }
             const independentModulesRaw = yield this.prisma.module.findMany({
-                where: { uniteId: null },
+                where: independentModulesWhere,
                 include: {
                     courses: {
                         select: {

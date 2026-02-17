@@ -1991,9 +1991,30 @@ let StudentService = class StudentService {
      * GET /students/sessions/filters - Canonical spec
      * Returns filter options for sessions by type (PRACTICE/EXAM)
      */
-    getSessionsFilters(user, sessionType) {
+    getSessionsFilters(user, sessionType, yearLevel) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.studentRepository.getSessionsFiltersCanonical(user.user_data.id, sessionType);
+            var _a;
+            // Determine studyPackIds from user access (same logic as getContentFilters)
+            const isAdminOrEmployee = user.user_data.role === 'ADMIN' || user.user_data.role === 'EMPLOYEE';
+            const hasResidencyAccess = ((_a = user.subscriptions) === null || _a === void 0 ? void 0 : _a.some((sub) => sub.pack_type === 'residency' || sub.pack_type === 'RESIDENCY')) || false;
+            let studyPackIds;
+            if (isAdminOrEmployee || hasResidencyAccess) {
+                if (yearLevel) {
+                    const matchingPacks = yield this.prisma.studyPack.findMany({
+                        where: { yearNumber: yearLevel },
+                        select: { id: true }
+                    });
+                    studyPackIds = matchingPacks.map((p) => p.id);
+                }
+                else {
+                    // No yearLevel filter: pass undefined to not restrict unites
+                    studyPackIds = undefined;
+                }
+            }
+            else {
+                studyPackIds = user.accessible_study_packs || [];
+            }
+            return yield this.studentRepository.getSessionsFiltersCanonical(user.user_data.id, sessionType, studyPackIds, yearLevel);
         });
     }
     /**

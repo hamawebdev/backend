@@ -1123,11 +1123,12 @@ let StudentController = class StudentController {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const sessionType = req.query.sessionType;
+                const yearLevel = req.query.yearLevel;
                 if (!sessionType || !['PRACTICE', 'EXAM'].includes(sessionType)) {
                     this.responseUtils.sendBadRequestResponse(res, "sessionType is required and must be PRACTICE or EXAM");
                     return;
                 }
-                const result = yield this.studentService.getSessionsFilters(req.user, sessionType);
+                const result = yield this.studentService.getSessionsFilters(req.user, sessionType, yearLevel);
                 this.responseUtils.sendSuccessResponse(res, result);
             }
             catch (error) {
