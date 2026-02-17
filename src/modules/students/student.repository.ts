@@ -677,21 +677,32 @@ export default class StudentRepository {
       }
     });
 
-    // Independent modules (uniteId: null) don't belong to any StudyPack.
-    // Filter them by yearLevel through their exams (Exam has moduleId + yearLevel).
-    // When no yearLevel is given, restrict to years from the user's accessible study packs.
+    // Independent modules (uniteId: null) don't belong to any StudyPack directly.
+    // Filter them by year level: StudyPack.yearNumber → Module.courses.questions.yearLevel
     const independentModulesWhere: any = { uniteId: null };
+
+    // Determine which yearNumbers to filter by
+    let effectiveYearNumbers: string[] = [];
     if (yearLevel) {
-      independentModulesWhere.exams = { some: { yearLevel: yearLevel } };
+      effectiveYearNumbers = [yearLevel];
     } else if (studyPackIds.length > 0) {
       const packs = await this.prisma.studyPack.findMany({
         where: { id: { in: studyPackIds } },
         select: { yearNumber: true }
       });
-      const yearNumbers = packs.map((p: any) => p.yearNumber).filter(Boolean);
-      if (yearNumbers.length > 0) {
-        independentModulesWhere.exams = { some: { yearLevel: { in: yearNumbers } } };
-      }
+      effectiveYearNumbers = packs.map((p: any) => p.yearNumber).filter(Boolean);
+    }
+
+    if (effectiveYearNumbers.length > 0) {
+      independentModulesWhere.courses = {
+        some: {
+          questions: {
+            some: {
+              yearLevel: { in: effectiveYearNumbers }
+            }
+          }
+        }
+      };
     }
 
     const independentModulesRaw = await this.prisma.module.findMany({
@@ -2833,21 +2844,32 @@ export default class StudentRepository {
       }
     });
 
-    // Independent modules (uniteId: null) don't belong to any StudyPack.
-    // Filter them by yearLevel through their exams (Exam has moduleId + yearLevel).
-    // When no yearLevel is given, restrict to years from the user's accessible study packs.
+    // Independent modules (uniteId: null) don't belong to any StudyPack directly.
+    // Filter them by year level: StudyPack.yearNumber → Module.courses.questions.yearLevel
     const independentModulesWhere: any = { uniteId: null };
+
+    // Determine which yearNumbers to filter by
+    let effectiveYearNumbers: string[] = [];
     if (yearLevel) {
-      independentModulesWhere.exams = { some: { yearLevel: yearLevel } };
+      effectiveYearNumbers = [yearLevel];
     } else if (studyPackIds && studyPackIds.length > 0) {
       const packs = await this.prisma.studyPack.findMany({
         where: { id: { in: studyPackIds } },
         select: { yearNumber: true }
       });
-      const yearNumbers = packs.map((p: any) => p.yearNumber).filter(Boolean);
-      if (yearNumbers.length > 0) {
-        independentModulesWhere.exams = { some: { yearLevel: { in: yearNumbers } } };
-      }
+      effectiveYearNumbers = packs.map((p: any) => p.yearNumber).filter(Boolean);
+    }
+
+    if (effectiveYearNumbers.length > 0) {
+      independentModulesWhere.courses = {
+        some: {
+          questions: {
+            some: {
+              yearLevel: { in: effectiveYearNumbers }
+            }
+          }
+        }
+      };
     }
 
     const independentModulesRaw = await this.prisma.module.findMany({
