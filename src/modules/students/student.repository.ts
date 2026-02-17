@@ -679,9 +679,19 @@ export default class StudentRepository {
 
     // Independent modules (uniteId: null) don't belong to any StudyPack.
     // Filter them by yearLevel through their exams (Exam has moduleId + yearLevel).
+    // When no yearLevel is given, restrict to years from the user's accessible study packs.
     const independentModulesWhere: any = { uniteId: null };
     if (yearLevel) {
       independentModulesWhere.exams = { some: { yearLevel: yearLevel } };
+    } else if (studyPackIds.length > 0) {
+      const packs = await this.prisma.studyPack.findMany({
+        where: { id: { in: studyPackIds } },
+        select: { yearNumber: true }
+      });
+      const yearNumbers = packs.map((p: any) => p.yearNumber).filter(Boolean);
+      if (yearNumbers.length > 0) {
+        independentModulesWhere.exams = { some: { yearLevel: { in: yearNumbers } } };
+      }
     }
 
     const independentModulesRaw = await this.prisma.module.findMany({
@@ -2825,9 +2835,19 @@ export default class StudentRepository {
 
     // Independent modules (uniteId: null) don't belong to any StudyPack.
     // Filter them by yearLevel through their exams (Exam has moduleId + yearLevel).
+    // When no yearLevel is given, restrict to years from the user's accessible study packs.
     const independentModulesWhere: any = { uniteId: null };
     if (yearLevel) {
       independentModulesWhere.exams = { some: { yearLevel: yearLevel } };
+    } else if (studyPackIds && studyPackIds.length > 0) {
+      const packs = await this.prisma.studyPack.findMany({
+        where: { id: { in: studyPackIds } },
+        select: { yearNumber: true }
+      });
+      const yearNumbers = packs.map((p: any) => p.yearNumber).filter(Boolean);
+      if (yearNumbers.length > 0) {
+        independentModulesWhere.exams = { some: { yearLevel: { in: yearNumbers } } };
+      }
     }
 
     const independentModulesRaw = await this.prisma.module.findMany({
