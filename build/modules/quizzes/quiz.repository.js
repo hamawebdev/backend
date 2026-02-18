@@ -148,6 +148,11 @@ let QuizRepository = class QuizRepository {
                 where: whereCondition,
                 include: {
                     sessionQuestions: {
+                        orderBy: {
+                            question: {
+                                repetitionCount: 'desc'
+                            }
+                        },
                         include: {
                             question: {
                                 include: {

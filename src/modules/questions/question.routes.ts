@@ -136,7 +136,7 @@ const bulkCreateQuestionsSchema = z.object({
     questionImages: z.array(imageSchema).max(10).optional(),
     explanationImages: z.array(imageSchema).max(10).optional(),
     repetitionCount: z.number().int().min(0).optional(),
-    repetitionYears: z.array(z.number().int().refine(val => val === 0 || (val >= 2000 && val <= 2100), { message: "Year must be 0 or between 2000 and 2100" })).optional(),
+    repetitionYears: z.array(z.number().int().refine(val => val === 0 || (val >= 1950 && val <= 2100), { message: "Year must be 0 or between 2000 and 2100" })).optional(),
     answers: z.array(z.object({
       answerText: z.string().min(1, "Answer text is required"),
       isCorrect: z.boolean(),
