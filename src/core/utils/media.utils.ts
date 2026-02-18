@@ -38,7 +38,7 @@ export interface UploadedFileInfo {
 @injectable()
 @singleton()
 export default class MediaHandler {
-  private uploadDirectory = process.env.UPLOADS_DIR || path.join(__dirname, "../../../../", "uploads");
+  private uploadDirectory = path.resolve(process.env.UPLOADS_DIR || path.join(__dirname, "../../../../", "uploads"));
   private subDirectories = {
     [FileType.IMAGE]: path.join(this.uploadDirectory, "images"),
     [FileType.PDF]: path.join(this.uploadDirectory, "pdfs"),
