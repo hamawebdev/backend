@@ -75,6 +75,12 @@ export const createModuleSchema = z.object({
   description: z.string().optional(),
 });
 
+export const createSubModuleSchema = z.object({
+  moduleId: z.number().int().positive(),
+  name: z.string().min(2),
+  courseIds: z.array(z.number().int().positive()).optional(),
+});
+
 export const createCourseSchema = z.object({
   moduleId: z.number().int().positive(),
   name: z.string().min(2),

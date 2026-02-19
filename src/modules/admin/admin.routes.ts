@@ -24,6 +24,7 @@ import {
 import {
   createUniteSchema,
   createModuleSchema,
+  createSubModuleSchema,
   createUserSchema,
   updateUserSchema,
   createStudyPackSchema,
@@ -175,6 +176,13 @@ router.post("/content/modules",
   adminOnly,
   validateRequest(createModuleSchema),
   (req, res, next) => adminController.createModule(req, res, next)
+);
+
+// Create SubModule (Admin Only)
+router.post("/content/sub-modules",
+  adminOnly,
+  validateRequest(createSubModuleSchema),
+  (req, res, next) => adminController.createSubModule(req, res, next)
 );
 
 // Create Course (Admin + Employee)
@@ -590,6 +598,13 @@ router.post("/modules/:id/books",
   adminOnly,
   validateParams({ id: idSchema }),
   (req, res, next) => adminController.createModuleBooks(req, res, next)
+);
+
+// POST /admin/sub-modules/:id/books - Bulk create books for a sub-module
+router.post("/sub-modules/:id/books",
+  adminOnly,
+  validateParams({ id: idSchema }),
+  (req, res, next) => adminController.createSubModuleBooks(req, res, next)
 );
 
 // ==========================================

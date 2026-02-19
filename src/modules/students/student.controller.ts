@@ -206,6 +206,18 @@ export default class StudentController {
     }
   }
 
+  // GET /api/v1/students/content/independent-resources
+  async getIndependentResources(req: RequestWithUser, res: Response): Promise<void> {
+    try {
+      const yearLevel = req.query.yearLevel as string | undefined;
+      const result = await this.studentService.getIndependentResources(req.user!, yearLevel);
+      this.responseUtils.sendSuccessResponse(res, result);
+    } catch (error) {
+      console.error("Error getting independent resources:", error);
+      this.responseUtils.sendErrorResponse(res, error);
+    }
+  }
+
   // GET /api/v1/study-packs
   async getStudyPacks(req: RequestWithUser, res: Response): Promise<void> {
     try {

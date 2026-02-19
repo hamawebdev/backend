@@ -236,6 +236,18 @@ export default class AdminController {
     }
   }
 
+  async createSubModule(req: RequestWithUser, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const createdById = req.user!.user_data.id;
+      const subModule = await this.adminService.createSubModuleCanonical(req.body, createdById);
+
+      // Canonical: Return flat object directly with 201 status
+      res.status(201).json(subModule);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async createCourse(req: RequestWithUser, res: Response, next: NextFunction): Promise<void> {
     try {
       const createdById = req.user!.user_data.id;
@@ -1238,6 +1250,34 @@ export default class AdminController {
       }
 
       const result = await this.adminService.createModuleBooks(moduleId, books, createdById);
+      res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /admin/sub-modules/:id/books
+   * Bulk create books for a sub-module
+   * Returns: { books: [...], totalCreated, message }
+   */
+  async createSubModuleBooks(req: RequestWithUser, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const subModuleId = parseInt(req.params.id);
+      if (isNaN(subModuleId)) {
+        this.responseUtils.sendBadRequestResponse(res, "Valid sub-module ID is required");
+        return;
+      }
+
+      const createdById = req.user!.user_data.id;
+      const { books } = req.body;
+
+      if (!Array.isArray(books) || books.length === 0) {
+        this.responseUtils.sendBadRequestResponse(res, "Books array is required and cannot be empty");
+        return;
+      }
+
+      const result = await this.adminService.createSubModuleBooks(subModuleId, books, createdById);
       res.status(201).json(result);
     } catch (error) {
       next(error);

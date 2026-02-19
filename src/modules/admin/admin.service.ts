@@ -1397,6 +1397,61 @@ export default class AdminService {
   }
 
   /**
+   * POST /admin/content/sub-modules - Canonical format
+   * Returns flat object directly with createdAt
+   */
+  async createSubModuleCanonical(data: any, createdById: number) {
+    try {
+      // Validate module exists
+      const module = await this.prisma.module.findUnique({ where: { id: data.moduleId } });
+      if (!module) {
+        throw new NotFoundError("Module");
+      }
+
+      const subModule = await this.prisma.subModule.create({
+        data: {
+          name: data.name,
+          moduleId: data.moduleId,
+          ...(data.courseIds && data.courseIds.length > 0 && {
+            courses: {
+              connect: data.courseIds.map((id: number) => ({ id }))
+            }
+          })
+        },
+        include: {
+          courses: {
+            select: { id: true }
+          }
+        }
+      });
+
+      // Log activity
+      try {
+        await this.prisma.employeeActivity.create({
+          data: {
+            employeeId: createdById,
+            activityType: 'COURSE_UPLOADED',
+            description: `Created sub-module: ${subModule.name}`,
+            relatedId: subModule.id
+          }
+        });
+      } catch (e) { /* ignore activity log errors */ }
+
+      return {
+        id: subModule.id,
+        name: subModule.name,
+        moduleId: subModule.moduleId,
+        courseIds: subModule.courses.map((c: any) => c.id),
+        createdAt: subModule.createdAt
+      };
+    } catch (error) {
+      if (error instanceof NotFoundError) throw error;
+      // Handle known prisma errors if needed
+      throw new InternalServerError("Failed to create sub-module");
+    }
+  }
+
+  /**
    * PUT /admin/content/modules/:moduleId - Canonical format
    * Returns flat object with updatedAt
    */
@@ -3739,6 +3794,64 @@ export default class AdminService {
         activityType: 'RESOURCE_ADDED',
         description: `Added ${createdBooks.length} books to module: ${module.name}`,
         relatedId: moduleId
+      }
+    });
+
+    return {
+      books: createdBooks.map(book => ({
+        name: book.name,
+        cover_path: book.coverPath,
+        view: book.viewUrl
+      })),
+      totalCreated: createdBooks.length,
+      message: `Successfully created ${createdBooks.length} books`
+    };
+  }
+
+  /**
+   * POST /admin/sub-modules/:id/books
+   * Bulk create books for a sub-module
+   */
+  async createSubModuleBooks(
+    subModuleId: number,
+    books: Array<{ name: string; coverPath?: string; viewUrl: string }>,
+    createdById: number
+  ) {
+    // Check if sub-module exists
+    const subModule = await this.prisma.subModule.findUnique({
+      where: { id: subModuleId }
+    });
+
+    if (!subModule) {
+      throw new NotFoundError("Sub-Module");
+    }
+
+    // Create all books in a transaction
+    const createdBooks = await this.prisma.$transaction(async (tx: TransactionClient) => {
+      const results = [];
+
+      for (const book of books) {
+        const created = await tx.subModuleBook.create({
+          data: {
+            subModuleId,
+            name: book.name,
+            coverPath: book.coverPath || null,
+            viewUrl: book.viewUrl
+          }
+        });
+        results.push(created);
+      }
+
+      return results;
+    });
+
+    // Log activity
+    await this.prisma.employeeActivity.create({
+      data: {
+        employeeId: createdById,
+        activityType: 'RESOURCE_ADDED',
+        description: `Added ${createdBooks.length} books to sub-module: ${subModule.name}`,
+        relatedId: subModuleId
       }
     });
 

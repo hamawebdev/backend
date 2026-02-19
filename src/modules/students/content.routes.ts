@@ -54,6 +54,11 @@ router.get("/courses/:id/resources",
   (req, res) => studentController.getCourseResources(req, res)
 );
 
+// Independent resources hierarchy (modules → subModules → courses/books)
+router.get("/content/independent-resources",
+  (req, res) => studentController.getIndependentResources(req, res)
+);
+
 // Student study pack in student context (canonical spec)
 router.get("/student/study-pack/:studyPackId",
   (req, res) => studentController.getStudentStudyPack(req, res)

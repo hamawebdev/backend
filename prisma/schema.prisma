@@ -157,6 +157,7 @@ model Module {
   courses    Course[]
   exams      Exam[]
   books      ModuleBook[]
+  subModules SubModule[]
 
   @@map("modules")
 }
@@ -176,15 +177,47 @@ model ModuleBook {
   @@index([moduleId])
 }
 
+model SubModule {
+  id        Int      @id @default(autoincrement())
+  name      String
+  moduleId  Int      @map("module_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  module    Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  courses   Course[]
+  books     SubModuleBook[]
+
+  @@map("sub_modules")
+  @@index([moduleId])
+}
+
+model SubModuleBook {
+  id          Int      @id @default(autoincrement())
+  subModuleId Int      @map("sub_module_id")
+  name        String
+  coverPath   String?  @map("cover_path")
+  viewUrl     String   @map("view_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  subModule   SubModule @relation(fields: [subModuleId], references: [id], onDelete: Cascade)
+
+  @@map("sub_module_books")
+  @@index([subModuleId])
+}
+
 model Course {
   id          Int      @id @default(autoincrement())
   moduleId    Int      @map("module_id")
+  subModuleId Int?     @map("sub_module_id")
   name        String
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   module      Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  subModule   SubModule? @relation(fields: [subModuleId], references: [id], onDelete: SetNull)
   courseLayers CourseLayer[]
   courseResources CourseResource[]
   quizzes     Quiz[]

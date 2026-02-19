@@ -55,6 +55,12 @@ router.get("/content/filters",
   (req, res) => studentController.getContentFilters(req, res)
 );
 
+// GET /students/content/independent-resources - Independent content structure
+router.get("/content/independent-resources",
+  checkPayment(),
+  (req, res) => studentController.getIndependentResources(req, res)
+);
+
 // GET /students/courses/by-module - Courses by moduleId or uniteId
 router.get("/courses/by-module",
   checkPayment(),

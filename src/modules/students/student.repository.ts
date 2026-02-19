@@ -738,6 +738,102 @@ export default class StudentRepository {
   }
 
   /**
+   * Get independent resources with hierarchical structure
+   * For GET /students/content/independent-resources
+   */
+  async getIndependentResources(studyPackIds: number[], yearLevel?: string): Promise<{
+    independentModules: any[];
+  }> {
+    const independentModulesWhere: any = { uniteId: null };
+
+    // Determine which yearNumbers to filter by
+    let effectiveYearNumbers: string[] = [];
+    if (yearLevel) {
+      effectiveYearNumbers = [yearLevel];
+    } else if (studyPackIds.length > 0) {
+      const packs = await this.prisma.studyPack.findMany({
+        where: { id: { in: studyPackIds } },
+        select: { yearNumber: true }
+      });
+      effectiveYearNumbers = packs.map((p: any) => p.yearNumber).filter(Boolean);
+    }
+
+    if (effectiveYearNumbers.length > 0) {
+      independentModulesWhere.exams = {
+        some: {
+          yearLevel: { in: effectiveYearNumbers }
+        }
+      };
+    }
+
+    const independentModulesRaw = await this.prisma.module.findMany({
+      where: independentModulesWhere as any,
+      include: {
+        subModules: {
+          include: {
+            courses: {
+              select: {
+                id: true,
+                name: true,
+                description: true
+              }
+            },
+            books: {
+              select: {
+                id: true,
+                name: true,
+                coverPath: true,
+                viewUrl: true
+              }
+            }
+          }
+        },
+        books: {
+          select: {
+            id: true,
+            name: true,
+            coverPath: true,
+            viewUrl: true
+          }
+        },
+        courses: {
+          where: { subModuleId: null },
+          select: {
+            id: true,
+            name: true,
+            description: true
+          }
+        }
+      }
+    });
+
+    return {
+      independentModules: independentModulesRaw.map((module: any) => ({
+        id: module.id,
+        name: module.name,
+        subModules: module.subModules.map((sm: any) => ({
+          id: sm.id,
+          name: sm.name,
+          courses: sm.courses,
+          books: sm.books.map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            coverPath: b.coverPath,
+            viewUrl: b.viewUrl
+          }))
+        })),
+        books: module.books.map((b: any) => ({
+          id: b.id,
+          name: b.name,
+          coverPath: b.coverPath,
+          viewUrl: b.viewUrl
+        })),
+        courses: module.courses
+      }))
+    };
+  }
+
+  /**
    * Get study packs with pagination
    * For GET /study-packs
    */

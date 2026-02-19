@@ -411,6 +411,40 @@ export default class StudentService {
   }
 
   /**
+   * GET /students/content/independent-resources
+   * Hierarchical structure: independentModules with subModules, books, and courses
+   */
+  async getIndependentResources(user: TJwtPayload, yearLevel?: string): Promise<{
+    independentModules: any[];
+  }> {
+    const isAdminOrEmployee = user.user_data.role === 'ADMIN' || user.user_data.role === 'EMPLOYEE';
+    const hasResidencyAccess = user.subscriptions?.some(
+      (sub: any) => sub.pack_type === 'residency' || sub.pack_type === 'RESIDENCY'
+    ) || false;
+
+    let studyPackIds: number[];
+
+    if (isAdminOrEmployee || hasResidencyAccess) {
+      if (yearLevel) {
+        const matchingPacks = await this.prisma.studyPack.findMany({
+          where: { yearNumber: yearLevel },
+          select: { id: true }
+        });
+        studyPackIds = matchingPacks.map((p: any) => p.id);
+      } else {
+        const allPacks = await this.prisma.studyPack.findMany({
+          select: { id: true }
+        });
+        studyPackIds = allPacks.map((p: any) => p.id);
+      }
+    } else {
+      studyPackIds = user.accessible_study_packs || [];
+    }
+
+    return await this.studentRepository.getIndependentResources(studyPackIds, yearLevel);
+  }
+
+  /**
    * GET /study-packs - Paginated list
    * Canonical spec: { items, total, page, limit, totalPages }
    */
