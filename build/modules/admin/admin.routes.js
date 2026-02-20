@@ -75,6 +75,8 @@ router.delete("/study-packs/:studyPackId", roleCheck_middleware_1.adminOnly, (0,
 router.post("/content/unites", roleCheck_middleware_1.adminOnly, (0, validation_middleware_1.validateRequest)(admin_validation_1.createUniteSchema), (req, res, next) => adminController.createUnite(req, res, next));
 // Create Module (Admin Only)
 router.post("/content/modules", roleCheck_middleware_1.adminOnly, (0, validation_middleware_1.validateRequest)(admin_validation_1.createModuleSchema), (req, res, next) => adminController.createModule(req, res, next));
+// Create SubModule (Admin Only)
+router.post("/content/sub-modules", roleCheck_middleware_1.adminOnly, (0, validation_middleware_1.validateRequest)(admin_validation_1.createSubModuleSchema), (req, res, next) => adminController.createSubModule(req, res, next));
 // Create Course (Admin + Employee)
 router.post("/content/courses", roleCheck_middleware_1.adminOrEmployee, (0, validation_middleware_1.validateRequest)(validation_middleware_1.courseSchema), (req, res, next) => adminController.createCourse(req, res, next));
 // Update Unite (Admin Only)
@@ -212,6 +214,8 @@ router.delete("/residency-questions/:id", roleCheck_middleware_1.adminOnly, (0, 
 router.get("/modules/:id/books", roleCheck_middleware_1.adminOnly, (0, validation_middleware_1.validateParams)({ id: validation_middleware_1.idSchema }), (req, res, next) => adminController.getModuleBooks(req, res, next));
 // POST /admin/modules/:id/books - Bulk create books for a module
 router.post("/modules/:id/books", roleCheck_middleware_1.adminOnly, (0, validation_middleware_1.validateParams)({ id: validation_middleware_1.idSchema }), (req, res, next) => adminController.createModuleBooks(req, res, next));
+// POST /admin/sub-modules/:id/books - Bulk create books for a sub-module
+router.post("/sub-modules/:id/books", roleCheck_middleware_1.adminOnly, (0, validation_middleware_1.validateParams)({ id: validation_middleware_1.idSchema }), (req, res, next) => adminController.createSubModuleBooks(req, res, next));
 // ==========================================
 // UNIFIED QUESTION MANAGEMENT (Admin + Employee)
 // ==========================================

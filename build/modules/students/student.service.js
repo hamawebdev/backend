@@ -263,6 +263,37 @@ let StudentService = class StudentService {
         });
     }
     /**
+     * GET /students/content/independent-resources
+     * Hierarchical structure: independentModules with subModules, books, and courses
+     */
+    getIndependentResources(user, yearLevel) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const isAdminOrEmployee = user.user_data.role === 'ADMIN' || user.user_data.role === 'EMPLOYEE';
+            const hasResidencyAccess = ((_a = user.subscriptions) === null || _a === void 0 ? void 0 : _a.some((sub) => sub.pack_type === 'residency' || sub.pack_type === 'RESIDENCY')) || false;
+            let studyPackIds;
+            if (isAdminOrEmployee || hasResidencyAccess) {
+                if (yearLevel) {
+                    const matchingPacks = yield this.prisma.studyPack.findMany({
+                        where: { yearNumber: yearLevel },
+                        select: { id: true }
+                    });
+                    studyPackIds = matchingPacks.map((p) => p.id);
+                }
+                else {
+                    const allPacks = yield this.prisma.studyPack.findMany({
+                        select: { id: true }
+                    });
+                    studyPackIds = allPacks.map((p) => p.id);
+                }
+            }
+            else {
+                studyPackIds = user.accessible_study_packs || [];
+            }
+            return yield this.studentRepository.getIndependentResources(studyPackIds, yearLevel);
+        });
+    }
+    /**
      * GET /study-packs - Paginated list
      * Canonical spec: { items, total, page, limit, totalPages }
      */

@@ -202,6 +202,20 @@ let StudentController = class StudentController {
             }
         });
     }
+    // GET /api/v1/students/content/independent-resources
+    getIndependentResources(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const yearLevel = req.query.yearLevel;
+                const result = yield this.studentService.getIndependentResources(req.user, yearLevel);
+                this.responseUtils.sendSuccessResponse(res, result);
+            }
+            catch (error) {
+                console.error("Error getting independent resources:", error);
+                this.responseUtils.sendErrorResponse(res, error);
+            }
+        });
+    }
     // GET /api/v1/study-packs
     getStudyPacks(req, res) {
         return __awaiter(this, void 0, void 0, function* () {

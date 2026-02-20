@@ -3261,10 +3261,11 @@ export default class AdminService {
     const { page, limit, part, examYear, universityId, search } = filters;
     const skip = (page - 1) * limit;
 
-    // Build where clause - residency questions have universityId and examYear
+    // Build where clause - residency questions must have residency-specific metadata (`part`)
     const whereClause: any = {
       universityId: { not: null },
-      examYear: { not: null }
+      examYear: { not: null },
+      ...this.buildResidencyMetadataFilter(part)
     };
 
     // Apply filters
@@ -3273,10 +3274,6 @@ export default class AdminService {
     }
     if (examYear) {
       whereClause.examYear = examYear;
-    }
-    if (part) {
-      // Store part in metadata as JSON
-      whereClause.metadata = { contains: part };
     }
     if (search) {
       whereClause.questionText = { contains: search, mode: 'insensitive' };
@@ -3370,7 +3367,7 @@ export default class AdminService {
     }
 
     // Verify it's a residency question
-    if (!question.universityId || !question.examYear) {
+    if (!this.isResidencyQuestion(question)) {
       throw new NotFoundError("Residency question");
     }
 
@@ -3482,7 +3479,7 @@ export default class AdminService {
       throw new NotFoundError("Residency question");
     }
 
-    if (!existingQuestion.universityId || !existingQuestion.examYear) {
+    if (!this.isResidencyQuestion(existingQuestion)) {
       throw new NotFoundError("Residency question");
     }
 
@@ -3595,7 +3592,7 @@ export default class AdminService {
       throw new NotFoundError("Residency question");
     }
 
-    if (!question.universityId || !question.examYear) {
+    if (!this.isResidencyQuestion(question)) {
       throw new NotFoundError("Residency question");
     }
 
@@ -3603,6 +3600,36 @@ export default class AdminService {
     await this.prisma.question.delete({
       where: { id: questionId }
     });
+  }
+
+  /**
+   * Residency questions are identified by dedicated residency metadata (`part`)
+   * in addition to university and exam year context.
+   */
+  private isResidencyQuestion(question: { universityId: number | null; examYear: number | null; metadata: string | null }): boolean {
+    if (question.universityId == null || question.examYear == null) {
+      return false;
+    }
+
+    const part = this.extractPartFromMetadata(question.metadata);
+    return part === 'PART_1' || part === 'PART_2';
+  }
+
+  /**
+   * Build metadata filter to include only residency questions created through
+   * residency flows (which set metadata.part).
+   */
+  private buildResidencyMetadataFilter(part?: string): any {
+    if (part === 'PART_1' || part === 'PART_2') {
+      return { metadata: { contains: `"part":"${part}"` } };
+    }
+
+    return {
+      OR: [
+        { metadata: { contains: '"part":"PART_1"' } },
+        { metadata: { contains: '"part":"PART_2"' } }
+      ]
+    };
   }
 
   /**

@@ -616,6 +616,98 @@ let StudentRepository = class StudentRepository {
         });
     }
     /**
+     * Get independent resources with hierarchical structure
+     * For GET /students/content/independent-resources
+     */
+    getIndependentResources(studyPackIds, yearLevel) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const independentModulesWhere = { uniteId: null };
+            // Determine which yearNumbers to filter by
+            let effectiveYearNumbers = [];
+            if (yearLevel) {
+                effectiveYearNumbers = [yearLevel];
+            }
+            else if (studyPackIds.length > 0) {
+                const packs = yield this.prisma.studyPack.findMany({
+                    where: { id: { in: studyPackIds } },
+                    select: { yearNumber: true }
+                });
+                effectiveYearNumbers = packs.map((p) => p.yearNumber).filter(Boolean);
+            }
+            if (effectiveYearNumbers.length > 0) {
+                independentModulesWhere.exams = {
+                    some: {
+                        yearLevel: { in: effectiveYearNumbers }
+                    }
+                };
+            }
+            const independentModulesRaw = yield this.prisma.module.findMany({
+                where: independentModulesWhere,
+                include: {
+                    subModules: {
+                        include: {
+                            courses: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    description: true
+                                }
+                            },
+                            books: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    coverPath: true,
+                                    viewUrl: true
+                                }
+                            }
+                        }
+                    },
+                    books: {
+                        select: {
+                            id: true,
+                            name: true,
+                            coverPath: true,
+                            viewUrl: true
+                        }
+                    },
+                    courses: {
+                        where: { subModuleId: null },
+                        select: {
+                            id: true,
+                            name: true,
+                            description: true
+                        }
+                    }
+                }
+            });
+            return {
+                independentModules: independentModulesRaw.map((module) => ({
+                    id: module.id,
+                    name: module.name,
+                    subModules: module.subModules.map((sm) => ({
+                        id: sm.id,
+                        name: sm.name,
+                        courses: sm.courses,
+                        books: sm.books.map((b) => ({
+                            id: b.id,
+                            name: b.name,
+                            coverPath: b.coverPath,
+                            viewUrl: b.viewUrl
+                        }))
+                    })),
+                    books: module.books.map((b) => ({
+                        id: b.id,
+                        name: b.name,
+                        coverPath: b.coverPath,
+                        viewUrl: b.viewUrl
+                    })),
+                    courses: module.courses
+                }))
+            };
+        });
+    }
+    /**
      * Get study packs with pagination
      * For GET /study-packs
      */

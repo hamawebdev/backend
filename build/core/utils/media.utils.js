@@ -42,7 +42,7 @@ var FileType;
 let MediaHandler = class MediaHandler {
     constructor(responseUtils) {
         this.responseUtils = responseUtils;
-        this.uploadDirectory = process.env.UPLOADS_DIR || path_1.default.join(__dirname, "../../../../", "uploads");
+        this.uploadDirectory = path_1.default.resolve(process.env.UPLOADS_DIR || path_1.default.join(__dirname, "../../../../", "uploads"));
         this.subDirectories = {
             [FileType.IMAGE]: path_1.default.join(this.uploadDirectory, "images"),
             [FileType.PDF]: path_1.default.join(this.uploadDirectory, "pdfs"),

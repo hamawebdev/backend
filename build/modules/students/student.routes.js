@@ -32,6 +32,8 @@ router.use(roleCheck_middleware_1.studentOnly);
 // ==========================================
 // GET /students/content/filters - Hierarchical content structure
 router.get("/content/filters", (0, paymentCheck_middleware_1.checkPayment)(), (req, res) => studentController.getContentFilters(req, res));
+// GET /students/content/independent-resources - Independent content structure
+router.get("/content/independent-resources", (0, paymentCheck_middleware_1.checkPayment)(), (req, res) => studentController.getIndependentResources(req, res));
 // GET /students/courses/by-module - Courses by moduleId or uniteId
 router.get("/courses/by-module", (0, paymentCheck_middleware_1.checkPayment)(), (req, res) => studentController.getCoursesByModule(req, res));
 // GET /students/modules/:moduleId/books - Books for a module

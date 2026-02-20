@@ -280,6 +280,19 @@ let AdminController = class AdminController {
             }
         });
     }
+    createSubModule(req, res, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const createdById = req.user.user_data.id;
+                const subModule = yield this.adminService.createSubModuleCanonical(req.body, createdById);
+                // Canonical: Return flat object directly with 201 status
+                res.status(201).json(subModule);
+            }
+            catch (error) {
+                next(error);
+            }
+        });
+    }
     createCourse(req, res, next) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
@@ -1278,6 +1291,33 @@ let AdminController = class AdminController {
                     return;
                 }
                 const result = yield this.adminService.createModuleBooks(moduleId, books, createdById);
+                res.status(201).json(result);
+            }
+            catch (error) {
+                next(error);
+            }
+        });
+    }
+    /**
+     * POST /admin/sub-modules/:id/books
+     * Bulk create books for a sub-module
+     * Returns: { books: [...], totalCreated, message }
+     */
+    createSubModuleBooks(req, res, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const subModuleId = parseInt(req.params.id);
+                if (isNaN(subModuleId)) {
+                    this.responseUtils.sendBadRequestResponse(res, "Valid sub-module ID is required");
+                    return;
+                }
+                const createdById = req.user.user_data.id;
+                const { books } = req.body;
+                if (!Array.isArray(books) || books.length === 0) {
+                    this.responseUtils.sendBadRequestResponse(res, "Books array is required and cannot be empty");
+                    return;
+                }
+                const result = yield this.adminService.createSubModuleBooks(subModuleId, books, createdById);
                 res.status(201).json(result);
             }
             catch (error) {

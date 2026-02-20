@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.bulkCreateResidencyQuestionsSchema = exports.residencyQuestionsQuerySchema = exports.updateResidencyQuestionSchema = exports.createResidencyQuestionSchema = exports.validateActivationCodeSchema = exports.getActivationCodesSchema = exports.updateActivationCodeSchema = exports.createActivationCodeSchema = exports.submitAnswerSchema = exports.updateQuestionSchema = exports.updateExamQuestionOrderSchema = exports.createRetakeSessionSchema = exports.analyticsQuerySchema = exports.idParamSchema = exports.updateQuestionSourceSchema = exports.createQuestionSourceSchema = exports.specialtiesQuerySchema = exports.updateSpecialtySchema = exports.createSpecialtySchema = exports.universitiesQuerySchema = exports.updateUniversitySchema = exports.createUniversitySchema = exports.reviewQuestionReportSchema = exports.activateSubscriptionSchema = exports.addMonthsSchema = exports.cancelSubscriptionSchema = exports.subscriptionFiltersSchema = exports.updateSubscriptionSchema = exports.createExamSchema = exports.createQuestionSchema = exports.updateQuizSchema = exports.createQuizSchema = exports.createCourseResourceSchema = exports.createCourseSchema = exports.createModuleSchema = exports.createUniteSchema = exports.updateStudyPackSchema = exports.createStudyPackSchema = exports.userFiltersSchema = exports.resetUserPasswordSchema = exports.updateUserSchema = exports.createUserSchema = void 0;
+exports.bulkCreateResidencyQuestionsSchema = exports.residencyQuestionsQuerySchema = exports.updateResidencyQuestionSchema = exports.createResidencyQuestionSchema = exports.validateActivationCodeSchema = exports.getActivationCodesSchema = exports.updateActivationCodeSchema = exports.createActivationCodeSchema = exports.submitAnswerSchema = exports.updateQuestionSchema = exports.updateExamQuestionOrderSchema = exports.createRetakeSessionSchema = exports.analyticsQuerySchema = exports.idParamSchema = exports.updateQuestionSourceSchema = exports.createQuestionSourceSchema = exports.specialtiesQuerySchema = exports.updateSpecialtySchema = exports.createSpecialtySchema = exports.universitiesQuerySchema = exports.updateUniversitySchema = exports.createUniversitySchema = exports.reviewQuestionReportSchema = exports.activateSubscriptionSchema = exports.addMonthsSchema = exports.cancelSubscriptionSchema = exports.subscriptionFiltersSchema = exports.updateSubscriptionSchema = exports.createExamSchema = exports.createQuestionSchema = exports.updateQuizSchema = exports.createQuizSchema = exports.createCourseResourceSchema = exports.createCourseSchema = exports.createSubModuleSchema = exports.createModuleSchema = exports.createUniteSchema = exports.updateStudyPackSchema = exports.createStudyPackSchema = exports.userFiltersSchema = exports.resetUserPasswordSchema = exports.updateUserSchema = exports.createUserSchema = void 0;
 const zod_1 = require("zod");
 const client_1 = require("@prisma/client");
 const quiz_types_1 = require("../../../types/quiz.types");
@@ -68,6 +68,11 @@ exports.createModuleSchema = zod_1.z.object({
     uniteId: zod_1.z.number().int().positive().optional(),
     name: zod_1.z.string().min(2),
     description: zod_1.z.string().optional(),
+});
+exports.createSubModuleSchema = zod_1.z.object({
+    moduleId: zod_1.z.number().int().positive(),
+    name: zod_1.z.string().min(2),
+    courseIds: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
 });
 exports.createCourseSchema = zod_1.z.object({
     moduleId: zod_1.z.number().int().positive(),

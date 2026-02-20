@@ -1214,6 +1214,58 @@ let AdminService = class AdminService {
         });
     }
     /**
+     * POST /admin/content/sub-modules - Canonical format
+     * Returns flat object directly with createdAt
+     */
+    createSubModuleCanonical(data, createdById) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // Validate module exists
+                const module = yield this.prisma.module.findUnique({ where: { id: data.moduleId } });
+                if (!module) {
+                    throw new AppError_1.NotFoundError("Module");
+                }
+                const subModule = yield this.prisma.subModule.create({
+                    data: Object.assign({ name: data.name, moduleId: data.moduleId }, (data.courseIds && data.courseIds.length > 0 && {
+                        courses: {
+                            connect: data.courseIds.map((id) => ({ id }))
+                        }
+                    })),
+                    include: {
+                        courses: {
+                            select: { id: true }
+                        }
+                    }
+                });
+                // Log activity
+                try {
+                    yield this.prisma.employeeActivity.create({
+                        data: {
+                            employeeId: createdById,
+                            activityType: 'COURSE_UPLOADED',
+                            description: `Created sub-module: ${subModule.name}`,
+                            relatedId: subModule.id
+                        }
+                    });
+                }
+                catch (e) { /* ignore activity log errors */ }
+                return {
+                    id: subModule.id,
+                    name: subModule.name,
+                    moduleId: subModule.moduleId,
+                    courseIds: subModule.courses.map((c) => c.id),
+                    createdAt: subModule.createdAt
+                };
+            }
+            catch (error) {
+                if (error instanceof AppError_1.NotFoundError)
+                    throw error;
+                // Handle known prisma errors if needed
+                throw new AppError_1.InternalServerError("Failed to create sub-module");
+            }
+        });
+    }
+    /**
      * PUT /admin/content/modules/:moduleId - Canonical format
      * Returns flat object with updatedAt
      */
@@ -2936,21 +2988,14 @@ let AdminService = class AdminService {
         return __awaiter(this, void 0, void 0, function* () {
             const { page, limit, part, examYear, universityId, search } = filters;
             const skip = (page - 1) * limit;
-            // Build where clause - residency questions have universityId and examYear
-            const whereClause = {
-                universityId: { not: null },
-                examYear: { not: null }
-            };
+            // Build where clause - residency questions must have residency-specific metadata (`part`)
+            const whereClause = Object.assign({ universityId: { not: null }, examYear: { not: null } }, this.buildResidencyMetadataFilter(part));
             // Apply filters
             if (universityId) {
                 whereClause.universityId = universityId;
             }
             if (examYear) {
                 whereClause.examYear = examYear;
-            }
-            if (part) {
-                // Store part in metadata as JSON
-                whereClause.metadata = { contains: part };
             }
             if (search) {
                 whereClause.questionText = { contains: search, mode: 'insensitive' };
@@ -3040,7 +3085,7 @@ let AdminService = class AdminService {
                 throw new AppError_1.NotFoundError("Residency question");
             }
             // Verify it's a residency question
-            if (!question.universityId || !question.examYear) {
+            if (!this.isResidencyQuestion(question)) {
                 throw new AppError_1.NotFoundError("Residency question");
             }
             return {
@@ -3148,7 +3193,7 @@ let AdminService = class AdminService {
             if (!existingQuestion) {
                 throw new AppError_1.NotFoundError("Residency question");
             }
-            if (!existingQuestion.universityId || !existingQuestion.examYear) {
+            if (!this.isResidencyQuestion(existingQuestion)) {
                 throw new AppError_1.NotFoundError("Residency question");
             }
             // Validate university if being updated
@@ -3261,7 +3306,7 @@ let AdminService = class AdminService {
             if (!question) {
                 throw new AppError_1.NotFoundError("Residency question");
             }
-            if (!question.universityId || !question.examYear) {
+            if (!this.isResidencyQuestion(question)) {
                 throw new AppError_1.NotFoundError("Residency question");
             }
             // Delete question (cascade will handle answers, images, etc.)
@@ -3269,6 +3314,32 @@ let AdminService = class AdminService {
                 where: { id: questionId }
             });
         });
+    }
+    /**
+     * Residency questions are identified by dedicated residency metadata (`part`)
+     * in addition to university and exam year context.
+     */
+    isResidencyQuestion(question) {
+        if (question.universityId == null || question.examYear == null) {
+            return false;
+        }
+        const part = this.extractPartFromMetadata(question.metadata);
+        return part === 'PART_1' || part === 'PART_2';
+    }
+    /**
+     * Build metadata filter to include only residency questions created through
+     * residency flows (which set metadata.part).
+     */
+    buildResidencyMetadataFilter(part) {
+        if (part === 'PART_1' || part === 'PART_2') {
+            return { metadata: { contains: `"part":"${part}"` } };
+        }
+        return {
+            OR: [
+                { metadata: { contains: '"part":"PART_1"' } },
+                { metadata: { contains: '"part":"PART_2"' } }
+            ]
+        };
     }
     /**
      * Helper to extract part from metadata JSON
@@ -3440,6 +3511,55 @@ let AdminService = class AdminService {
                     activityType: 'RESOURCE_ADDED',
                     description: `Added ${createdBooks.length} books to module: ${module.name}`,
                     relatedId: moduleId
+                }
+            });
+            return {
+                books: createdBooks.map(book => ({
+                    name: book.name,
+                    cover_path: book.coverPath,
+                    view: book.viewUrl
+                })),
+                totalCreated: createdBooks.length,
+                message: `Successfully created ${createdBooks.length} books`
+            };
+        });
+    }
+    /**
+     * POST /admin/sub-modules/:id/books
+     * Bulk create books for a sub-module
+     */
+    createSubModuleBooks(subModuleId, books, createdById) {
+        return __awaiter(this, void 0, void 0, function* () {
+            // Check if sub-module exists
+            const subModule = yield this.prisma.subModule.findUnique({
+                where: { id: subModuleId }
+            });
+            if (!subModule) {
+                throw new AppError_1.NotFoundError("Sub-Module");
+            }
+            // Create all books in a transaction
+            const createdBooks = yield this.prisma.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
+                const results = [];
+                for (const book of books) {
+                    const created = yield tx.subModuleBook.create({
+                        data: {
+                            subModuleId,
+                            name: book.name,
+                            coverPath: book.coverPath || null,
+                            viewUrl: book.viewUrl
+                        }
+                    });
+                    results.push(created);
+                }
+                return results;
+            }));
+            // Log activity
+            yield this.prisma.employeeActivity.create({
+                data: {
+                    employeeId: createdById,
+                    activityType: 'RESOURCE_ADDED',
+                    description: `Added ${createdBooks.length} books to sub-module: ${subModule.name}`,
+                    relatedId: subModuleId
                 }
             });
             return {
