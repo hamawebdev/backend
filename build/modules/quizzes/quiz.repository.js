@@ -1849,7 +1849,7 @@ let QuizRepository = class QuizRepository {
                     status: session.status,
                     examYear: examYear || null,
                     university: university ? { id: university.id, name: university.name } : null,
-                    parts: ["Sciences fondamentales", "Pathologie medico-chirurgical", "Dossier clinique"], // Default parts
+                    parts: ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"], // Default parts
                     score: session.status === 'COMPLETED' ? score : null,
                     createdAt: session.createdAt.toISOString(),
                     completedAt: ((_b = session.completedAt) === null || _b === void 0 ? void 0 : _b.toISOString()) || null

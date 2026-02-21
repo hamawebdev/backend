@@ -2234,7 +2234,7 @@ export default class QuizRepository {
         status: session.status,
         examYear: examYear || null,
         university: university ? { id: university.id, name: university.name } : null,
-        parts: ["Sciences fondamentales", "Pathologie medico-chirurgical", "Dossier clinique"], // Default parts
+        parts: ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"], // Default parts
         score: session.status === 'COMPLETED' ? score : null,
         createdAt: session.createdAt.toISOString(),
         completedAt: session.completedAt?.toISOString() || null
@@ -2250,16 +2250,27 @@ export default class QuizRepository {
     examYear: number,
     parts: string[]
   ): Promise<Array<{ id: number }>> {
-    // For now, parts filtering is a placeholder since the schema doesn't have a parts field
-    // In real implementation, parts might filter by specific question attributes
     const questions = await this.prisma.question.findMany({
       where: {
         universityId,
         examYear
       },
-      select: { id: true }
+      select: { id: true, metadata: true }
     });
 
-    return questions;
+    // Filter locally by parsing metadata if parts are provided
+    if (parts && parts.length > 0) {
+      return questions.filter(q => {
+        if (!q.metadata) return false;
+        try {
+          const meta = JSON.parse(q.metadata);
+          return meta.part && parts.includes(meta.part);
+        } catch {
+          return false;
+        }
+      }).map(q => ({ id: q.id }));
+    }
+
+    return questions.map(q => ({ id: q.id }));
   }
 }

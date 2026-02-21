@@ -580,6 +580,7 @@ export default class StudentService {
       courseId: resource.courseId,
       type: resource.type,
       title: resource.title,
+      tag: resource.tag,
       description: resource.description,
       filePath: resource.filePath,
       externalUrl: resource.externalUrl,
@@ -634,7 +635,8 @@ export default class StudentService {
         id: book.id,
         name: book.name,
         cover_path: book.coverPath,
-        view: book.viewUrl
+        view: book.viewUrl,
+        tag: book.tag
       }))
     };
   }
@@ -2685,13 +2687,14 @@ export default class StudentService {
 
   /**
    * GET /students/sessions/residency-filters - Canonical spec
-   * Returns: { universities: [{id, name, examYears}], parts: ['PART_1', 'PART_2'], totalQuestions }
+   * Returns: { universities: [{id, name, examYears, parts}], parts: ['Sciences_fondamentales', ...], totalQuestions }
    */
   async getResidencyFiltersCanonical(user: TJwtPayload): Promise<{
     universities: Array<{
       id: number;
       name: string;
       examYears: number[];
+      parts: string[];
     }>;
     parts: string[];
     totalQuestions: number;

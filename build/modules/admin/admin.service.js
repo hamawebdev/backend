@@ -3120,7 +3120,11 @@ let AdminService = class AdminService {
                 }
             }
             // Store part in metadata
-            const metadata = JSON.stringify(Object.assign({ part: data.part }, (data.metadata ? JSON.parse(data.metadata) : {})));
+            const metadataObj = data.metadata ? JSON.parse(data.metadata) : {};
+            if (data.part) {
+                metadataObj.part = data.part;
+            }
+            const metadata = JSON.stringify(metadataObj);
             const question = yield this.prisma.question.create({
                 data: {
                     questionText: data.questionText,
@@ -3324,21 +3328,20 @@ let AdminService = class AdminService {
             return false;
         }
         const part = this.extractPartFromMetadata(question.metadata);
-        return part === 'PART_1' || part === 'PART_2';
+        const validParts = ['Sciences_fondamentales', 'Pathologie_medico_chirurgical', 'Dossier_clinique'];
+        return part !== null && validParts.includes(part);
     }
     /**
      * Build metadata filter to include only residency questions created through
      * residency flows (which set metadata.part).
      */
     buildResidencyMetadataFilter(part) {
-        if (part === 'PART_1' || part === 'PART_2') {
+        const validParts = ['Sciences_fondamentales', 'Pathologie_medico_chirurgical', 'Dossier_clinique'];
+        if (part && validParts.includes(part)) {
             return { metadata: { contains: `"part":"${part}"` } };
         }
         return {
-            OR: [
-                { metadata: { contains: '"part":"PART_1"' } },
-                { metadata: { contains: '"part":"PART_2"' } }
-            ]
+            OR: validParts.map(p => ({ metadata: { contains: `"part":"${p}"` } }))
         };
     }
     /**
@@ -3374,7 +3377,11 @@ let AdminService = class AdminService {
                 const results = [];
                 for (const q of questions) {
                     // Store part in metadata
-                    const metadata = JSON.stringify(Object.assign({ part }, (q.metadata ? { original: q.metadata } : {})));
+                    const metadataObj = q.metadata ? { original: q.metadata } : {};
+                    if (part) {
+                        metadataObj.part = part;
+                    }
+                    const metadata = JSON.stringify(metadataObj);
                     const question = yield tx.question.create({
                         data: {
                             questionText: q.questionText,
@@ -3470,7 +3477,8 @@ let AdminService = class AdminService {
                 books: books.map(book => ({
                     name: book.name,
                     cover_path: book.coverPath,
-                    view: book.viewUrl
+                    view: book.viewUrl,
+                    tag: book.tag
                 }))
             };
         });
@@ -3497,7 +3505,8 @@ let AdminService = class AdminService {
                             moduleId,
                             name: book.name,
                             coverPath: book.coverPath || null,
-                            viewUrl: book.viewUrl
+                            viewUrl: book.viewUrl,
+                            tag: book.tag || null
                         }
                     });
                     results.push(created);
@@ -3517,7 +3526,8 @@ let AdminService = class AdminService {
                 books: createdBooks.map(book => ({
                     name: book.name,
                     cover_path: book.coverPath,
-                    view: book.viewUrl
+                    view: book.viewUrl,
+                    tag: book.tag
                 })),
                 totalCreated: createdBooks.length,
                 message: `Successfully created ${createdBooks.length} books`
@@ -3546,7 +3556,8 @@ let AdminService = class AdminService {
                             subModuleId,
                             name: book.name,
                             coverPath: book.coverPath || null,
-                            viewUrl: book.viewUrl
+                            viewUrl: book.viewUrl,
+                            tag: book.tag || null
                         }
                     });
                     results.push(created);
@@ -3566,7 +3577,8 @@ let AdminService = class AdminService {
                 books: createdBooks.map(book => ({
                     name: book.name,
                     cover_path: book.coverPath,
-                    view: book.viewUrl
+                    view: book.viewUrl,
+                    tag: book.tag
                 })),
                 totalCreated: createdBooks.length,
                 message: `Successfully created ${createdBooks.length} books`

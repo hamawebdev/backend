@@ -1164,3 +1164,8 @@ Create a new residency question with support for tags and repetition tracking.
   "message": "University not found"
 }
 ```
+
+
+residency parts : 
+["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"]
+

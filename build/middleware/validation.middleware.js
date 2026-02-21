@@ -681,6 +681,11 @@ exports.resourceSchema = zod_1.z.object({
         .trim()
         .min(3, "Resource title must be at least 3 characters")
         .max(200, "Resource title cannot exceed 200 characters"),
+    tag: zod_1.z.string()
+        .trim()
+        .min(1, "Tag cannot be empty")
+        .max(100, "Tag cannot exceed 100 characters")
+        .optional(),
     description: zod_1.z.string()
         .trim()
         .max(1000, "Description cannot exceed 1000 characters")

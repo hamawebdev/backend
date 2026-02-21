@@ -412,6 +412,7 @@ let StudentService = class StudentService {
                 courseId: resource.courseId,
                 type: resource.type,
                 title: resource.title,
+                tag: resource.tag,
                 description: resource.description,
                 filePath: resource.filePath,
                 externalUrl: resource.externalUrl,
@@ -462,7 +463,8 @@ let StudentService = class StudentService {
                     id: book.id,
                     name: book.name,
                     cover_path: book.coverPath,
-                    view: book.viewUrl
+                    view: book.viewUrl,
+                    tag: book.tag
                 }))
             };
         });
@@ -2059,7 +2061,7 @@ let StudentService = class StudentService {
     }
     /**
      * GET /students/sessions/residency-filters - Canonical spec
-     * Returns: { universities: [{id, name, examYears}], parts: ['PART_1', 'PART_2'], totalQuestions }
+     * Returns: { universities: [{id, name, examYears, parts}], parts: ['Sciences_fondamentales', ...], totalQuestions }
      */
     getResidencyFiltersCanonical(user) {
         return __awaiter(this, void 0, void 0, function* () {

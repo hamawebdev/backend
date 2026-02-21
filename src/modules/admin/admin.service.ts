@@ -128,7 +128,7 @@ interface ResidencyQuestionFilters {
 
 interface CreateResidencyQuestionData {
   questionText: string;
-  part: 'PART_1' | 'PART_2';
+  part?: string;
   explanation?: string;
   examYear?: number;
   universityId?: number;
@@ -144,7 +144,7 @@ interface CreateResidencyQuestionData {
 
 interface UpdateResidencyQuestionData {
   questionText?: string;
-  part?: 'PART_1' | 'PART_2';
+  part?: string;
   explanation?: string;
   examYear?: number;
   universityId?: number;
@@ -3403,7 +3403,11 @@ export default class AdminService {
     }
 
     // Store part in metadata
-    const metadata = JSON.stringify({ part: data.part, ...(data.metadata ? JSON.parse(data.metadata) : {}) });
+    const metadataObj: any = data.metadata ? JSON.parse(data.metadata) : {};
+    if (data.part) {
+      metadataObj.part = data.part;
+    }
+    const metadata = JSON.stringify(metadataObj);
 
     const question = await this.prisma.question.create({
       data: {
@@ -3612,7 +3616,8 @@ export default class AdminService {
     }
 
     const part = this.extractPartFromMetadata(question.metadata);
-    return part === 'PART_1' || part === 'PART_2';
+    const validParts = ['Sciences_fondamentales', 'Pathologie_medico_chirurgical', 'Dossier_clinique'];
+    return part !== null && validParts.includes(part);
   }
 
   /**
@@ -3620,15 +3625,13 @@ export default class AdminService {
    * residency flows (which set metadata.part).
    */
   private buildResidencyMetadataFilter(part?: string): any {
-    if (part === 'PART_1' || part === 'PART_2') {
+    const validParts = ['Sciences_fondamentales', 'Pathologie_medico_chirurgical', 'Dossier_clinique'];
+    if (part && validParts.includes(part)) {
       return { metadata: { contains: `"part":"${part}"` } };
     }
 
     return {
-      OR: [
-        { metadata: { contains: '"part":"PART_1"' } },
-        { metadata: { contains: '"part":"PART_2"' } }
-      ]
+      OR: validParts.map(p => ({ metadata: { contains: `"part":"${p}"` } }))
     };
   }
 
@@ -3666,10 +3669,11 @@ export default class AdminService {
 
       for (const q of questions) {
         // Store part in metadata
-        const metadata = JSON.stringify({
-          part,
-          ...(q.metadata ? { original: q.metadata } : {})
-        });
+        const metadataObj: any = q.metadata ? { original: q.metadata } : {};
+        if (part) {
+          metadataObj.part = part;
+        }
+        const metadata = JSON.stringify(metadataObj);
 
         const question = await tx.question.create({
           data: {
@@ -3772,7 +3776,8 @@ export default class AdminService {
       books: books.map(book => ({
         name: book.name,
         cover_path: book.coverPath,
-        view: book.viewUrl
+        view: book.viewUrl,
+        tag: book.tag
       }))
     };
   }
@@ -3783,7 +3788,7 @@ export default class AdminService {
    */
   async createModuleBooks(
     moduleId: number,
-    books: Array<{ name: string; coverPath?: string; viewUrl: string }>,
+    books: Array<{ name: string; coverPath?: string; viewUrl: string; tag?: string }>,
     createdById: number
   ) {
     // Check if module exists
@@ -3805,7 +3810,8 @@ export default class AdminService {
             moduleId,
             name: book.name,
             coverPath: book.coverPath || null,
-            viewUrl: book.viewUrl
+            viewUrl: book.viewUrl,
+            tag: book.tag || null
           }
         });
         results.push(created);
@@ -3828,7 +3834,8 @@ export default class AdminService {
       books: createdBooks.map(book => ({
         name: book.name,
         cover_path: book.coverPath,
-        view: book.viewUrl
+        view: book.viewUrl,
+        tag: book.tag
       })),
       totalCreated: createdBooks.length,
       message: `Successfully created ${createdBooks.length} books`
@@ -3841,7 +3848,7 @@ export default class AdminService {
    */
   async createSubModuleBooks(
     subModuleId: number,
-    books: Array<{ name: string; coverPath?: string; viewUrl: string }>,
+    books: Array<{ name: string; coverPath?: string; viewUrl: string; tag?: string }>,
     createdById: number
   ) {
     // Check if sub-module exists
@@ -3863,7 +3870,8 @@ export default class AdminService {
             subModuleId,
             name: book.name,
             coverPath: book.coverPath || null,
-            viewUrl: book.viewUrl
+            viewUrl: book.viewUrl,
+            tag: book.tag || null
           }
         });
         results.push(created);
@@ -3886,7 +3894,8 @@ export default class AdminService {
       books: createdBooks.map(book => ({
         name: book.name,
         cover_path: book.coverPath,
-        view: book.viewUrl
+        view: book.viewUrl,
+        tag: book.tag
       })),
       totalCreated: createdBooks.length,
       message: `Successfully created ${createdBooks.length} books`

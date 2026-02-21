@@ -183,7 +183,7 @@ let QuizService = class QuizService {
                     availableSpecialties: filtersData.availableSpecialties,
                     universities: filtersData.universities,
                     sessionDifficultyLevels,
-                    parts: ["Sciences fondamentales", "Pathologie medico-chirurgical", "Dossier clinique"],
+                    parts: ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"],
                     totalQuestionCount: filtersData.totalQuestionCount
                 }
             };
@@ -966,7 +966,7 @@ let QuizService = class QuizService {
                 throw new AppError_1.ForbiddenError("Access denied. This endpoint is only available for users with active residency subscriptions.");
             }
             // Default parts to all if not specified
-            const parts = dto.parts || ["Sciences fondamentales", "Pathologie medico-chirurgical", "Dossier clinique"];
+            const parts = dto.parts || ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"];
             // Get questions matching the filters (universityId and examYear)
             const questions = yield this.quizRepository.getQuestionsForResidencySession(dto.universityId, dto.examYear, parts);
             if (questions.length === 0) {

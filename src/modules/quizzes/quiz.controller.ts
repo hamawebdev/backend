@@ -463,7 +463,7 @@ export default class QuizController {
         this.responseUtils.sendBadRequestResponse(res, "parts must be an array");
         return;
       }
-      const validParts = ["Sciences fondamentales", "Pathologie medico-chirurgical", "Dossier clinique"];
+      const validParts = ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"];
       if (parts && parts.some((p: string) => !validParts.includes(p))) {
         this.responseUtils.sendBadRequestResponse(res, `parts must contain only ${validParts.join(', ')}`);
         return;

@@ -83,6 +83,7 @@ exports.createCourseResourceSchema = zod_1.z.object({
     courseId: zod_1.z.number().int().positive(),
     type: zod_1.z.nativeEnum(client_1.ResourceType),
     title: zod_1.z.string().min(2),
+    tag: zod_1.z.string().min(1).max(100).optional(),
     description: zod_1.z.string().optional(),
     filePath: zod_1.z.string().optional(),
     externalUrl: zod_1.z.string().url().optional(),
@@ -487,7 +488,7 @@ const residencyQuestionAnswerSchema = zod_1.z.object({
 // Create Residency Question Validation
 exports.createResidencyQuestionSchema = zod_1.z.object({
     questionText: zod_1.z.string().min(1, 'Question text is required'),
-    part: zod_1.z.enum(['PART_1', 'PART_2'], { errorMap: () => ({ message: 'Part must be PART_1 or PART_2' }) }),
+    part: zod_1.z.string().optional(),
     explanation: zod_1.z.string().optional().transform(val => val ? (0, validation_middleware_1.sanitizeMarkdown)(val) : undefined),
     examYear: zod_1.z.number().int().positive().optional(),
     universityId: zod_1.z.number().int().positive().optional(),
@@ -502,7 +503,7 @@ exports.createResidencyQuestionSchema = zod_1.z.object({
 // Update Residency Question Validation (all fields optional)
 exports.updateResidencyQuestionSchema = zod_1.z.object({
     questionText: zod_1.z.string().min(1).optional(),
-    part: zod_1.z.enum(['PART_1', 'PART_2']).optional(),
+    part: zod_1.z.string().optional(),
     explanation: zod_1.z.string().optional().transform(val => val ? (0, validation_middleware_1.sanitizeMarkdown)(val) : undefined),
     examYear: zod_1.z.number().int().positive().optional(),
     universityId: zod_1.z.number().int().positive().optional(),
@@ -519,7 +520,7 @@ exports.updateResidencyQuestionSchema = zod_1.z.object({
 exports.residencyQuestionsQuerySchema = zod_1.z.object({
     page: zod_1.z.coerce.number().int().positive().default(1),
     limit: zod_1.z.coerce.number().int().min(1).max(100).default(10),
-    part: zod_1.z.enum(['PART_1', 'PART_2']).optional(),
+    part: zod_1.z.string().optional(),
     examYear: zod_1.z.coerce.number().int().positive().optional(),
     universityId: zod_1.z.coerce.number().int().positive().optional(),
     search: zod_1.z.string().optional()
@@ -528,7 +529,7 @@ exports.residencyQuestionsQuerySchema = zod_1.z.object({
 exports.bulkCreateResidencyQuestionsSchema = zod_1.z.object({
     universityId: zod_1.z.number().int().positive('University ID must be a positive integer'),
     examYear: zod_1.z.number().int().positive('Exam year must be a positive integer'),
-    part: zod_1.z.string().min(1, 'Part is required'),
+    part: zod_1.z.string().optional(),
     questions: zod_1.z.array(zod_1.z.object({
         questionText: zod_1.z.string().min(1, 'Question text is required'),
         explanation: zod_1.z.string().optional().transform(val => val ? (0, validation_middleware_1.sanitizeMarkdown)(val) : undefined),

@@ -732,6 +732,7 @@ export default class StudentRepository {
       independentModules: independentModulesRaw.map((module: any) => ({
         id: module.id,
         name: module.name,
+        imagePath: module.imagePath,
         courses: module.courses
       }))
     };
@@ -811,6 +812,7 @@ export default class StudentRepository {
       independentModules: independentModulesRaw.map((module: any) => ({
         id: module.id,
         name: module.name,
+        imagePath: module.imagePath,
         subModules: module.subModules.map((sm: any) => ({
           id: sm.id,
           name: sm.name,
@@ -3182,13 +3184,14 @@ export default class StudentRepository {
 
   /**
    * GET /students/sessions/residency-filters - Canonical spec
-   * Returns: { universities: [{id, name, examYears}], parts: ['PART_1', 'PART_2'], totalQuestions }
+   * Returns: { universities: [{id, name, examYears, parts}], parts: ['PART_1', 'PART_2', ...], totalQuestions }
    */
   async getResidencyFiltersCanonical(userId: number): Promise<{
     universities: Array<{
       id: number;
       name: string;
       examYears: number[];
+      parts: string[];
     }>;
     parts: string[];
     totalQuestions: number;
@@ -3203,20 +3206,40 @@ export default class StudentRepository {
             examYear: { not: null }
           },
           select: {
-            examYear: true
+            examYear: true,
+            metadata: true
           }
         }
       }
     });
 
+    const allParts = new Set<string>();
+
     // Process universities with unique exam years
     const universitiesWithYears = universities
       .map(uni => {
         const examYears = [...new Set(uni.questions.map(q => q.examYear).filter((y): y is number => y !== null))];
+        const uniParts = new Set<string>();
+
+        uni.questions.forEach(q => {
+          if (q.metadata) {
+            try {
+              const meta = JSON.parse(q.metadata);
+              if (meta.part) {
+                uniParts.add(meta.part);
+                allParts.add(meta.part);
+              }
+            } catch (e) {
+              // Ignore parse errors safely
+            }
+          }
+        });
+
         return {
           id: uni.id,
           name: uni.name,
-          examYears: examYears.sort((a, b) => b - a) // Sort descending
+          examYears: examYears.sort((a, b) => b - a), // Sort descending
+          parts: Array.from(uniParts).sort()
         };
       })
       .filter(uni => uni.examYears.length > 0); // Only include universities with exam years
@@ -3231,7 +3254,7 @@ export default class StudentRepository {
 
     return {
       universities: universitiesWithYears,
-      parts: ['PART_1', 'PART_2'],
+      parts: Array.from(allParts).sort(),
       totalQuestions
     };
   }

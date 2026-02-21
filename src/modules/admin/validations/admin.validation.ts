@@ -91,6 +91,7 @@ export const createCourseResourceSchema = z.object({
   courseId: z.number().int().positive(),
   type: z.nativeEnum(ResourceType),
   title: z.string().min(2),
+  tag: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   filePath: z.string().optional(),
   externalUrl: z.string().url().optional(),
@@ -533,7 +534,7 @@ const residencyQuestionAnswerSchema = z.object({
 // Create Residency Question Validation
 export const createResidencyQuestionSchema = z.object({
   questionText: z.string().min(1, 'Question text is required'),
-  part: z.enum(['PART_1', 'PART_2'], { errorMap: () => ({ message: 'Part must be PART_1 or PART_2' }) }),
+  part: z.string().optional(),
   explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
   examYear: z.number().int().positive().optional(),
   universityId: z.number().int().positive().optional(),
@@ -552,7 +553,7 @@ export const createResidencyQuestionSchema = z.object({
 // Update Residency Question Validation (all fields optional)
 export const updateResidencyQuestionSchema = z.object({
   questionText: z.string().min(1).optional(),
-  part: z.enum(['PART_1', 'PART_2']).optional(),
+  part: z.string().optional(),
   explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
   examYear: z.number().int().positive().optional(),
   universityId: z.number().int().positive().optional(),
@@ -573,7 +574,7 @@ export const updateResidencyQuestionSchema = z.object({
 export const residencyQuestionsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),
-  part: z.enum(['PART_1', 'PART_2']).optional(),
+  part: z.string().optional(),
   examYear: z.coerce.number().int().positive().optional(),
   universityId: z.coerce.number().int().positive().optional(),
   search: z.string().optional()
@@ -583,7 +584,7 @@ export const residencyQuestionsQuerySchema = z.object({
 export const bulkCreateResidencyQuestionsSchema = z.object({
   universityId: z.number().int().positive('University ID must be a positive integer'),
   examYear: z.number().int().positive('Exam year must be a positive integer'),
-  part: z.string().min(1, 'Part is required'),
+  part: z.string().optional(),
   questions: z.array(z.object({
     questionText: z.string().min(1, 'Question text is required'),
     explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),

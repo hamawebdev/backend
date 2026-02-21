@@ -227,7 +227,7 @@ export default class QuizService {
         availableSpecialties: filtersData.availableSpecialties,
         universities: filtersData.universities,
         sessionDifficultyLevels,
-        parts: ["Sciences fondamentales", "Pathologie medico-chirurgical", "Dossier clinique"],
+        parts: ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"],
         totalQuestionCount: filtersData.totalQuestionCount
       }
     };
@@ -1296,7 +1296,7 @@ export default class QuizService {
     }
 
     // Default parts to all if not specified
-    const parts = dto.parts || ["Sciences fondamentales", "Pathologie medico-chirurgical", "Dossier clinique"];
+    const parts = dto.parts || ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"];
 
     // Get questions matching the filters (universityId and examYear)
     const questions = await this.quizRepository.getQuestionsForResidencySession(
