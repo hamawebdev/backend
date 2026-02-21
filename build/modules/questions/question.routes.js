@@ -19,7 +19,7 @@ const imageSchema = zod_1.z.object({
     altText: zod_1.z.string().optional(),
 });
 const createQuestionSchema = zod_1.z.object({
-    questionText: zod_1.z.string().min(5, "Question text must be at least 5 characters"),
+    questionText: zod_1.z.string().min(2, "Question text must be at least 3 characters"),
     explanation: zod_1.z.string().optional(),
     questionType: zod_1.z.nativeEnum(client_1.QuestionType).optional(),
     courseId: zod_1.z.number().int().positive().optional(),
@@ -58,7 +58,7 @@ const createQuestionSchema = zod_1.z.object({
     message: "Invalid number of correct answers for the question type",
 });
 const updateQuestionSchema = zod_1.z.object({
-    questionText: zod_1.z.string().min(5).optional(),
+    questionText: zod_1.z.string().min(2).optional(),
     explanation: zod_1.z.string().optional(),
     questionType: zod_1.z.nativeEnum(client_1.QuestionType).optional(),
     courseId: zod_1.z.number().int().positive().optional(),
@@ -118,7 +118,7 @@ const bulkCreateQuestionsSchema = zod_1.z.object({
         examYear: zod_1.z.number().int().min(2000).max(2100).optional(),
     }),
     questions: zod_1.z.array(zod_1.z.object({
-        questionText: zod_1.z.string().min(5, "Question text must be at least 5 characters"),
+        questionText: zod_1.z.string().min(2, "Question text must be at least 3 characters"),
         explanation: zod_1.z.string().optional(),
         questionType: zod_1.z.nativeEnum(client_1.QuestionType).optional(),
         questionTags: zod_1.z.array(zod_1.z.string().trim().min(1).max(50)).max(20).optional(),

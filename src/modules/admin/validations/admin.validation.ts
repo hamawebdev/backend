@@ -114,7 +114,7 @@ export const createQuizSchema = z.object({
     .max(new Date().getFullYear() + 10, "Quiz year cannot be more than 10 years in the future")
     .optional(),
   questions: z.array(z.object({
-    questionText: z.string().min(5),
+    questionText: z.string().min(2),
     explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
     questionType: z.nativeEnum(QuestionType).optional().default(QuestionType.SINGLE_CHOICE),
     answers: z.array(z.object({
@@ -163,7 +163,7 @@ export const updateQuizSchema = z.object({
 export const createQuestionSchema = z.object({
   courseId: z.number().int().positive().optional(),
   examId: z.number().int().positive().optional(), // New field for exam association
-  questionText: z.string().min(5),
+  questionText: z.string().min(2),
   explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
   questionType: z.nativeEnum(QuestionType).optional(),
   universityId: z.number().int().positive().optional(),
@@ -207,7 +207,7 @@ export const createExamSchema = z.object({
   examYear: z.string().datetime(),
   year: z.number().int().min(2000).max(2100), // Valid 4-digit year range
   questions: z.array(z.object({
-    questionText: z.string().min(5),
+    questionText: z.string().min(2),
     explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
     answers: z.array(z.object({
       answerText: z.string().min(1),
@@ -347,7 +347,7 @@ export const updateExamQuestionOrderSchema = z.object({
 export const updateQuestionSchema = z.object({
   courseId: z.number().int().positive().optional(),
   examId: z.number().int().positive().optional(),
-  questionText: z.string().min(5).optional(),
+  questionText: z.string().min(2).optional(),
   explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
   questionType: z.nativeEnum(QuestionType).optional(),
   universityId: z.number().int().positive().optional(),

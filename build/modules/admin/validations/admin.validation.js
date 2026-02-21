@@ -104,7 +104,7 @@ exports.createQuizSchema = zod_1.z.object({
         .max(new Date().getFullYear() + 10, "Quiz year cannot be more than 10 years in the future")
         .optional(),
     questions: zod_1.z.array(zod_1.z.object({
-        questionText: zod_1.z.string().min(5),
+        questionText: zod_1.z.string().min(2),
         explanation: zod_1.z.string().optional().transform(val => val ? (0, validation_middleware_1.sanitizeMarkdown)(val) : undefined),
         questionType: zod_1.z.nativeEnum(quiz_types_1.QuestionType).optional().default(quiz_types_1.QuestionType.SINGLE_CHOICE),
         answers: zod_1.z.array(zod_1.z.object({
@@ -151,7 +151,7 @@ exports.updateQuizSchema = zod_1.z.object({
 exports.createQuestionSchema = zod_1.z.object({
     courseId: zod_1.z.number().int().positive().optional(),
     examId: zod_1.z.number().int().positive().optional(), // New field for exam association
-    questionText: zod_1.z.string().min(5),
+    questionText: zod_1.z.string().min(2),
     explanation: zod_1.z.string().optional().transform(val => val ? (0, validation_middleware_1.sanitizeMarkdown)(val) : undefined),
     questionType: zod_1.z.nativeEnum(quiz_types_1.QuestionType).optional(),
     universityId: zod_1.z.number().int().positive().optional(),
@@ -193,7 +193,7 @@ exports.createExamSchema = zod_1.z.object({
     examYear: zod_1.z.string().datetime(),
     year: zod_1.z.number().int().min(2000).max(2100), // Valid 4-digit year range
     questions: zod_1.z.array(zod_1.z.object({
-        questionText: zod_1.z.string().min(5),
+        questionText: zod_1.z.string().min(2),
         explanation: zod_1.z.string().optional().transform(val => val ? (0, validation_middleware_1.sanitizeMarkdown)(val) : undefined),
         answers: zod_1.z.array(zod_1.z.object({
             answerText: zod_1.z.string().min(1),
@@ -312,7 +312,7 @@ exports.updateExamQuestionOrderSchema = zod_1.z.object({
 exports.updateQuestionSchema = zod_1.z.object({
     courseId: zod_1.z.number().int().positive().optional(),
     examId: zod_1.z.number().int().positive().optional(),
-    questionText: zod_1.z.string().min(5).optional(),
+    questionText: zod_1.z.string().min(2).optional(),
     explanation: zod_1.z.string().optional().transform(val => val ? (0, validation_middleware_1.sanitizeMarkdown)(val) : undefined),
     questionType: zod_1.z.nativeEnum(quiz_types_1.QuestionType).optional(),
     universityId: zod_1.z.number().int().positive().optional(),

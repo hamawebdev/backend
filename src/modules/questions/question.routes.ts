@@ -17,7 +17,7 @@ const imageSchema = z.object({
 });
 
 const createQuestionSchema = z.object({
-  questionText: z.string().min(5, "Question text must be at least 5 characters"),
+  questionText: z.string().min(2, "Question text must be at least 3 characters"),
   explanation: z.string().optional(),
   questionType: z.nativeEnum(QuestionType).optional(),
   courseId: z.number().int().positive().optional(),
@@ -61,7 +61,7 @@ const createQuestionSchema = z.object({
 });
 
 const updateQuestionSchema = z.object({
-  questionText: z.string().min(5).optional(),
+  questionText: z.string().min(2).optional(),
   explanation: z.string().optional(),
   questionType: z.nativeEnum(QuestionType).optional(),
   courseId: z.number().int().positive().optional(),
@@ -129,7 +129,7 @@ const bulkCreateQuestionsSchema = z.object({
     examYear: z.number().int().min(2000).max(2100).optional(),
   }),
   questions: z.array(z.object({
-    questionText: z.string().min(5, "Question text must be at least 5 characters"),
+    questionText: z.string().min(2, "Question text must be at least 3 characters"),
     explanation: z.string().optional(),
     questionType: z.nativeEnum(QuestionType).optional(),
     questionTags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
