@@ -816,7 +816,7 @@ export const resourceSchema = z.object({
 
   title: z.string()
     .trim()
-    .min(3, "Resource title must be at least 3 characters")
+    .min(2, "Resource title must be at least 2 characters")
     .max(200, "Resource title cannot exceed 200 characters"),
 
   tag: z.string()

@@ -1862,16 +1862,28 @@ let QuizRepository = class QuizRepository {
      */
     getQuestionsForResidencySession(universityId, examYear, parts) {
         return __awaiter(this, void 0, void 0, function* () {
-            // For now, parts filtering is a placeholder since the schema doesn't have a parts field
-            // In real implementation, parts might filter by specific question attributes
             const questions = yield this.prisma.question.findMany({
                 where: {
                     universityId,
                     examYear
                 },
-                select: { id: true }
+                select: { id: true, metadata: true }
             });
-            return questions;
+            // Filter locally by parsing metadata if parts are provided
+            if (parts && parts.length > 0) {
+                return questions.filter(q => {
+                    if (!q.metadata)
+                        return false;
+                    try {
+                        const meta = JSON.parse(q.metadata);
+                        return meta.part && parts.includes(meta.part);
+                    }
+                    catch (_a) {
+                        return false;
+                    }
+                }).map(q => ({ id: q.id }));
+            }
+            return questions.map(q => ({ id: q.id }));
         });
     }
 };
