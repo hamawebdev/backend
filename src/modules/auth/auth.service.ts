@@ -144,17 +144,30 @@ export default class AuthService implements IAuthService {
         throw new BadRequestError("Refresh token is required");
       }
 
-      // Get full payload including device fingerprint
-      const { userId, deviceFingerprint } = this.jwt.getRefreshTokenPayload(refreshToken);
-
-      const storedRefreshToken =
-        await this.refreshTokenRepository.findByUserId(userId);
-
-      if (!storedRefreshToken) {
-        throw new UnauthorizedError("Refresh token not found. Please log in again.");
+      // Verify JWT and extract payload (userId + deviceFingerprint)
+      let userId: number;
+      let deviceFingerprint: string;
+      try {
+        const payload = this.jwt.getRefreshTokenPayload(refreshToken);
+        userId = payload.userId;
+        deviceFingerprint = payload.deviceFingerprint;
+      } catch (error) {
+        console.error("[refreshTokens] JWT verification failed for refresh token:", (error as Error).message);
+        throw error;
       }
 
-      if (storedRefreshToken.token !== refreshToken) {
+      // Look up by token directly (uses unique index) for reliable matching
+      const storedRefreshToken =
+        await this.refreshTokenRepository.findByToken(refreshToken);
+
+      if (!storedRefreshToken) {
+        console.error("[refreshTokens] Token not found in DB for userId:", userId, "— may have been replaced by another login");
+        throw new UnauthorizedError("Session expired. You may have logged in on another device. Please log in again.");
+      }
+
+      // Verify the token belongs to the expected user
+      if (storedRefreshToken.userId !== userId) {
+        console.error("[refreshTokens] Token userId mismatch:", { tokenUserId: storedRefreshToken.userId, jwtUserId: userId });
         throw new UnauthorizedError("Invalid refresh token. Please log in again.");
       }
 

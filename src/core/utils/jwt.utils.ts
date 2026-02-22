@@ -10,9 +10,19 @@ import { TJwtPayload } from "../../types/types";
 @injectable()
 export default class JwtUtils {
   private readonly JWT_SECRET: string = process.env.JWT_SECRET ?? "your-secret-key";
-  private readonly JWT_EXPIRATION: string = process.env.JWT_EXPIRATION || "15m";
+  private readonly JWT_EXPIRATION: string = process.env.JWT_EXPIRATION || process.env.JWT_EXPIRES_IN || "15m";
   private readonly REFRESH_TOKEN_SECRET: string = process.env.REFRESH_TOKEN_SECRET ?? "your-refresh-secret";
   private readonly REFRESH_TOKEN_EXPIRY: string = process.env.REFRESH_TOKEN_EXPIRY || "25d";
+
+  constructor() {
+    if (!process.env.JWT_SECRET) {
+      console.warn("⚠️ WARNING: JWT_SECRET is not set. Using default value. This is a security risk.");
+    }
+    if (!process.env.REFRESH_TOKEN_SECRET) {
+      console.warn("⚠️ WARNING: REFRESH_TOKEN_SECRET is not set. Using default value. Tokens will be invalidated on restart.");
+    }
+    console.log(`🔑 JWT configured: accessToken expiry=${this.JWT_EXPIRATION}, refreshToken expiry=${this.REFRESH_TOKEN_EXPIRY}`);
+  }
 
   generateAccessToken(payload: TJwtPayload): string {
     const options: SignOptions = { expiresIn: this.JWT_EXPIRATION as any };

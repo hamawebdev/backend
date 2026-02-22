@@ -657,15 +657,46 @@ class AdminContentCLI {
 
   async createModule() {
     const name = await this.ask("Module name", { required: true });
-    const uniteId = await this.askNumber("Unite ID (leave empty for independent module)", {
-      integer: true,
-      min: 1,
-    });
+    const mode = await this.choose("Module creation mode", [
+      "Attach to an existing unite",
+      "Create independent module",
+    ]);
+
+    let uniteId;
+    let selectedStudyPack;
+    if (mode === 1) {
+      uniteId = await this.askNumber("Unite ID", {
+        integer: true,
+        min: 1,
+        required: true,
+      });
+    } else {
+      while (true) {
+        const studyPackId = await this.askNumber("Study pack ID (required for independent module)", {
+          integer: true,
+          min: 1,
+          required: true,
+        });
+        const resolved = await this.resolveStudyPack(studyPackId);
+        if (resolved) {
+          selectedStudyPack = resolved;
+          break;
+        }
+        console.log(`Study pack #${studyPackId} was not found. Try again.`);
+      }
+    }
+
     const description = await this.ask("Description");
 
     const payload = { name };
     if (uniteId !== undefined) payload.uniteId = uniteId;
     if (description) payload.description = description;
+
+    if (selectedStudyPack) {
+      console.log(
+        `Selected study pack for independent module: #${selectedStudyPack.id} - ${selectedStudyPack.name}`
+      );
+    }
 
     const confirmed = await this.previewAndConfirm(payload, "Create module");
     if (!confirmed) return;
