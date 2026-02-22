@@ -38,6 +38,9 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const jwt = __importStar(require("jsonwebtoken"));
 const tsyringe_1 = require("tsyringe");
@@ -46,9 +49,16 @@ let JwtUtils = class JwtUtils {
     constructor() {
         var _a, _b;
         this.JWT_SECRET = (_a = process.env.JWT_SECRET) !== null && _a !== void 0 ? _a : "your-secret-key";
-        this.JWT_EXPIRATION = process.env.JWT_EXPIRATION || "15m";
+        this.JWT_EXPIRATION = process.env.JWT_EXPIRATION || process.env.JWT_EXPIRES_IN || "15m";
         this.REFRESH_TOKEN_SECRET = (_b = process.env.REFRESH_TOKEN_SECRET) !== null && _b !== void 0 ? _b : "your-refresh-secret";
         this.REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || "25d";
+        if (!process.env.JWT_SECRET) {
+            console.warn("⚠️ WARNING: JWT_SECRET is not set. Using default value. This is a security risk.");
+        }
+        if (!process.env.REFRESH_TOKEN_SECRET) {
+            console.warn("⚠️ WARNING: REFRESH_TOKEN_SECRET is not set. Using default value. Tokens will be invalidated on restart.");
+        }
+        console.log(`🔑 JWT configured: accessToken expiry=${this.JWT_EXPIRATION}, refreshToken expiry=${this.REFRESH_TOKEN_EXPIRY}`);
     }
     generateAccessToken(payload) {
         const options = { expiresIn: this.JWT_EXPIRATION };
@@ -190,6 +200,7 @@ let JwtUtils = class JwtUtils {
 };
 JwtUtils = __decorate([
     (0, tsyringe_1.singleton)(),
-    (0, tsyringe_1.injectable)()
+    (0, tsyringe_1.injectable)(),
+    __metadata("design:paramtypes", [])
 ], JwtUtils);
 exports.default = JwtUtils;

@@ -122,13 +122,27 @@ let AuthService = class AuthService {
                 if (!refreshToken) {
                     throw new AppError_1.BadRequestError("Refresh token is required");
                 }
-                // Get full payload including device fingerprint
-                const { userId, deviceFingerprint } = this.jwt.getRefreshTokenPayload(refreshToken);
-                const storedRefreshToken = yield this.refreshTokenRepository.findByUserId(userId);
-                if (!storedRefreshToken) {
-                    throw new AppError_1.UnauthorizedError("Refresh token not found. Please log in again.");
+                // Verify JWT and extract payload (userId + deviceFingerprint)
+                let userId;
+                let deviceFingerprint;
+                try {
+                    const payload = this.jwt.getRefreshTokenPayload(refreshToken);
+                    userId = payload.userId;
+                    deviceFingerprint = payload.deviceFingerprint;
                 }
-                if (storedRefreshToken.token !== refreshToken) {
+                catch (error) {
+                    console.error("[refreshTokens] JWT verification failed for refresh token:", error.message);
+                    throw error;
+                }
+                // Look up by token directly (uses unique index) for reliable matching
+                const storedRefreshToken = yield this.refreshTokenRepository.findByToken(refreshToken);
+                if (!storedRefreshToken) {
+                    console.error("[refreshTokens] Token not found in DB for userId:", userId, "— may have been replaced by another login");
+                    throw new AppError_1.UnauthorizedError("Session expired. You may have logged in on another device. Please log in again.");
+                }
+                // Verify the token belongs to the expected user
+                if (storedRefreshToken.userId !== userId) {
+                    console.error("[refreshTokens] Token userId mismatch:", { tokenUserId: storedRefreshToken.userId, jwtUserId: userId });
                     throw new AppError_1.UnauthorizedError("Invalid refresh token. Please log in again.");
                 }
                 if (storedRefreshToken.expiresAt < new Date()) {

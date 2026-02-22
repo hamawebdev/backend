@@ -9,6 +9,7 @@ import { AccessControlService } from '../services/access-control.service';
 
 // Common ID schema
 export const idSchema = z.coerce.number().int().positive();
+const MAX_SESSION_QUESTIONS = 1000;
 
 // Enhanced validation schemas with more strict rules
 export const createQuizSessionSchema = z.object({
@@ -27,7 +28,7 @@ export const createQuizSessionSchema = z.object({
     questionCount: z.number()
       .int("Question count must be an integer")
       .min(1, "Question count must be at least 1")
-      .max(100, "Question count cannot exceed 100")
+      .max(MAX_SESSION_QUESTIONS, `Question count cannot exceed ${MAX_SESSION_QUESTIONS}`)
   }),
 
   filters: z.object({
@@ -145,7 +146,7 @@ export const createSessionByQuestionsSchema = z.object({
   }),
   questionIds: z.array(z.number().int().positive("Question ID must be a positive integer"))
     .min(1, "At least one question ID must be provided")
-    .max(100, "Cannot create session with more than 100 questions")
+    .max(MAX_SESSION_QUESTIONS, `Cannot create session with more than ${MAX_SESSION_QUESTIONS} questions`)
     .refine(arr => new Set(arr).size === arr.length, "Question IDs must be unique")
 });
 
@@ -173,7 +174,7 @@ export const canonicalCreateSessionSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(200, "Title too long"),
   courseIds: z.array(z.number().int().positive()).min(1, "At least one courseId is required"),
   sessionType: z.enum(["PRACTISE", "EXAM"]),
-  questionCount: z.number().int().min(1, "Question count must be at least 1").max(100, "Question count cannot exceed 100").optional(),
+  questionCount: z.number().int().min(1, "Question count must be at least 1").max(MAX_SESSION_QUESTIONS, `Question count cannot exceed ${MAX_SESSION_QUESTIONS}`).optional(),
   questionTypes: z.array(z.enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "QROC"])).optional(),
   years: z.array(z.number().int().positive()).optional(),
   rotations: z.array(z.enum(["R1", "R2", "R3", "R4"])).optional(),
@@ -203,7 +204,7 @@ export const submitAnswersSchema = z.object({
   }, {
     message: "Must provide exactly one of: selectedAnswerId (single choice), selectedAnswerIds (multiple choice), or textAnswer"
   })).min(1, "At least one answer must be provided")
-    .max(100, "Cannot submit more than 100 answers at once")
+    .max(MAX_SESSION_QUESTIONS, `Cannot submit more than ${MAX_SESSION_QUESTIONS} answers at once`)
 });
 
 export const updateAnswerSchema = z.object({

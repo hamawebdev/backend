@@ -1157,7 +1157,8 @@ let StudentService = class StudentService {
             }
             catch (error) {
                 if (error.code === 'P2002') {
-                    throw new Error('Question already in label');
+                    // Question is already in the label — this is fine, treat as success (idempotent)
+                    return;
                 }
                 throw error;
             }

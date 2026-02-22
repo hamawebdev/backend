@@ -1454,7 +1454,8 @@ export default class StudentService {
       await this.studentRepository.addQuestionToLabel(user.user_data.id, questionId, labelId);
     } catch (error: any) {
       if (error.code === 'P2002') {
-        throw new Error('Question already in label');
+        // Question is already in the label — this is fine, treat as success (idempotent)
+        return;
       }
       throw error;
     }

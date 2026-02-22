@@ -20,6 +20,7 @@ const QuizErrors_1 = require("../core/errors/QuizErrors");
 const access_control_service_1 = require("../services/access-control.service");
 // Common ID schema
 exports.idSchema = zod_1.z.coerce.number().int().positive();
+const MAX_SESSION_QUESTIONS = 1000;
 // Enhanced validation schemas with more strict rules
 exports.createQuizSessionSchema = zod_1.z.object({
     title: zod_1.z.string()
@@ -34,7 +35,7 @@ exports.createQuizSessionSchema = zod_1.z.object({
         questionCount: zod_1.z.number()
             .int("Question count must be an integer")
             .min(1, "Question count must be at least 1")
-            .max(100, "Question count cannot exceed 100")
+            .max(MAX_SESSION_QUESTIONS, `Question count cannot exceed ${MAX_SESSION_QUESTIONS}`)
     }),
     filters: zod_1.z.object({
         yearLevels: zod_1.z.array(zod_1.z.nativeEnum(client_1.YearLevel))
@@ -136,7 +137,7 @@ exports.createSessionByQuestionsSchema = zod_1.z.object({
     }),
     questionIds: zod_1.z.array(zod_1.z.number().int().positive("Question ID must be a positive integer"))
         .min(1, "At least one question ID must be provided")
-        .max(100, "Cannot create session with more than 100 questions")
+        .max(MAX_SESSION_QUESTIONS, `Cannot create session with more than ${MAX_SESSION_QUESTIONS} questions`)
         .refine(arr => new Set(arr).size === arr.length, "Question IDs must be unique")
 });
 exports.questionCountQuerySchema = zod_1.z.object({
@@ -161,7 +162,7 @@ exports.canonicalCreateSessionSchema = zod_1.z.object({
     title: zod_1.z.string().trim().min(1, "Title is required").max(200, "Title too long"),
     courseIds: zod_1.z.array(zod_1.z.number().int().positive()).min(1, "At least one courseId is required"),
     sessionType: zod_1.z.enum(["PRACTISE", "EXAM"]),
-    questionCount: zod_1.z.number().int().min(1, "Question count must be at least 1").max(100, "Question count cannot exceed 100").optional(),
+    questionCount: zod_1.z.number().int().min(1, "Question count must be at least 1").max(MAX_SESSION_QUESTIONS, `Question count cannot exceed ${MAX_SESSION_QUESTIONS}`).optional(),
     questionTypes: zod_1.z.array(zod_1.z.enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "QROC"])).optional(),
     years: zod_1.z.array(zod_1.z.number().int().positive()).optional(),
     rotations: zod_1.z.array(zod_1.z.enum(["R1", "R2", "R3", "R4"])).optional(),
@@ -188,7 +189,7 @@ exports.submitAnswersSchema = zod_1.z.object({
     }, {
         message: "Must provide exactly one of: selectedAnswerId (single choice), selectedAnswerIds (multiple choice), or textAnswer"
     })).min(1, "At least one answer must be provided")
-        .max(100, "Cannot submit more than 100 answers at once")
+        .max(MAX_SESSION_QUESTIONS, `Cannot submit more than ${MAX_SESSION_QUESTIONS} answers at once`)
 });
 exports.updateAnswerSchema = zod_1.z.object({
     selectedAnswerId: zod_1.z.number().int().positive("Invalid answer ID")
@@ -679,7 +680,7 @@ exports.resourceSchema = zod_1.z.object({
     type: zod_1.z.nativeEnum(client_1.ResourceType),
     title: zod_1.z.string()
         .trim()
-        .min(3, "Resource title must be at least 3 characters")
+        .min(1, "Resource title must be at least 2 characters")
         .max(200, "Resource title cannot exceed 200 characters"),
     tag: zod_1.z.string()
         .trim()

@@ -31,6 +31,7 @@ const question_service_1 = __importDefault(require("../questions/question.servic
 const access_control_service_1 = require("../../services/access-control.service");
 const QuizErrors_1 = require("../../core/errors/QuizErrors");
 const AppError_1 = require("../../core/errors/AppError");
+const MAX_SESSION_QUESTIONS = 1000;
 let QuizService = class QuizService {
     constructor(quizRepository, questionService) {
         this.quizRepository = quizRepository;
@@ -44,8 +45,8 @@ let QuizService = class QuizService {
                 throw new QuizErrors_1.SubscriptionRequiredError("quiz sessions");
             }
             // Validate configuration
-            if (settings.questionCount > 100) {
-                throw new QuizErrors_1.InvalidQuizConfigurationError("Question count cannot exceed 100");
+            if (settings.questionCount > MAX_SESSION_QUESTIONS) {
+                throw new QuizErrors_1.InvalidQuizConfigurationError(`Question count cannot exceed ${MAX_SESSION_QUESTIONS}`);
             }
             if (settings.questionCount < 1) {
                 throw new QuizErrors_1.InvalidQuizConfigurationError("Question count must be at least 1");

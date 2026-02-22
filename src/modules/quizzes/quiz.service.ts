@@ -38,6 +38,8 @@ import {
 } from "../../core/errors/QuizErrors";
 import { BadRequestError, ForbiddenError } from "../../core/errors/AppError";
 
+const MAX_SESSION_QUESTIONS = 1000;
+
 @injectable()
 export default class QuizService {
   constructor(
@@ -57,8 +59,8 @@ export default class QuizService {
     }
 
     // Validate configuration
-    if (settings.questionCount > 100) {
-      throw new InvalidQuizConfigurationError("Question count cannot exceed 100");
+    if (settings.questionCount > MAX_SESSION_QUESTIONS) {
+      throw new InvalidQuizConfigurationError(`Question count cannot exceed ${MAX_SESSION_QUESTIONS}`);
     }
 
     if (settings.questionCount < 1) {
