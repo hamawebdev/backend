@@ -73,6 +73,29 @@ export default class QuizController {
     }
   }
 
+  // GET /api/v1/quizzes/residency-available-parts?universityId=1&examYear=2024
+  async getResidencyAvailableParts(req: RequestWithUser, res: Response): Promise<void> {
+    try {
+      const universityId = parseInt(req.query.universityId as string);
+      const examYear = parseInt(req.query.examYear as string);
+
+      if (!universityId || isNaN(universityId)) {
+        this.responseUtils.sendBadRequestResponse(res, "Valid universityId query parameter is required");
+        return;
+      }
+      if (!examYear || isNaN(examYear)) {
+        this.responseUtils.sendBadRequestResponse(res, "Valid examYear query parameter is required");
+        return;
+      }
+
+      const result = await this.quizService.getResidencyAvailableParts(req.user!, universityId, examYear);
+      this.responseUtils.sendSuccessResponse(res, result);
+    } catch (error) {
+      console.error("Error getting residency available parts:", error);
+      this.responseUtils.sendErrorResponse(res, error);
+    }
+  }
+
   // GET /api/v1/quizzes/exam-session-filters
   async getExamSessionFilters(req: RequestWithUser, res: Response): Promise<void> {
     try {

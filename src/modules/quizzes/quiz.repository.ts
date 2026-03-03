@@ -800,193 +800,10 @@ export default class QuizRepository {
     };
   }
 
-  async getResidencySessionFilters(): Promise<{
-    availableYears: YearLevel[];
-    singleChoiceQuestionCount: number;
-    multipleChoiceQuestionCount: number;
-    unites: Array<{
-      id: number;
-      name: string;
-      year: YearLevel;
-      modules: Array<{
-        id: number;
-        name: string;
-        courses: Array<{
-          id: number;
-          name: string;
-          questionCount: number;
-          singleChoiceQuestionCount: number;
-          multipleChoiceQuestionCount: number;
-        }>;
-      }>;
-    }>;
-    availableQuizYears: number[];
-    availableSpecialties: Array<{
-      id: number;
-      name: string;
-      questionCount: number;
-      availableYears: YearLevel[];
-    }>;
-    universities: Array<{
-      id: number;
-      name: string;
-      examYears: number[];
-    }>;
-    totalQuestionCount: number;
-    questionSources: Array<{
-      id: number;
-      name: string;
-      questionCount: number;
-    }>;
-  }> {
-    // For residency users, get ALL study packs (same as regular quiz-filters)
-    // Residency users have access to all questions in the system
-    const allStudyPacks = await this.prisma.studyPack.findMany({
-      select: {
-        id: true
-      }
-    });
-
-    const accessibleStudyPackIds = allStudyPacks.map(pack => pack.id);
-
-    // Get unites for all accessible study packs (same structure as regular quiz-filters)
-    const unites = await this.prisma.unite.findMany({
-      where: {
-        studyPackId: {
-          in: accessibleStudyPackIds
-        }
-      },
-      select: {
-        id: true,
-        name: true,
-        studyPack: {
-          select: {
-            yearNumber: true
-          }
-        },
-        modules: {
-          select: {
-            id: true,
-            name: true,
-            courses: {
-              select: {
-                id: true,
-                name: true,
-                _count: {
-                  select: {
-                    questions: true
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
-
-    // Get question type counts for courses (same as regular quiz-filters)
-    const courseQuestionTypeCounts = await this.prisma.question.groupBy({
-      by: ['courseId', 'questionType'],
-      where: {
-        course: {
-          module: {
-            unite: {
-              studyPackId: {
-                in: accessibleStudyPackIds
-              }
-            }
-          }
-        }
-      },
-      _count: {
-        id: true
-      }
-    });
-
-    // Get available years from all accessible questions
-    const availableYearsResult = await this.prisma.question.findMany({
-      where: {
-        course: {
-          module: {
-            unite: {
-              studyPackId: {
-                in: accessibleStudyPackIds
-              }
-            }
-          }
-        }
-      },
-      select: {
-        yearLevel: true
-      },
-      distinct: ['yearLevel']
-    });
-
-    const availableYears = availableYearsResult.map(q => q.yearLevel).filter((year): year is YearLevel => year !== null);
-
-    // Calculate total question counts
-    const totalQuestionCounts = await this.prisma.question.groupBy({
-      by: ['questionType'],
-      where: {
-        course: {
-          module: {
-            unite: {
-              studyPackId: {
-                in: accessibleStudyPackIds
-              }
-            }
-          }
-        }
-      },
-      _count: {
-        id: true
-      }
-    });
-
-    const singleChoiceCount = totalQuestionCounts.find(q => q.questionType === 'SINGLE_CHOICE')?._count.id || 0;
-    const multipleChoiceCount = totalQuestionCounts.find(q => q.questionType === 'MULTIPLE_CHOICE')?._count.id || 0;
-
-    // Get question sources with their question counts
-    let questionSources: any[] = [];
-    try {
-      const questionSourcesRaw = await this.prisma.$queryRaw`
-        SELECT qs.id, qs.name, COUNT(q.id) as question_count
-        FROM question_sources qs
-        LEFT JOIN questions q ON q.source_id = qs.id
-        GROUP BY qs.id, qs.name
-        ORDER BY qs.name
-      ` as any[];
-
-      questionSources = questionSourcesRaw.map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        questionCount: Number(row.question_count) || 0
-      }));
-    } catch (error) {
-      console.log('Error fetching question sources for residency:', error);
-      questionSources = [];
-    }
-
-    // Get available quiz years (same as regular quiz-filters)
-    const availableQuizYears = [2024, 2023, 2022, 2021, 2020];
-
-    // Get all specialties for residency-specific data
-    const specialties = await this.prisma.specialty.findMany({
-      select: {
-        id: true,
-        name: true
-      }
-    });
-
-    // For residency, all specialties have access to all questions in the system
-    const processedSpecialties = specialties.map(specialty => ({
-      id: specialty.id,
-      name: specialty.name,
-      questionCount: singleChoiceCount + multipleChoiceCount,
-      availableYears: availableYears.filter((year): year is YearLevel => year !== null)
-    }));
-
-    // Get universities with available exam years for residency
+  /**
+   * Get universities with their distinct exam years for residency session creation
+   */
+  async getResidencyUniversities(): Promise<Array<{ id: number; name: string; examYears: number[] }>> {
     const universitiesData = await this.prisma.university.findMany({
       where: {
         questions: {
@@ -1010,48 +827,60 @@ export default class QuizRepository {
       }
     });
 
-    const universities = universitiesData.map(u => ({
+    return universitiesData.map(u => ({
       id: u.id,
       name: u.name,
       examYears: u.questions.map(q => q.examYear!).sort((a, b) => b - a)
     }));
+  }
+
+  /**
+   * Get available parts for a given university and exam year
+   * Reads the 'part' field from each question's metadata JSON
+   */
+  async getResidencyAvailableParts(
+    universityId: number,
+    examYear: number
+  ): Promise<{ parts: string[]; questionCount: number }> {
+    const questions = await this.prisma.question.findMany({
+      where: {
+        universityId,
+        examYear
+      },
+      select: { id: true, metadata: true }
+    });
+
+    // Extract distinct parts from question metadata
+    const partsSet = new Set<string>();
+    for (const q of questions) {
+      if (!q.metadata) continue;
+      try {
+        const meta = JSON.parse(q.metadata);
+        if (meta.part && typeof meta.part === 'string') {
+          partsSet.add(meta.part);
+        }
+      } catch {
+        // ignore malformed metadata
+      }
+    }
+
+    // Define canonical order for parts
+    const canonicalOrder = [
+      "Sciences_fondamentales",
+      "Pathologie_medico_chirurgical",
+      "Dossier_clinique"
+    ];
+
+    // Sort parts in canonical order, unknown parts go at the end
+    const parts = Array.from(partsSet).sort((a, b) => {
+      const ai = canonicalOrder.indexOf(a);
+      const bi = canonicalOrder.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
 
     return {
-      availableYears,
-      singleChoiceQuestionCount: singleChoiceCount,
-      multipleChoiceQuestionCount: multipleChoiceCount,
-      unites: unites.map(unite => ({
-        id: unite.id,
-        name: unite.name,
-        year: (unite.studyPack.yearNumber as YearLevel) || YearLevel.ONE,
-        modules: unite.modules.map(module => ({
-          id: module.id,
-          name: module.name,
-          courses: module.courses.map(course => {
-            // Get question type counts for this course
-            const courseSingleChoice = courseQuestionTypeCounts.find(
-              q => q.courseId === course.id && q.questionType === 'SINGLE_CHOICE'
-            )?._count.id || 0;
-
-            const courseMultipleChoice = courseQuestionTypeCounts.find(
-              q => q.courseId === course.id && q.questionType === 'MULTIPLE_CHOICE'
-            )?._count.id || 0;
-
-            return {
-              id: course.id,
-              name: course.name,
-              questionCount: course._count.questions,
-              singleChoiceQuestionCount: courseSingleChoice,
-              multipleChoiceQuestionCount: courseMultipleChoice
-            };
-          })
-        }))
-      })),
-      availableQuizYears,
-      availableSpecialties: processedSpecialties,
-      universities,
-      totalQuestionCount: singleChoiceCount + multipleChoiceCount,
-      questionSources: questionSources
+      parts,
+      questionCount: questions.length
     };
   }
 

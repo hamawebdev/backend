@@ -139,22 +139,20 @@ export interface CourseFilter {
   multipleChoiceQuestionCount: number;
 }
 
-// Residency Session Filter Types (same structure as QuizFiltersResponse with additional fields)
+// Residency Session Filter Types - Returns only universities with their exam years
 export interface ResidencySessionFiltersResponse {
   success: true;
   data: {
-    availableYears: YearLevel[];
-    singleChoiceQuestionCount: number;
-    multipleChoiceQuestionCount: number;
-    unites: UniteFilter[];
-    availableQuizYears: number[];
-    questionSources: QuestionSourceFilter[];
-    // Additional residency-specific fields
-    availableSpecialties: SpecialtyFilter[];
-    sessionDifficultyLevels: DifficultyLevel[];
-    parts: string[];
     universities: Array<{ id: number; name: string; examYears: number[] }>;
-    totalQuestionCount: number;
+  };
+}
+
+// Residency Available Parts Response
+export interface ResidencyAvailablePartsResponse {
+  success: true;
+  data: {
+    parts: string[];
+    questionCount: number;
   };
 }
 

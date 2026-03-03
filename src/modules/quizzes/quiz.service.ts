@@ -182,57 +182,36 @@ export default class QuizService {
       throw new Error("Access denied. This endpoint is only available for users with active residency subscriptions.");
     }
 
-    // Get residency-specific filter data
-    const filtersData = await this.quizRepository.getResidencySessionFilters();
-
-    // For residency users, ensure all year levels are available (same logic as regular quiz-filters)
-    const availableYears: YearLevel[] = [
-      YearLevel.ONE, YearLevel.TWO, YearLevel.THREE,
-      YearLevel.FOUR, YearLevel.FIVE, YearLevel.SIX, YearLevel.SEVEN
-    ];
-
-    // Define session difficulty levels (additional residency-specific feature)
-    const sessionDifficultyLevels = [
-      {
-        level: 'EASY' as const,
-        name: 'Easy',
-        description: 'Basic concepts and fundamental knowledge'
-      },
-      {
-        level: 'MEDIUM' as const,
-        name: 'Medium',
-        description: 'Intermediate level with clinical applications'
-      },
-      {
-        level: 'HARD' as const,
-        name: 'Hard',
-        description: 'Advanced concepts and complex scenarios'
-      },
-      {
-        level: 'EXPERT' as const,
-        name: 'Expert',
-        description: 'Expert level for residency preparation'
-      }
-    ];
+    // Get universities with their exam years
+    const universities = await this.quizRepository.getResidencyUniversities();
 
     return {
       success: true,
       data: {
-        // Same structure as regular quiz-filters
-        availableYears,
-        singleChoiceQuestionCount: filtersData.singleChoiceQuestionCount,
-        multipleChoiceQuestionCount: filtersData.multipleChoiceQuestionCount,
-        unites: filtersData.unites,
-        availableQuizYears: filtersData.availableQuizYears,
-        questionSources: filtersData.questionSources,
-        // Additional residency-specific fields
-        availableSpecialties: filtersData.availableSpecialties,
-        universities: filtersData.universities,
-        sessionDifficultyLevels,
-        parts: ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"],
-        totalQuestionCount: filtersData.totalQuestionCount
+        universities
       }
     };
+  }
+
+  /**
+   * GET /quizzes/residency-available-parts
+   * Returns available parts for a given university and exam year
+   */
+  async getResidencyAvailableParts(
+    user: TJwtPayload,
+    universityId: number,
+    examYear: number
+  ): Promise<{ parts: string[]; questionCount: number }> {
+    if (!user.has_active_subscription) {
+      throw new SubscriptionRequiredError("residency available parts");
+    }
+
+    const accessControlService = new AccessControlService();
+    if (!accessControlService.hasResidencyAccess(user)) {
+      throw new Error("Access denied. This endpoint is only available for users with active residency subscriptions.");
+    }
+
+    return await this.quizRepository.getResidencyAvailableParts(universityId, examYear);
   }
 
   async getQuizSession(
