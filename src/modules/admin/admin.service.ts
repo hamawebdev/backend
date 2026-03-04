@@ -3118,11 +3118,63 @@ export default class AdminService {
   // QUESTION SOURCE MANAGEMENT
   // ==========================================
 
-  async createQuestionSource(name: string, createdById: number): Promise<QuestionSource> {
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (error as { code?: string })?.code === 'P2002';
+  }
+
+  private getUniqueConstraintTargets(error: unknown): string[] {
+    const target = (error as { meta?: { target?: unknown } })?.meta?.target;
+
+    if (Array.isArray(target)) {
+      return target.map(value => String(value).toLowerCase());
+    }
+    if (typeof target === "string") {
+      return [target.toLowerCase()];
+    }
+
+    return [];
+  }
+
+  private isQuestionSourceNameUniqueViolation(error: unknown): boolean {
+    if (!this.isUniqueConstraintError(error)) {
+      return false;
+    }
+
+    return this.getUniqueConstraintTargets(error).some(target => target.includes("name"));
+  }
+
+  private async syncQuestionSourceIdSequence(): Promise<void> {
+    await this.prisma.$executeRaw`
+      SELECT setval(
+        pg_get_serial_sequence('question_sources', 'id'),
+        COALESCE((SELECT MAX(id) FROM question_sources), 0) + 1,
+        false
+      )
+    `;
+  }
+
+  private async createQuestionSourceWithSequenceRecovery(name: string): Promise<QuestionSource> {
     try {
-      const questionSource = await this.prisma.questionSource.create({
+      return await this.prisma.questionSource.create({
         data: { name }
       });
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error) || this.isQuestionSourceNameUniqueViolation(error)) {
+        throw error;
+      }
+
+      // If question_sources id sequence is out of sync, realign and retry once.
+      await this.syncQuestionSourceIdSequence();
+
+      return this.prisma.questionSource.create({
+        data: { name }
+      });
+    }
+  }
+
+  async createQuestionSource(name: string, createdById: number): Promise<QuestionSource> {
+    try {
+      const questionSource = await this.createQuestionSourceWithSequenceRecovery(name);
 
       // Log activity
       await this.prisma.employeeActivity.create({
@@ -3136,9 +3188,21 @@ export default class AdminService {
 
       return questionSource;
     } catch (error) {
-      if ((error as any).code === 'P2002') {
+      if (this.isQuestionSourceNameUniqueViolation(error)) {
         throw new BadRequestError("Question source name already exists");
       }
+
+      // Fallback when Prisma doesn't return target metadata for P2002.
+      if (this.isUniqueConstraintError(error)) {
+        const existingQuestionSource = await this.prisma.questionSource.findUnique({
+          where: { name },
+          select: { id: true }
+        });
+        if (existingQuestionSource) {
+          throw new BadRequestError("Question source name already exists");
+        }
+      }
+
       throw new InternalServerError("Failed to create question source");
     }
   }

@@ -251,6 +251,15 @@ async function main() {
       prisma.questionSource.create({ data: { id: 10, name: 'Residanat Oran' } }),
     ]);
 
+    // Keep autoincrement in sync after explicit IDs above.
+    await prisma.$executeRaw`
+      SELECT setval(
+        pg_get_serial_sequence('question_sources', 'id'),
+        COALESCE((SELECT MAX(id) FROM question_sources), 0) + 1,
+        false
+      )
+    `;
+
 
     console.log('✅ Database seeding completed successfully!');
     console.log('📊 Complete Summary:');
