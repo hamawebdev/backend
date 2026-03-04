@@ -804,21 +804,30 @@ export default class QuizRepository {
    * Get universities with their distinct exam years for residency session creation
    */
   async getResidencyUniversities(): Promise<Array<{ id: number; name: string; examYears: number[] }>> {
+    const residencyQuestionFilter = {
+      examYear: { not: null },
+      course: {
+        module: {
+          unite: {
+            studyPack: {
+              type: 'RESIDENCY'
+            }
+          }
+        }
+      }
+    };
+
     const universitiesData = await this.prisma.university.findMany({
       where: {
         questions: {
-          some: {
-            examYear: { not: null }
-          }
+          some: residencyQuestionFilter as any
         }
       },
       select: {
         id: true,
         name: true,
         questions: {
-          where: {
-            examYear: { not: null }
-          },
+          where: residencyQuestionFilter as any,
           select: {
             examYear: true
           },
