@@ -298,6 +298,8 @@ export default class AdminService {
         ];
       }
 
+      const now = new Date();
+
       const [users, total] = await Promise.all([
         this.prisma.user.findMany({
           where,
@@ -312,16 +314,61 @@ export default class AdminService {
             specialtyId: true,
             currentYear: true,
             isActive: true,
-            createdAt: true
+            createdAt: true,
+            subscriptions: {
+              select: {
+                id: true,
+                status: true,
+                startDate: true,
+                endDate: true,
+                studyPack: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
+                }
+              },
+              orderBy: { endDate: 'desc' }
+            }
           },
           orderBy: { createdAt: 'desc' }
         }),
         this.prisma.user.count({ where })
       ]);
 
+      // Map users to include subscription status
+      const usersWithSubscriptionStatus = users.map(user => {
+        const activeSubscription = user.subscriptions.find(
+          sub => sub.status === 'ACTIVE' && new Date(sub.endDate) > now
+        );
+
+        return {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role,
+          universityId: user.universityId,
+          specialtyId: user.specialtyId,
+          currentYear: user.currentYear,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          hasActiveSubscription: !!activeSubscription,
+          activeSubscription: activeSubscription
+            ? {
+              id: activeSubscription.id,
+              studyPackId: activeSubscription.studyPack.id,
+              studyPackName: activeSubscription.studyPack.name,
+              status: activeSubscription.status,
+              startDate: activeSubscription.startDate,
+              endDate: activeSubscription.endDate
+            }
+            : null
+        };
+      });
+
       // Canonical format: items array
       return {
-        items: users,
+        items: usersWithSubscriptionStatus,
         total,
         page,
         limit,
