@@ -48,6 +48,8 @@ router.post("/quiz-sessions", (0, validation_middleware_1.validateQuizSessionReq
 router.get("/quiz-filters", (req, res) => quizController.getQuizFilters(req, res));
 // Residency Session Filters
 router.get("/session-residency-filters", (req, res) => quizController.getResidencySessionFilters(req, res));
+// Residency Available Parts (by university + exam year)
+router.get("/residency-available-parts", (req, res) => quizController.getResidencyAvailableParts(req, res));
 // Exam Session Filters
 router.get("/exam-session-filters", (req, res) => quizController.getExamSessionFilters(req, res));
 // Create Session by Questions

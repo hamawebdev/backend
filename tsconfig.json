@@ -107,5 +107,8 @@
     "tests/**/*",
     "src/tests/**/*",
     "src/**/__tests__/**/*"
+  ],
+  "include": [
+    "src/**/*.ts"
   ]
 }

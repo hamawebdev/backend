@@ -91,6 +91,29 @@ let QuizController = class QuizController {
             }
         });
     }
+    // GET /api/v1/quizzes/residency-available-parts?universityId=1&examYear=2024
+    getResidencyAvailableParts(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const universityId = parseInt(req.query.universityId);
+                const examYear = parseInt(req.query.examYear);
+                if (!universityId || isNaN(universityId)) {
+                    this.responseUtils.sendBadRequestResponse(res, "Valid universityId query parameter is required");
+                    return;
+                }
+                if (!examYear || isNaN(examYear)) {
+                    this.responseUtils.sendBadRequestResponse(res, "Valid examYear query parameter is required");
+                    return;
+                }
+                const result = yield this.quizService.getResidencyAvailableParts(req.user, universityId, examYear);
+                this.responseUtils.sendSuccessResponse(res, result);
+            }
+            catch (error) {
+                console.error("Error getting residency available parts:", error);
+                this.responseUtils.sendErrorResponse(res, error);
+            }
+        });
+    }
     // GET /api/v1/quizzes/exam-session-filters
     getExamSessionFilters(req, res) {
         return __awaiter(this, void 0, void 0, function* () {

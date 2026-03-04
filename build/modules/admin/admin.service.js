@@ -158,6 +158,7 @@ let AdminService = class AdminService {
                         { email: { contains: search } }
                     ];
                 }
+                const now = new Date();
                 const [users, total] = yield Promise.all([
                     this.prisma.user.findMany({
                         where,
@@ -172,15 +173,56 @@ let AdminService = class AdminService {
                             specialtyId: true,
                             currentYear: true,
                             isActive: true,
-                            createdAt: true
+                            createdAt: true,
+                            subscriptions: {
+                                select: {
+                                    id: true,
+                                    status: true,
+                                    startDate: true,
+                                    endDate: true,
+                                    studyPack: {
+                                        select: {
+                                            id: true,
+                                            name: true
+                                        }
+                                    }
+                                },
+                                orderBy: { endDate: 'desc' }
+                            }
                         },
                         orderBy: { createdAt: 'desc' }
                     }),
                     this.prisma.user.count({ where })
                 ]);
+                // Map users to include subscription status
+                const usersWithSubscriptionStatus = users.map(user => {
+                    const activeSubscription = user.subscriptions.find(sub => sub.status === 'ACTIVE' && new Date(sub.endDate) > now);
+                    return {
+                        id: user.id,
+                        email: user.email,
+                        fullName: user.fullName,
+                        role: user.role,
+                        universityId: user.universityId,
+                        specialtyId: user.specialtyId,
+                        currentYear: user.currentYear,
+                        isActive: user.isActive,
+                        createdAt: user.createdAt,
+                        hasActiveSubscription: !!activeSubscription,
+                        activeSubscription: activeSubscription
+                            ? {
+                                id: activeSubscription.id,
+                                studyPackId: activeSubscription.studyPack.id,
+                                studyPackName: activeSubscription.studyPack.name,
+                                status: activeSubscription.status,
+                                startDate: activeSubscription.startDate,
+                                endDate: activeSubscription.endDate
+                            }
+                            : null
+                    };
+                });
                 // Canonical format: items array
                 return {
-                    items: users,
+                    items: usersWithSubscriptionStatus,
                     total,
                     page,
                     limit,
@@ -2804,12 +2846,60 @@ let AdminService = class AdminService {
     // ==========================================
     // QUESTION SOURCE MANAGEMENT
     // ==========================================
+    isUniqueConstraintError(error) {
+        return (error === null || error === void 0 ? void 0 : error.code) === 'P2002';
+    }
+    getUniqueConstraintTargets(error) {
+        var _a;
+        const target = (_a = error === null || error === void 0 ? void 0 : error.meta) === null || _a === void 0 ? void 0 : _a.target;
+        if (Array.isArray(target)) {
+            return target.map(value => String(value).toLowerCase());
+        }
+        if (typeof target === "string") {
+            return [target.toLowerCase()];
+        }
+        return [];
+    }
+    isQuestionSourceNameUniqueViolation(error) {
+        if (!this.isUniqueConstraintError(error)) {
+            return false;
+        }
+        return this.getUniqueConstraintTargets(error).some(target => target.includes("name"));
+    }
+    syncQuestionSourceIdSequence() {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.prisma.$executeRaw `
+      SELECT setval(
+        pg_get_serial_sequence('question_sources', 'id'),
+        COALESCE((SELECT MAX(id) FROM question_sources), 0) + 1,
+        false
+      )
+    `;
+        });
+    }
+    createQuestionSourceWithSequenceRecovery(name) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return yield this.prisma.questionSource.create({
+                    data: { name }
+                });
+            }
+            catch (error) {
+                if (!this.isUniqueConstraintError(error) || this.isQuestionSourceNameUniqueViolation(error)) {
+                    throw error;
+                }
+                // If question_sources id sequence is out of sync, realign and retry once.
+                yield this.syncQuestionSourceIdSequence();
+                return this.prisma.questionSource.create({
+                    data: { name }
+                });
+            }
+        });
+    }
     createQuestionSource(name, createdById) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const questionSource = yield this.prisma.questionSource.create({
-                    data: { name }
-                });
+                const questionSource = yield this.createQuestionSourceWithSequenceRecovery(name);
                 // Log activity
                 yield this.prisma.employeeActivity.create({
                     data: {
@@ -2822,8 +2912,18 @@ let AdminService = class AdminService {
                 return questionSource;
             }
             catch (error) {
-                if (error.code === 'P2002') {
+                if (this.isQuestionSourceNameUniqueViolation(error)) {
                     throw new AppError_1.BadRequestError("Question source name already exists");
+                }
+                // Fallback when Prisma doesn't return target metadata for P2002.
+                if (this.isUniqueConstraintError(error)) {
+                    const existingQuestionSource = yield this.prisma.questionSource.findUnique({
+                        where: { name },
+                        select: { id: true }
+                    });
+                    if (existingQuestionSource) {
+                        throw new AppError_1.BadRequestError("Question source name already exists");
+                    }
                 }
                 throw new AppError_1.InternalServerError("Failed to create question source");
             }

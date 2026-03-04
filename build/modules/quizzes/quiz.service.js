@@ -140,54 +140,30 @@ let QuizService = class QuizService {
             if (!accessControlService.hasResidencyAccess(user)) {
                 throw new Error("Access denied. This endpoint is only available for users with active residency subscriptions.");
             }
-            // Get residency-specific filter data
-            const filtersData = yield this.quizRepository.getResidencySessionFilters();
-            // For residency users, ensure all year levels are available (same logic as regular quiz-filters)
-            const availableYears = [
-                client_1.YearLevel.ONE, client_1.YearLevel.TWO, client_1.YearLevel.THREE,
-                client_1.YearLevel.FOUR, client_1.YearLevel.FIVE, client_1.YearLevel.SIX, client_1.YearLevel.SEVEN
-            ];
-            // Define session difficulty levels (additional residency-specific feature)
-            const sessionDifficultyLevels = [
-                {
-                    level: 'EASY',
-                    name: 'Easy',
-                    description: 'Basic concepts and fundamental knowledge'
-                },
-                {
-                    level: 'MEDIUM',
-                    name: 'Medium',
-                    description: 'Intermediate level with clinical applications'
-                },
-                {
-                    level: 'HARD',
-                    name: 'Hard',
-                    description: 'Advanced concepts and complex scenarios'
-                },
-                {
-                    level: 'EXPERT',
-                    name: 'Expert',
-                    description: 'Expert level for residency preparation'
-                }
-            ];
+            // Get universities with their exam years
+            const universities = yield this.quizRepository.getResidencyUniversities();
             return {
                 success: true,
                 data: {
-                    // Same structure as regular quiz-filters
-                    availableYears,
-                    singleChoiceQuestionCount: filtersData.singleChoiceQuestionCount,
-                    multipleChoiceQuestionCount: filtersData.multipleChoiceQuestionCount,
-                    unites: filtersData.unites,
-                    availableQuizYears: filtersData.availableQuizYears,
-                    questionSources: filtersData.questionSources,
-                    // Additional residency-specific fields
-                    availableSpecialties: filtersData.availableSpecialties,
-                    universities: filtersData.universities,
-                    sessionDifficultyLevels,
-                    parts: ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"],
-                    totalQuestionCount: filtersData.totalQuestionCount
+                    universities
                 }
             };
+        });
+    }
+    /**
+     * GET /quizzes/residency-available-parts
+     * Returns available parts for a given university and exam year
+     */
+    getResidencyAvailableParts(user, universityId, examYear) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!user.has_active_subscription) {
+                throw new QuizErrors_1.SubscriptionRequiredError("residency available parts");
+            }
+            const accessControlService = new access_control_service_1.AccessControlService();
+            if (!accessControlService.hasResidencyAccess(user)) {
+                throw new Error("Access denied. This endpoint is only available for users with active residency subscriptions.");
+            }
+            return yield this.quizRepository.getResidencyAvailableParts(universityId, examYear);
         });
     }
     getQuizSession(sessionId, user) {
