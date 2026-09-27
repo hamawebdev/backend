@@ -160,12 +160,23 @@ export default class UserRepository implements IUserRepository {
       return this.prisma.user.update({
         where: { id },
         data: {
-          passwordHash
+          passwordHash,
+          // A password change ends every access token issued before it
+          tokenVersion: { increment: 1 }
         }
       });
     } catch (error) {
       throw error;
     }
+  }
+
+  async revokeAccessTokens(id: number): Promise<number> {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { tokenVersion: { increment: 1 } },
+      select: { tokenVersion: true }
+    });
+    return user.tokenVersion;
   }
 
   async getAllStudyPackIds(): Promise<number[]> {

@@ -378,8 +378,6 @@ export interface YearExamFilter {
   year: number;
   questionSingleCount: number;
   questionMultipleCount: number;
-  questionSingleChoiceIds: number[];
-  questionMultipleChoiceIds: number[];
 }
 
 // Create Session by Questions Types

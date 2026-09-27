@@ -34,6 +34,8 @@ export interface TJwtPayload {
   payment_status: 'active' | 'expired' | 'cancelled' | 'pending';
   has_active_subscription: boolean;
   accessible_study_packs: number[];
+  // Bumped on logout and password changes; authMiddleware rejects tokens with an older value
+  token_version?: number;
 }
 
 export type RequestWithUser = Request & {

@@ -205,7 +205,9 @@ router.get("/notes/by-module",
 );
 
 // POST /students/notes - Canonical: returns note object with 201 status
+// Attaching a note to a question needs a subscription (the service also checks the question's pack)
 router.post("/notes",
+  checkPayment(),
   (req, res) => studentController.createStudentNote(req, res)
 );
 
@@ -267,12 +269,14 @@ router.delete("/labels/:labelId",
 
 router.post("/quizzes/:quizId/labels/:labelId",
   validateParams({ quizId: idSchema, labelId: idSchema }),
+  checkPayment(),
   (req, res) => studentController.addQuizToLabel(req, res)
 );
 
 // POST /students/questions/:questionId/labels/:labelId - Canonical: returns { message }
 router.post("/questions/:questionId/labels/:labelId",
   validateParams({ questionId: idSchema, labelId: idSchema }),
+  checkPayment(),
   (req, res) => studentController.addQuestionToLabel(req, res)
 );
 
@@ -316,6 +320,7 @@ router.put("/todos/:id/complete",
 
 router.post("/questions/:questionId/report",
   validateParams({ questionId: idSchema }),
+  checkPayment(),
   (req, res) => studentController.createQuestionReport(req, res)
 );
 

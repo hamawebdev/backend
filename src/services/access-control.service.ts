@@ -25,6 +25,45 @@ export class AccessControlService {
   }
 
   /**
+   * Whether the user may see a question (text, answers, explanations), based on
+   * where the question sits in the content tree:
+   * - no course (residency questions): residency access only
+   * - course in an independent module (no unite, so no study pack): any active subscription
+   * - otherwise: the question's study pack must be one of the user's packs
+   *   (residency access covers every pack)
+   */
+  canAccessQuestion(
+    user: TJwtPayload,
+    location: { hasCourse: boolean; studyPackId: number | null }
+  ): boolean {
+    const role = user.user_data?.role;
+    if (role === 'ADMIN' || role === 'EMPLOYEE') {
+      return true;
+    }
+    if (!location.hasCourse) {
+      return this.hasResidencyAccess(user);
+    }
+    return this.canAccessPackContent(user, location.studyPackId);
+  }
+
+  /**
+   * Whether the user may see content (courses, resources, books) that sits in a
+   * study pack, given that pack's id:
+   * - null (independent module, not in a unite): any active subscription
+   * - otherwise: the pack must be one of the user's packs (residency access covers every pack)
+   */
+  canAccessPackContent(user: TJwtPayload, studyPackId: number | null): boolean {
+    const role = user.user_data?.role;
+    if (role === 'ADMIN' || role === 'EMPLOYEE') {
+      return true;
+    }
+    if (studyPackId === null) {
+      return !!user.has_active_subscription;
+    }
+    return this.hasResidencyAccess(user) || (user.accessible_study_packs || []).includes(studyPackId);
+  }
+
+  /**
    * Get accessible year levels for a user based on their subscription type
    * OPTIMIZED: Uses only JWT token data, no database queries
    */

@@ -180,7 +180,16 @@ export default class QuizController {
         return;
       }
 
-      const result = await this.quizService.getQuestionsByUniteOrModule(req.user!, uniteId, moduleId);
+      // Optional pagination; the page size is capped by the repository
+      const page = req.query.page !== undefined ? Number(req.query.page) : undefined;
+      const limit = req.query.limit !== undefined ? Number(req.query.limit) : undefined;
+      if ((page !== undefined && (!Number.isInteger(page) || page < 1)) ||
+        (limit !== undefined && (!Number.isInteger(limit) || limit < 1))) {
+        this.responseUtils.sendBadRequestResponse(res, "page and limit must be positive integers");
+        return;
+      }
+
+      const result = await this.quizService.getQuestionsByUniteOrModule(req.user!, uniteId, moduleId, page, limit);
       this.responseUtils.sendSuccessResponse(res, result);
     } catch (error) {
       console.error("Error getting questions by unite/module:", error);

@@ -4,6 +4,7 @@ import AdminService from "./admin.service";
 import ResponseUtils from "../../core/utils/response.utils";
 import { RequestWithUser } from "../../types/types";
 import { ActivationCodeService } from "./services/activation-code.service";
+import { normalizeResidencyPart } from "./validations/admin.validation";
 
 @injectable()
 export default class AdminController {
@@ -1046,14 +1047,31 @@ export default class AdminController {
         return;
       }
 
-      const { code, studyPackId, expiryDate, maxUses, durationMonths, isActive } = req.body;
+      const {
+        code,
+        description,
+        studyPackId,
+        studyPackIds,
+        expiryDate,
+        expiresAt,
+        maxUses,
+        durationType,
+        durationMonths,
+        durationDays,
+        isActive
+      } = req.body;
 
       const activationCode = await this.activationCodeService.updateActivationCode(id, {
         code,
+        description,
         studyPackId,
+        studyPackIds,
         expiryDate,
+        expiresAt,
         maxUses,
+        durationType,
         durationMonths,
+        durationDays,
         isActive
       });
 
@@ -1121,7 +1139,8 @@ export default class AdminController {
       const filters = {
         page: req.query.page ? parseInt(req.query.page as string) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
-        part: req.query.part as string | undefined,
+        // Accepts the canonical part or an older UI label
+        part: normalizeResidencyPart(req.query.part) as string | undefined,
         examYear: req.query.examYear ? parseInt(req.query.examYear as string) : undefined,
         universityId: req.query.universityId ? parseInt(req.query.universityId as string) : undefined,
         search: req.query.search as string | undefined

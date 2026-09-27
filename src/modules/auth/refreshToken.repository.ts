@@ -82,6 +82,28 @@ export default class RefreshTokenRepository implements IRefreshTokenRepository {
     }
   }
 
+  /**
+   * Replace a stored refresh token with its successor, but only while the old
+   * token is still stored (compare-and-swap). Returns false when another request
+   * already rotated or deleted it.
+   */
+  async rotate(
+    oldToken: string,
+    newToken: string,
+    expiresAt: Date,
+    deviceFingerprint?: string
+  ): Promise<boolean> {
+    const result = await this.prisma.refreshToken.updateMany({
+      where: { token: oldToken },
+      data: {
+        token: newToken,
+        expiresAt,
+        deviceFingerprint,
+      },
+    });
+    return result.count > 0;
+  }
+
   async deleteByUserId(userId: number): Promise<void> {
     try {
       await this.prisma.refreshToken.deleteMany({

@@ -2,6 +2,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy, VerifyCallback } from "passport-google-oauth20";
 import { container } from "tsyringe";
 import { GoogleOAuthService, GoogleProfile } from "../modules/auth/services/google-oauth.service";
+import { GoogleOAuthCookieStateStore } from "../modules/auth/google-oauth-state";
 
 const googleOAuthService = container.resolve(GoogleOAuthService);
 
@@ -26,6 +27,8 @@ if (googleOAuthEnabled) {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
         callbackURL: process.env.GOOGLE_CALLBACK_URL || "http://localhost:8080/api/v1/auth/google/callback",
         scope: ["profile", "email"],
+        // OAuth `state` (login CSRF protection) kept in a signed httpOnly cookie; no server sessions
+        store: new GoogleOAuthCookieStateStore() as any,
       },
       async (
         accessToken: string,

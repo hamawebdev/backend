@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { UserRole, YearLevel, PackType, QuizType, ResourceType, SubscriptionStatus, RetakeType } from '@prisma/client';
+import { UserRole, YearLevel, PackType, QuizType, ResourceType, SubscriptionStatus, RetakeType, ReportStatus } from '@prisma/client';
 import { QuestionType } from '../../../types/quiz.types';
-import { sanitizeMarkdown } from '../../../middleware/validation.middleware';
+import { markdownSchema, httpUrlSchema, httpUrlOrPathSchema } from '../../../middleware/validation.middleware';
 
 // User Management Validations
 export const createUserSchema = z.object({
-  email: z.string().email('Invalid email format'),
+  email: z.string().trim().toLowerCase().email('Invalid email format'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
   role: z.nativeEnum(UserRole),
@@ -15,7 +15,7 @@ export const createUserSchema = z.object({
 });
 
 export const updateUserSchema = z.object({
-  email: z.string().email().optional(),
+  email: z.string().trim().toLowerCase().email().optional(),
   fullName: z.string().min(2).optional(),
   role: z.nativeEnum(UserRole).optional(),
   universityId: z.number().int().positive().optional(),
@@ -66,13 +66,19 @@ export const createUniteSchema = z.object({
   studyPackId: z.number().int().positive(),
   name: z.string().min(2),
   description: z.string().optional(),
-  logoUrl: z.string().url().optional(),
+  // Rendered as an image source: http(s) URL or a /api/v1/media/... path
+  logoUrl: httpUrlOrPathSchema('Logo URL must be an http(s) URL or a /path').optional(),
 });
 
+// Used for create and update (PUT /admin/content/modules/:moduleId)
 export const createModuleSchema = z.object({
   uniteId: z.number().int().positive().optional(),
   name: z.string().min(2),
   description: z.string().optional(),
+  // Module image: the url POST /admin/upload/logo returns (or any http(s) URL); null removes it.
+  // logoUrl is accepted as an alias, like unites use.
+  imagePath: httpUrlOrPathSchema('Image path must be an http(s) URL or a /path').nullable().optional(),
+  logoUrl: httpUrlOrPathSchema('Logo URL must be an http(s) URL or a /path').nullable().optional(),
 });
 
 export const createSubModuleSchema = z.object({
@@ -94,7 +100,7 @@ export const createCourseResourceSchema = z.object({
   tag: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   filePath: z.string().optional(),
-  externalUrl: z.string().url().optional(),
+  externalUrl: httpUrlSchema('External URL must be an http(s) URL').optional(),
   youtubeVideoId: z.string().optional(),
   isPaid: z.boolean().default(false),
   price: z.number().min(0).optional(),
@@ -116,12 +122,12 @@ export const createQuizSchema = z.object({
     .optional(),
   questions: z.array(z.object({
     questionText: z.string().min(2),
-    explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+    explanation: markdownSchema(),
     questionType: z.nativeEnum(QuestionType).optional().default(QuestionType.SINGLE_CHOICE),
     answers: z.array(z.object({
       answerText: z.string().min(1),
       isCorrect: z.boolean(),
-      explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+      explanation: markdownSchema(),
       images: z.array(z.object({
         imagePath: z.string(),
         altText: z.string().optional(),
@@ -165,7 +171,7 @@ export const createQuestionSchema = z.object({
   courseId: z.number().int().positive().optional(),
   examId: z.number().int().positive().optional(), // New field for exam association
   questionText: z.string().min(2),
-  explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+  explanation: markdownSchema(),
   questionType: z.nativeEnum(QuestionType).optional(),
   universityId: z.number().int().positive().optional(),
   yearLevel: z.nativeEnum(YearLevel).optional(),
@@ -173,7 +179,7 @@ export const createQuestionSchema = z.object({
   answers: z.array(z.object({
     answerText: z.string().min(1),
     isCorrect: z.boolean(),
-    explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+    explanation: markdownSchema(),
     images: z.array(z.object({
       imagePath: z.string(),
       altText: z.string().optional(),
@@ -209,11 +215,11 @@ export const createExamSchema = z.object({
   year: z.number().int().min(2000).max(2100), // Valid 4-digit year range
   questions: z.array(z.object({
     questionText: z.string().min(2),
-    explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+    explanation: markdownSchema(),
     answers: z.array(z.object({
       answerText: z.string().min(1),
       isCorrect: z.boolean(),
-      explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+      explanation: markdownSchema(),
       images: z.array(z.object({
         imagePath: z.string(),
         altText: z.string().optional(),
@@ -253,12 +259,22 @@ export const activateSubscriptionSchema = z.object({
 });
 
 // Question Report Management Validations (Canonical spec)
-export const reviewQuestionReportSchema = z.object({
-  status: z.enum(['PENDING', 'REVIEWED', 'RESOLVED', 'REJECTED'], {
-    required_error: 'Status is required'
-  }),
-  adminNotes: z.string().max(1000, 'Admin notes cannot exceed 1000 characters').optional(),
-});
+// Body: { status, adminNotes }. The older client shape { action, response } is mapped to it.
+export const reviewQuestionReportSchema = z.preprocess(
+  (body: any) => {
+    if (body && typeof body === 'object' && body.status === undefined && body.action !== undefined) {
+      const { action, response, ...rest } = body;
+      return { ...rest, status: action, adminNotes: rest.adminNotes ?? response };
+    }
+    return body;
+  },
+  z.object({
+    status: z.nativeEnum(ReportStatus, {
+      errorMap: () => ({ message: `Status must be one of ${Object.values(ReportStatus).join(', ')}` })
+    }),
+    adminNotes: z.string().max(1000, 'Admin notes cannot exceed 1000 characters').optional(),
+  })
+);
 
 // University & Specialty Management Validations
 export const createUniversitySchema = z.object({
@@ -349,7 +365,7 @@ export const updateQuestionSchema = z.object({
   courseId: z.number().int().positive().optional(),
   examId: z.number().int().positive().optional(),
   questionText: z.string().min(2).optional(),
-  explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+  explanation: markdownSchema(),
   questionType: z.nativeEnum(QuestionType).optional(),
   universityId: z.number().int().positive().optional(),
   yearLevel: z.nativeEnum(YearLevel).optional(),
@@ -358,7 +374,7 @@ export const updateQuestionSchema = z.object({
     id: z.number().int().positive().optional(), // For existing answers
     answerText: z.string().min(1),
     isCorrect: z.boolean(),
-    explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+    explanation: markdownSchema(),
     images: z.array(z.object({
       id: z.number().int().positive().optional(), // For existing images
       imagePath: z.string(),
@@ -405,14 +421,21 @@ export const submitAnswerSchema = z.object({
 // ACTIVATION CODE MANAGEMENT VALIDATIONS
 // ==========================================
 
+// Activation codes are stored upper-case, 8-32 characters of A-Z, 0-9 and '-': the
+// format students can redeem (validateActivationCodeSchema)
+const ACTIVATION_CODE_FORMAT = /^[A-Z0-9-]{8,32}$/;
+const activationCodeSchema = z.string()
+  .trim()
+  .transform(value => value.toUpperCase())
+  .pipe(z.string().regex(
+    ACTIVATION_CODE_FORMAT,
+    'Activation code must be 8-32 characters: letters, numbers and hyphens'
+  ));
+
 // Create Activation Code Validation (Canonical spec)
 // Supports both legacy (code, studyPackId) and new format (studyPackIds, expiresAt)
 export const createActivationCodeSchema = z.object({
-  code: z.string()
-    .min(1, 'Activation code cannot be empty')
-    .max(50, 'Activation code cannot exceed 50 characters')
-    .trim()
-    .optional(), // Optional - will be auto-generated if not provided
+  code: activationCodeSchema.optional(), // Optional - will be auto-generated if not provided
   description: z.string()
     .max(500, 'Description cannot exceed 500 characters')
     .optional(),
@@ -460,25 +483,41 @@ export const createActivationCodeSchema = z.object({
 
 // Update Activation Code Validation (Canonical spec - all fields optional)
 export const updateActivationCodeSchema = z.object({
-  code: z.string()
-    .min(1, 'Activation code cannot be empty')
-    .max(50, 'Activation code cannot exceed 50 characters')
-    .trim()
+  code: activationCodeSchema.optional(),
+  description: z.string()
+    .max(500, 'Description cannot exceed 500 characters')
+    .nullable()
     .optional(),
+  // Replaces the code's study packs (studyPackIds wins over the legacy single studyPackId)
   studyPackId: z.number()
     .int('Study pack ID must be an integer')
     .positive('Study pack ID must be positive')
     .optional(),
+  studyPackIds: z.array(
+    z.number().int('Study pack ID must be an integer').positive('Study pack ID must be positive')
+  )
+    .min(1, 'At least one study pack must be selected')
+    .optional(),
   expiryDate: z.string()
+    .datetime('Invalid expiry date format')
+    .optional(),
+  expiresAt: z.string()
     .datetime('Invalid expiry date format')
     .optional(),
   maxUses: z.number()
     .int('Max uses must be an integer')
     .min(1, 'Max uses must be at least 1')
     .optional(),
+  durationType: z.enum(['MONTHS', 'DAYS']).optional(),
   durationMonths: z.number()
     .int('Duration must be an integer')
     .min(1, 'Duration must be at least 1 month')
+    .max(60, 'Duration cannot exceed 60 months')
+    .optional(),
+  durationDays: z.number()
+    .int('Duration must be an integer')
+    .min(1, 'Duration must be at least 1 day')
+    .max(1825, 'Duration cannot exceed 1825 days')
     .optional(),
   isActive: z.boolean().optional()
 });
@@ -512,21 +551,61 @@ export const getActivationCodesSchema = z.object({
     .optional()
 });
 
-// Validate Activation Code (Student) Validation
+// Validate Activation Code (Student) Validation: case-insensitive, like the stored codes
 export const validateActivationCodeSchema = z.object({
   code: z.string()
-    .min(8, 'Activation code must be at least 8 characters')
-    .max(32, 'Activation code cannot exceed 32 characters')
-    .regex(/^[A-Z0-9-]+$/, 'Activation code can only contain uppercase letters, numbers, and hyphens')
-    .transform((val) => val.toUpperCase().trim())
+    .trim()
+    .transform((val) => val.toUpperCase())
+    .pipe(z.string()
+      .min(8, 'Activation code must be at least 8 characters')
+      .max(32, 'Activation code cannot exceed 32 characters')
+      .regex(/^[A-Z0-9-]+$/, 'Activation code can only contain letters, numbers, and hyphens'))
 });
 
 // ==========================================
 // RESIDENCY QUESTION MANAGEMENT (Canonical spec)
 // ==========================================
 
-// Answer schema for residency questions
+// The three residency exam parts. Questions are only listed, editable and used in
+// student sessions when their part is one of these.
+export const RESIDENCY_PARTS = ['Sciences_fondamentales', 'Pathologie_medico_chirurgical', 'Dossier_clinique'] as const;
+
+// Labels older admin screens send, keyed by a normalized form (lower case, no accents,
+// runs of other characters as '_')
+const RESIDENCY_PART_ALIASES: Record<string, typeof RESIDENCY_PARTS[number]> = {
+  sciences_fondamentales: 'Sciences_fondamentales',
+  e_sciences_fondamentales: 'Sciences_fondamentales',
+  pathologie_medico_chirurgical: 'Pathologie_medico_chirurgical',
+  pathologie_medico_chirurgicale: 'Pathologie_medico_chirurgical',
+  pathologies_medico_chirurgicales: 'Pathologie_medico_chirurgical',
+  e_pathologies_m_c: 'Pathologie_medico_chirurgical',
+  dossier_clinique: 'Dossier_clinique',
+  dossiers_cliniques: 'Dossier_clinique',
+  e_dossiers_cliniques: 'Dossier_clinique',
+};
+
+export function normalizeResidencyPart(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const key = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return RESIDENCY_PART_ALIASES[key] ?? value;
+}
+
+const residencyPartSchema = z.preprocess(
+  normalizeResidencyPart,
+  z.enum(RESIDENCY_PARTS, {
+    errorMap: () => ({ message: `Part must be one of ${RESIDENCY_PARTS.join(', ')}` })
+  })
+);
+
+// Answer schema for residency questions. On update, an answer with an id edits that
+// answer; answers without an id are added; existing answers left out are removed.
 const residencyQuestionAnswerSchema = z.object({
+  id: z.number().int().positive().optional(),
   answerText: z.string().min(1, 'Answer text is required'),
   isCorrect: z.boolean()
 });
@@ -534,8 +613,8 @@ const residencyQuestionAnswerSchema = z.object({
 // Create Residency Question Validation
 export const createResidencyQuestionSchema = z.object({
   questionText: z.string().min(1, 'Question text is required'),
-  part: z.string().optional(),
-  explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+  part: residencyPartSchema,
+  explanation: markdownSchema(),
   examYear: z.number().int().positive().optional(),
   universityId: z.number().int().positive().optional(),
   metadata: z.string().optional(),
@@ -553,8 +632,8 @@ export const createResidencyQuestionSchema = z.object({
 // Update Residency Question Validation (all fields optional)
 export const updateResidencyQuestionSchema = z.object({
   questionText: z.string().min(1).optional(),
-  part: z.string().optional(),
-  explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+  part: residencyPartSchema.optional(),
+  explanation: markdownSchema(),
   examYear: z.number().int().positive().optional(),
   universityId: z.number().int().positive().optional(),
   metadata: z.string().optional(),
@@ -574,7 +653,7 @@ export const updateResidencyQuestionSchema = z.object({
 export const residencyQuestionsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),
-  part: z.string().optional(),
+  part: z.preprocess(normalizeResidencyPart, z.string().optional()),
   examYear: z.coerce.number().int().positive().optional(),
   universityId: z.coerce.number().int().positive().optional(),
   search: z.string().optional()
@@ -584,15 +663,15 @@ export const residencyQuestionsQuerySchema = z.object({
 export const bulkCreateResidencyQuestionsSchema = z.object({
   universityId: z.number().int().positive('University ID must be a positive integer'),
   examYear: z.number().int().positive('Exam year must be a positive integer'),
-  part: z.string().optional(),
+  part: residencyPartSchema,
   questions: z.array(z.object({
     questionText: z.string().min(1, 'Question text is required'),
-    explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined),
+    explanation: markdownSchema(),
     metadata: z.string().optional(),
     questionAnswers: z.array(z.object({
       answerText: z.string().min(1, 'Answer text is required'),
       isCorrect: z.boolean(),
-      explanation: z.string().optional().transform(val => val ? sanitizeMarkdown(val) : undefined)
+      explanation: markdownSchema()
     }))
       .min(1, 'At least one answer is required')
       .refine(
@@ -600,4 +679,15 @@ export const bulkCreateResidencyQuestionsSchema = z.object({
         { message: 'At least one answer must be marked as correct' }
       )
   })).min(1, 'At least one question is required')
+});
+
+// Module / sub-module books (POST /admin/modules/:id/books, /admin/sub-modules/:id/books).
+// viewUrl and coverPath are rendered as links and images: http(s) URLs or /paths only.
+export const createBooksSchema = z.object({
+  books: z.array(z.object({
+    name: z.string().trim().min(1, 'Book name is required').max(255, 'Book name cannot exceed 255 characters'),
+    coverPath: httpUrlOrPathSchema('Cover path must be an http(s) URL or a /path').optional(),
+    viewUrl: httpUrlOrPathSchema('View URL must be an http(s) URL or a /path'),
+    tag: z.string().trim().max(100, 'Tag cannot exceed 100 characters').optional(),
+  })).min(1, 'Books array is required and cannot be empty').max(500, 'Cannot create more than 500 books at once'),
 });

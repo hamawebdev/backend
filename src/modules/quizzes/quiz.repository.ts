@@ -1,12 +1,11 @@
 import {
+  Prisma,
   Question,
+  QuestionType,
   QuizSession,
-  QuizAttempt,
   YearLevel,
   SessionType,
   SessionStatus,
-  QuestionAnswer,
-
   QuizType,
   RetakeType,
   PrismaClient
@@ -14,6 +13,51 @@ import {
 import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
 import { QuizSessionFilters } from "../../types/quiz.types";
+
+/** Upper bound on the questions one session can hold (matches the request schemas) */
+export const MAX_SESSION_QUESTIONS = 1000;
+
+/** Upper bound on the rows GET /quizzes/questions-by-unite-or-module returns per page */
+export const MAX_QUESTIONS_PAGE_SIZE = 5000;
+
+const RESIDENCY_PARTS = ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"];
+
+/**
+ * Residency content: questions with a university and exam year that either sit
+ * in a RESIDENCY study pack or have no course (created through the residency
+ * admin flow; course-less questions of an admin-built exam are not residency).
+ * Externat questions of the same university and year are excluded.
+ */
+export function residencyQuestionWhere(): Prisma.QuestionWhereInput {
+  return {
+    universityId: { not: null },
+    examYear: { not: null },
+    OR: [
+      { courseId: null, examId: null, examQuestions: { none: {} } },
+      { course: { module: { unite: { studyPack: { type: 'RESIDENCY' } } } } }
+    ]
+  };
+}
+
+/** An answer that has been validated against its question and scored */
+export type PreparedAnswer =
+  | { kind: 'SINGLE'; questionId: number; selectedAnswerId: number; isCorrect: boolean }
+  | { kind: 'TEXT'; questionId: number; textAnswer: string; isCorrect: boolean; userManualCorrection: boolean }
+  | { kind: 'MULTIPLE'; questionId: number; selectedAnswerIds: number[]; isCorrect: boolean; partialScore: number };
+
+export type SessionStats = {
+  totalQuestions: number;
+  answeredCount: number;
+  correctCount: number;
+  score: number;
+  percentage: number;
+};
+
+function assertId(value: unknown, name: string): asserts value is number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+}
 
 @injectable()
 export default class QuizRepository {
@@ -149,13 +193,40 @@ export default class QuizRepository {
     sessionId: number,
     questionIds: number[]
   ): Promise<void> {
-    const sessionQuestions = questionIds.map(questionId => ({
+    assertId(sessionId, 'sessionId');
+    const sessionQuestions = Array.from(new Set(questionIds)).map(questionId => ({
       sessionId,
       questionId
     }));
 
     await this.prisma.quizSessionQuestion.createMany({
-      data: sessionQuestions
+      data: sessionQuestions,
+      skipDuplicates: true
+    });
+  }
+
+  /**
+   * Create a session together with its questions in one statement, so a
+   * failure never leaves an empty session behind
+   */
+  async createSessionWithQuestionIds(
+    userId: number,
+    title: string,
+    type: SessionType,
+    questionIds: number[],
+    quizType?: QuizType
+  ): Promise<QuizSession> {
+    return await this.prisma.quizSession.create({
+      data: {
+        userId,
+        title,
+        type,
+        quizType,
+        status: SessionStatus.NOT_STARTED,
+        sessionQuestions: {
+          create: Array.from(new Set(questionIds)).map(questionId => ({ questionId }))
+        }
+      }
     });
   }
 
@@ -163,6 +234,8 @@ export default class QuizRepository {
     sessionId: number,
     userId?: number
   ): Promise<QuizSession | null> {
+    // Prisma ignores undefined in filters, so a missing id would match any session
+    assertId(sessionId, 'sessionId');
     const whereCondition: any = { id: sessionId };
 
     // If userId is provided, filter by user ownership
@@ -222,375 +295,192 @@ export default class QuizRepository {
     });
   }
 
-  async submitAnswers(
-    sessionId: number,
-    answers: Array<{ questionId: number; selectedAnswerId?: number; selectedAnswerIds?: number[]; textAnswer?: string; isCorrect?: boolean }>
-  ): Promise<void> {
-    for (const answer of answers) {
-      if (answer.selectedAnswerId !== undefined) {
-        // Single choice question
-        await this.submitSingleChoiceAnswer(sessionId, answer.questionId, answer.selectedAnswerId);
-      } else if (answer.selectedAnswerIds !== undefined) {
-        // Multiple choice question
-        await this.submitMultipleChoiceAnswer(sessionId, answer.questionId, answer.selectedAnswerIds);
-      } else if (answer.textAnswer !== undefined) {
-        // QROC question
-        await this.submitTextAnswerWithResult(sessionId, answer.questionId, answer.textAnswer, answer.isCorrect);
-      }
-    }
+  /**
+   * Light ownership check used before writing answers or reading results
+   */
+  async findOwnedSession(sessionId: number, userId: number): Promise<{
+    id: number;
+    userId: number;
+    title: string;
+    type: SessionType;
+    quizType: QuizType | null;
+    status: SessionStatus;
+    completedAt: Date | null;
+  } | null> {
+    assertId(sessionId, 'sessionId');
+    return await this.prisma.quizSession.findFirst({
+      where: { id: sessionId, userId },
+      select: { id: true, userId: true, title: true, type: true, quizType: true, status: true, completedAt: true }
+    });
   }
 
   /**
-   * Submit answers and return results with isCorrect for each - Canonical spec
+   * Question types and answer options needed to score submitted answers
    */
-  async submitAnswersWithResults(
-    sessionId: number,
-    answers: Array<{ questionId: number; selectedAnswerId?: number; selectedAnswerIds?: number[]; textAnswer?: string; isCorrect?: boolean }>
-  ): Promise<Array<{ questionId: number; isCorrect: boolean }>> {
-    const results: Array<{ questionId: number; isCorrect: boolean }> = [];
+  async getQuestionsForScoring(questionIds: number[]): Promise<Array<{
+    id: number;
+    questionType: QuestionType;
+    questionAnswers: Array<{ id: number; isCorrect: boolean }>;
+  }>> {
+    if (questionIds.length === 0) {
+      return [];
+    }
+    return await this.prisma.question.findMany({
+      where: { id: { in: questionIds } },
+      select: {
+        id: true,
+        questionType: true,
+        questionAnswers: { select: { id: true, isCorrect: true } }
+      }
+    });
+  }
+
+  /**
+   * Store already-scored answers in one transaction, then recompute the
+   * session score once. Each question lives in exactly one attempt table:
+   * multiple choice in multiple_choice_attempts, everything else in
+   * quiz_attempts; a stale row in the other table is removed.
+   */
+  async saveAnswers(sessionId: number, answers: PreparedAnswer[]): Promise<SessionStats> {
+    const now = new Date();
+    const multipleIds = answers.filter(a => a.kind === 'MULTIPLE').map(a => a.questionId);
+    const otherIds = answers.filter(a => a.kind !== 'MULTIPLE').map(a => a.questionId);
+
+    const operations: Prisma.PrismaPromise<unknown>[] = [];
+    if (multipleIds.length > 0) {
+      operations.push(this.prisma.quizAttempt.deleteMany({ where: { sessionId, questionId: { in: multipleIds } } }));
+    }
+    if (otherIds.length > 0) {
+      operations.push(this.prisma.multipleChoiceAttempt.deleteMany({ where: { sessionId, questionId: { in: otherIds } } }));
+    }
 
     for (const answer of answers) {
-      let isCorrect = false;
-
-      if (answer.selectedAnswerId !== undefined) {
-        // Single choice question
-        isCorrect = await this.submitSingleChoiceAnswerWithResult(sessionId, answer.questionId, answer.selectedAnswerId);
-      } else if (answer.selectedAnswerIds !== undefined) {
-        // Multiple choice question
-        isCorrect = await this.submitMultipleChoiceAnswerWithResult(sessionId, answer.questionId, answer.selectedAnswerIds);
-      } else if (answer.textAnswer !== undefined) {
-        // QROC question
-        isCorrect = await this.submitTextAnswerWithResult(sessionId, answer.questionId, answer.textAnswer, answer.isCorrect);
-      }
-
-      results.push({ questionId: answer.questionId, isCorrect });
-    }
-
-    return results;
-  }
-
-  async submitSingleChoiceAnswerWithResult(
-    sessionId: number,
-    questionId: number,
-    selectedAnswerId: number
-  ): Promise<boolean> {
-    // Get correct answer for validation
-    const correctAnswer = await this.prisma.questionAnswer.findFirst({
-      where: {
-        questionId,
-        isCorrect: true
-      }
-    });
-
-    const isCorrect = correctAnswer?.id === selectedAnswerId;
-
-    // Use upsert to handle duplicate submissions
-    await this.prisma.quizAttempt.upsert({
-      where: {
-        sessionId_questionId: {
-          sessionId,
-          questionId
-        }
-      },
-      update: {
-        selectedAnswerId,
-        isCorrect,
-        answeredAt: new Date()
-      },
-      create: {
-        sessionId,
-        questionId,
-        selectedAnswerId,
-        isCorrect,
-        answeredAt: new Date()
-      }
-    });
-
-    // Update session score after each submission
-    await this.updateSessionScore(sessionId);
-
-    return isCorrect;
-  }
-
-  async submitMultipleChoiceAnswerWithResult(
-    sessionId: number,
-    questionId: number,
-    selectedAnswerIds: number[]
-  ): Promise<boolean> {
-    // Get all correct answers for this question
-    const correctAnswers = await this.prisma.questionAnswer.findMany({
-      where: {
-        questionId,
-        isCorrect: true
-      }
-    });
-
-    const correctAnswerIds = correctAnswers.map(answer => answer.id);
-
-    // Calculate if answer is correct (all correct answers selected, no incorrect ones)
-    const selectedSet = new Set(selectedAnswerIds);
-    const correctSet = new Set(correctAnswerIds);
-
-    const isCorrect = selectedSet.size === correctSet.size &&
-      [...selectedSet].every(id => correctSet.has(id));
-
-    // Calculate partial score (percentage of correct selections)
-    const correctSelections = selectedAnswerIds.filter(id => correctSet.has(id)).length;
-    const incorrectSelections = selectedAnswerIds.filter(id => !correctSet.has(id)).length;
-    const totalCorrectAnswers = correctAnswerIds.length;
-
-    // Partial scoring: (correct selections - incorrect selections) / total correct answers
-    // Minimum score is 0
-    const partialScore = Math.max(0, (correctSelections - incorrectSelections) / totalCorrectAnswers);
-
-    // Use upsert to handle duplicate submissions
-    // Note: selectedAnswerIds is stored as JSON string in database
-    await this.prisma.multipleChoiceAttempt.upsert({
-      where: {
-        sessionId_questionId: {
-          sessionId,
-          questionId
-        }
-      },
-      update: {
-        selectedAnswerIds: JSON.stringify(selectedAnswerIds),
-        isCorrect,
-        partialScore,
-        answeredAt: new Date()
-      },
-      create: {
-        sessionId,
-        questionId,
-        selectedAnswerIds: JSON.stringify(selectedAnswerIds),
-        isCorrect,
-        partialScore,
-        answeredAt: new Date()
-      }
-    });
-
-    // Update session score after each submission
-    await this.updateSessionScore(sessionId);
-
-    return isCorrect;
-  }
-
-  async submitTextAnswerWithResult(
-    sessionId: number,
-    questionId: number,
-    textAnswer: string,
-    isCorrectInput?: boolean
-  ): Promise<boolean> {
-    // For QROC, we trust the self-grading input if provided, otherwise default to false (needs manual correction)
-    // In future, we might add regex matching or keyword matching here
-    const isCorrect = isCorrectInput === true;
-    const userManualCorrection = isCorrectInput !== undefined;
-
-    // Use upsert to handle duplicate submissions
-    await this.prisma.quizAttempt.upsert({
-      where: {
-        sessionId_questionId: {
-          sessionId,
-          questionId
-        }
-      },
-      update: {
-        textAnswer,
-        isCorrect,
-        userManualCorrection,
-        answeredAt: new Date()
-      },
-      create: {
-        sessionId,
-        questionId,
-        textAnswer,
-        isCorrect,
-        userManualCorrection,
-        answeredAt: new Date()
-      }
-    });
-
-    // Update session score
-    await this.updateSessionScore(sessionId);
-
-    return isCorrect;
-  }
-
-  async submitSingleChoiceAnswer(
-    sessionId: number,
-    questionId: number,
-    selectedAnswerId: number
-  ): Promise<void> {
-    // Get correct answer for validation
-    const correctAnswer = await this.prisma.questionAnswer.findFirst({
-      where: {
-        questionId,
-        isCorrect: true
-      }
-    });
-
-    const isCorrect = correctAnswer?.id === selectedAnswerId;
-
-    // Use upsert to handle duplicate submissions
-    await this.prisma.quizAttempt.upsert({
-      where: {
-        sessionId_questionId: {
-          sessionId,
-          questionId
-        }
-      },
-      update: {
-        selectedAnswerId,
-        isCorrect,
-        answeredAt: new Date()
-      },
-      create: {
-        sessionId,
-        questionId,
-        selectedAnswerId,
-        isCorrect,
-        answeredAt: new Date()
-      }
-    });
-
-    // Update session score after each submission
-    await this.updateSessionScore(sessionId);
-  }
-
-  async submitMultipleChoiceAnswer(
-    sessionId: number,
-    questionId: number,
-    selectedAnswerIds: number[]
-  ): Promise<void> {
-    // Get all correct answers for this question
-    const correctAnswers = await this.prisma.questionAnswer.findMany({
-      where: {
-        questionId,
-        isCorrect: true
-      }
-    });
-
-    const correctAnswerIds = correctAnswers.map(answer => answer.id);
-
-    // Calculate if answer is correct (all correct answers selected, no incorrect ones)
-    const selectedSet = new Set(selectedAnswerIds);
-    const correctSet = new Set(correctAnswerIds);
-
-    const isCorrect = selectedSet.size === correctSet.size &&
-      [...selectedSet].every(id => correctSet.has(id));
-
-    // Calculate partial score (percentage of correct selections)
-    const correctSelections = selectedAnswerIds.filter(id => correctSet.has(id)).length;
-    const incorrectSelections = selectedAnswerIds.filter(id => !correctSet.has(id)).length;
-    const totalCorrectAnswers = correctAnswerIds.length;
-
-    // Partial scoring: (correct selections - incorrect selections) / total correct answers
-    // Minimum score is 0
-    const partialScore = Math.max(0, (correctSelections - incorrectSelections) / totalCorrectAnswers);
-
-    // Use upsert to handle duplicate submissions
-    await this.prisma.multipleChoiceAttempt.upsert({
-      where: {
-        sessionId_questionId: {
-          sessionId,
-          questionId
-        }
-      },
-      update: {
-        selectedAnswerIds: JSON.stringify(selectedAnswerIds),
-        isCorrect,
-        partialScore,
-        answeredAt: new Date()
-      },
-      create: {
-        sessionId,
-        questionId,
-        selectedAnswerIds: JSON.stringify(selectedAnswerIds),
-        isCorrect,
-        partialScore,
-        answeredAt: new Date()
-      }
-    });
-
-    // Update session score and status
-    await this.updateSessionScore(sessionId);
-  }
-
-  private async updateSessionScore(sessionId: number): Promise<void> {
-    // Get total number of questions in the session
-    const sessionQuestions = await this.prisma.quizSessionQuestion.findMany({
-      where: { sessionId },
-      select: { questionId: true }
-    });
-
-    const totalQuestions = sessionQuestions.length;
-
-    if (totalQuestions === 0) {
-      return; // No questions in session, nothing to calculate
-    }
-
-    // Get all single choice attempts
-    const singleChoiceAttempts = await this.prisma.quizAttempt.findMany({
-      where: { sessionId }
-    });
-
-    // Get all multiple choice attempts
-    const multipleChoiceAttempts = await this.prisma.multipleChoiceAttempt.findMany({
-      where: { sessionId }
-    });
-
-    // Calculate score from single choice questions
-    let totalScore = 0;
-    let answeredQuestions = 0;
-
-    // Process single choice attempts
-    for (const attempt of singleChoiceAttempts) {
-      if (attempt.selectedAnswerId !== null || attempt.textAnswer !== null) {
-        answeredQuestions++;
-        if (attempt.isCorrect) {
-          totalScore += 1; // Full point for correct single choice or QROC
-        }
+      const key = { sessionId_questionId: { sessionId, questionId: answer.questionId } };
+      if (answer.kind === 'MULTIPLE') {
+        const data = {
+          selectedAnswerIds: JSON.stringify(answer.selectedAnswerIds),
+          isCorrect: answer.isCorrect,
+          partialScore: answer.partialScore,
+          answeredAt: now
+        };
+        operations.push(this.prisma.multipleChoiceAttempt.upsert({
+          where: key,
+          update: data,
+          create: { sessionId, questionId: answer.questionId, ...data }
+        }));
+      } else if (answer.kind === 'SINGLE') {
+        const data = {
+          selectedAnswerId: answer.selectedAnswerId,
+          textAnswer: null,
+          isCorrect: answer.isCorrect,
+          userManualCorrection: null,
+          answeredAt: now
+        };
+        operations.push(this.prisma.quizAttempt.upsert({
+          where: key,
+          update: data,
+          create: { sessionId, questionId: answer.questionId, ...data }
+        }));
+      } else {
+        const data = {
+          selectedAnswerId: null,
+          textAnswer: answer.textAnswer,
+          isCorrect: answer.isCorrect,
+          userManualCorrection: answer.userManualCorrection,
+          answeredAt: now
+        };
+        operations.push(this.prisma.quizAttempt.upsert({
+          where: key,
+          update: data,
+          create: { sessionId, questionId: answer.questionId, ...data }
+        }));
       }
     }
 
-    // Process multiple choice attempts
-    for (const attempt of multipleChoiceAttempts) {
-      if (attempt.selectedAnswerIds && attempt.selectedAnswerIds !== '[]') {
-        answeredQuestions++;
-        if (attempt.isCorrect) {
-          totalScore += 1; // Full point for completely correct multiple choice
-        } else if (attempt.partialScore && attempt.partialScore > 0) {
-          totalScore += attempt.partialScore; // Partial credit for partially correct
-        }
-      }
-    }
+    await this.prisma.$transaction(operations);
 
-    // Calculate percentage
-    const percentage = totalQuestions > 0 ? (totalScore / totalQuestions) * 100 : 0;
-
-    // Determine session status
-    const allAnswered = answeredQuestions >= totalQuestions;
-    const status = allAnswered ? SessionStatus.COMPLETED : SessionStatus.IN_PROGRESS;
-
-    // Update session with calculated scores
-    await this.prisma.quizSession.update({
-      where: { id: sessionId },
-      data: {
-        score: totalScore,
-        percentage: Math.round(percentage * 100) / 100, // Round to 2 decimal places
-        status,
-        ...(status === SessionStatus.COMPLETED && { completedAt: new Date() }),
-        ...(status === SessionStatus.IN_PROGRESS && !await this.isSessionStarted(sessionId)
-          ? { startedAt: new Date() } : {})
-      }
-    });
+    return await this.updateSessionScore(sessionId);
   }
 
-  private async isSessionStarted(sessionId: number): Promise<boolean> {
+  /**
+   * Score a session from its stored attempts. A question counts at most once
+   * (its best attempt), and rows without an answer are ignored.
+   */
+  async getSessionStats(sessionId: number): Promise<SessionStats> {
+    const [totalQuestions, singleAttempts, multipleAttempts] = await Promise.all([
+      this.prisma.quizSessionQuestion.count({ where: { sessionId } }),
+      this.prisma.quizAttempt.findMany({
+        where: {
+          sessionId,
+          OR: [{ selectedAnswerId: { not: null } }, { textAnswer: { not: null } }]
+        },
+        select: { questionId: true, isCorrect: true }
+      }),
+      this.prisma.multipleChoiceAttempt.findMany({
+        where: { sessionId },
+        select: { questionId: true, isCorrect: true, partialScore: true, selectedAnswerIds: true }
+      })
+    ]);
+
+    const best = new Map<number, { points: number; correct: boolean }>();
+    const record = (questionId: number, points: number, correct: boolean) => {
+      const current = best.get(questionId);
+      if (!current || points > current.points || (points === current.points && correct && !current.correct)) {
+        best.set(questionId, { points, correct });
+      }
+    };
+
+    for (const attempt of singleAttempts) {
+      record(attempt.questionId, attempt.isCorrect ? 1 : 0, attempt.isCorrect === true);
+    }
+    for (const attempt of multipleAttempts) {
+      if (!attempt.selectedAnswerIds || attempt.selectedAnswerIds === '[]') {
+        continue;
+      }
+      const points = attempt.isCorrect
+        ? 1
+        : (attempt.partialScore && attempt.partialScore > 0 ? attempt.partialScore : 0);
+      record(attempt.questionId, points, attempt.isCorrect === true);
+    }
+
+    let score = 0;
+    let correctCount = 0;
+    for (const entry of best.values()) {
+      score += entry.points;
+      if (entry.correct) correctCount++;
+    }
+    const answeredCount = Math.min(best.size, totalQuestions);
+    const percentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100 * 100) / 100 : 0;
+
+    return { totalQuestions, answeredCount, correctCount, score, percentage };
+  }
+
+  private async updateSessionScore(sessionId: number): Promise<SessionStats> {
+    const stats = await this.getSessionStats(sessionId);
+    if (stats.totalQuestions === 0) {
+      return stats; // No questions in session, nothing to calculate
+    }
+
     const session = await this.prisma.quizSession.findUnique({
       where: { id: sessionId },
       select: { startedAt: true }
     });
-    return session?.startedAt !== null;
+
+    const now = new Date();
+    const completed = stats.answeredCount >= stats.totalQuestions;
+
+    await this.prisma.quizSession.update({
+      where: { id: sessionId },
+      data: {
+        score: stats.score,
+        percentage: stats.percentage,
+        status: completed ? SessionStatus.COMPLETED : SessionStatus.IN_PROGRESS,
+        ...(completed ? { completedAt: now } : {}),
+        ...(!session?.startedAt ? { startedAt: now } : {})
+      }
+    });
+
+    return stats;
   }
 
   async getAvailableFilters(
@@ -742,14 +632,15 @@ export default class QuizRepository {
     // Get question sources with their question counts
     let questionSources: any[] = [];
     try {
-      const questionSourcesRaw = await this.prisma.$queryRaw`
+      // Prisma.join binds one integer parameter per pack id; an empty list matches nothing
+      const questionSourcesRaw = accessibleStudyPackIds.length === 0 ? [] : await this.prisma.$queryRaw`
         SELECT qs.id, qs.name, COUNT(q.id) as question_count
         FROM question_sources qs
-        LEFT JOIN questions q ON q.source_id = qs.id
-        LEFT JOIN courses c ON q.course_id = c.id
-        LEFT JOIN modules m ON c.module_id = m.id
-        LEFT JOIN unites u ON m.unite_id = u.id
-        WHERE u.study_pack_id IN (${accessibleStudyPackIds.join(',')})
+        JOIN questions q ON q.source_id = qs.id
+        JOIN courses c ON q.course_id = c.id
+        JOIN modules m ON c.module_id = m.id
+        JOIN unites u ON m.unite_id = u.id
+        WHERE u.study_pack_id IN (${Prisma.join(accessibleStudyPackIds)})
         GROUP BY qs.id, qs.name
         ORDER BY qs.name
       ` as any[];
@@ -804,18 +695,7 @@ export default class QuizRepository {
    * Get universities with their distinct exam years for residency session creation
    */
   async getResidencyUniversities(): Promise<Array<{ id: number; name: string; examYears: number[] }>> {
-    const residencyQuestionFilter = {
-      examYear: { not: null },
-      course: {
-        module: {
-          unite: {
-            studyPack: {
-              type: 'RESIDENCY'
-            }
-          }
-        }
-      }
-    };
+    const residencyQuestionFilter = residencyQuestionWhere();
 
     const universitiesData = await this.prisma.university.findMany({
       where: {
@@ -851,10 +731,11 @@ export default class QuizRepository {
     universityId: number,
     examYear: number
   ): Promise<{ parts: string[]; questionCount: number }> {
+    assertId(universityId, 'universityId');
+    assertId(examYear, 'examYear');
     const questions = await this.prisma.question.findMany({
       where: {
-        universityId,
-        examYear
+        AND: [residencyQuestionWhere(), { universityId, examYear }]
       },
       select: { id: true, metadata: true }
     });
@@ -874,11 +755,7 @@ export default class QuizRepository {
     }
 
     // Define canonical order for parts
-    const canonicalOrder = [
-      "Sciences_fondamentales",
-      "Pathologie_medico_chirurgical",
-      "Dossier_clinique"
-    ];
+    const canonicalOrder = RESIDENCY_PARTS;
 
     // Sort parts in canonical order, unknown parts go at the end
     const parts = Array.from(partsSet).sort((a, b) => {
@@ -918,15 +795,15 @@ export default class QuizRepository {
             year: number;
             questionSingleCount: number;
             questionMultipleCount: number;
-            questionSingleChoiceIds: number[];
-            questionMultipleChoiceIds: number[];
           }>;
         }>;
       }>;
     }>;
   }> {
-    // Get all questions with their hierarchical relationships
-    const questions = await this.prisma.question.findMany({
+    // Count questions per course, university, exam year and type in the database
+    // instead of loading every question
+    const groups = await this.prisma.question.groupBy({
+      by: ['courseId', 'universityId', 'examYear', 'questionType'],
       where: {
         course: {
           module: {
@@ -934,44 +811,41 @@ export default class QuizRepository {
               { unite: { studyPackId: { in: accessibleStudyPackIds } } },
               { uniteId: null }
             ]
-          } as any
+          }
         },
         universityId: { not: null } // Only include questions with university
-        // Note: We now include questions without examYear and handle them with a default year
+        // Questions without examYear are reported under the placeholder year 9999
       },
-      select: {
-        id: true,
-        questionType: true,
-        examYear: true,
-        universityId: true,
-        course: {
-          select: {
-            id: true,
-            name: true,
-            module: {
-              select: {
-                id: true,
-                name: true,
-                unite: {
-                  select: {
-                    id: true,
-                    name: true
-                  }
-                }
-              }
-            }
-          }
-        },
-        university: {
-          select: {
-            id: true,
-            name: true
-          }
-        }
-      }
+      _count: { _all: true }
     });
 
-    // Group questions hierarchically
+    const courseIds = Array.from(new Set(groups.map(g => g.courseId).filter((id): id is number => id !== null)));
+    const universityIds = Array.from(new Set(groups.map(g => g.universityId).filter((id): id is number => id !== null)));
+
+    type CourseInfo = { id: number; module: { id: number; name: string; unite: { id: number; name: string } | null } };
+    const [courses, universities]: [CourseInfo[], Array<{ id: number; name: string }>] = await Promise.all([
+      this.prisma.course.findMany({
+        where: { id: { in: courseIds } },
+        select: {
+          id: true,
+          module: {
+            select: {
+              id: true,
+              name: true,
+              unite: { select: { id: true, name: true } }
+            }
+          }
+        }
+      }),
+      this.prisma.university.findMany({
+        where: { id: { in: universityIds } },
+        select: { id: true, name: true }
+      })
+    ]);
+    const courseById = new Map<number, CourseInfo>(courses.map(c => [c.id, c]));
+    const universityNameById = new Map<number, string>(universities.map(u => [u.id, u.name]));
+
+    // Group hierarchically: unite -> module -> university -> year
     const uniteMap = new Map<number, {
       id: number;
       title: string;
@@ -981,81 +855,54 @@ export default class QuizRepository {
         universities: Map<number, {
           id: number;
           name: string;
-          years: Map<number, {
-            year: number;
-            questionSingleCount: number;
-            questionMultipleCount: number;
-            questionSingleChoiceIds: number[];
-            questionMultipleChoiceIds: number[];
-          }>;
+          years: Map<number, { year: number; questionSingleCount: number; questionMultipleCount: number }>;
         }>;
       }>;
     }>();
 
-    questions.forEach(question => {
-      if (!question.course) return; // Skip if course is null
+    for (const group of groups) {
+      const course = group.courseId !== null ? courseById.get(group.courseId) : undefined;
+      if (!course || group.universityId === null) continue;
 
-      const uniteId = question.course.module.unite?.id ?? 0;
-      const moduleId = question.course.module.id;
-      const universityId = question.universityId!;
-      // Use examYear if available, otherwise use a default year (e.g., 9999 for "No Year Specified")
-      const year = question.examYear || 9999;
+      const uniteId = course.module.unite?.id ?? 0;
+      const moduleId = course.module.id;
+      const universityId = group.universityId;
+      const year = group.examYear || 9999;
 
-      // Initialize unite if not exists
       if (!uniteMap.has(uniteId)) {
         uniteMap.set(uniteId, {
           id: uniteId,
-          title: question.course.module.unite?.name ?? 'Unknown',
+          title: course.module.unite?.name ?? 'Unknown',
           modules: new Map()
         });
       }
-
       const unite = uniteMap.get(uniteId)!;
 
-      // Initialize module if not exists
       if (!unite.modules.has(moduleId)) {
-        unite.modules.set(moduleId, {
-          id: moduleId,
-          title: question.course.module.name,
-          universities: new Map()
-        });
+        unite.modules.set(moduleId, { id: moduleId, title: course.module.name, universities: new Map() });
       }
-
       const module = unite.modules.get(moduleId)!;
 
-      // Initialize university if not exists
       if (!module.universities.has(universityId)) {
         module.universities.set(universityId, {
           id: universityId,
-          name: question.university!.name,
+          name: universityNameById.get(universityId) ?? 'Unknown',
           years: new Map()
         });
       }
-
       const university = module.universities.get(universityId)!;
 
-      // Initialize year if not exists
       if (!university.years.has(year)) {
-        university.years.set(year, {
-          year,
-          questionSingleCount: 0,
-          questionMultipleCount: 0,
-          questionSingleChoiceIds: [],
-          questionMultipleChoiceIds: []
-        });
+        university.years.set(year, { year, questionSingleCount: 0, questionMultipleCount: 0 });
       }
-
       const yearData = university.years.get(year)!;
 
-      // Add question to appropriate arrays and update counts
-      if (question.questionType === 'SINGLE_CHOICE') {
-        yearData.questionSingleCount++;
-        yearData.questionSingleChoiceIds.push(question.id);
-      } else if (question.questionType === 'MULTIPLE_CHOICE') {
-        yearData.questionMultipleCount++;
-        yearData.questionMultipleChoiceIds.push(question.id);
+      if (group.questionType === 'SINGLE_CHOICE') {
+        yearData.questionSingleCount += group._count._all;
+      } else if (group.questionType === 'MULTIPLE_CHOICE') {
+        yearData.questionMultipleCount += group._count._all;
       }
-    });
+    }
 
     // Convert maps to arrays and sort
     const unites = Array.from(uniteMap.values()).map(unite => ({
@@ -1143,9 +990,11 @@ export default class QuizRepository {
 
   // Additional validation methods for enhanced error handling
   async getSessionQuestionIds(sessionId: number): Promise<number[]> {
+    assertId(sessionId, 'sessionId');
     const sessionQuestions = await this.prisma.quizSessionQuestion.findMany({
       where: { sessionId },
-      select: { questionId: true }
+      select: { questionId: true },
+      orderBy: { id: 'asc' }
     });
 
     return sessionQuestions.map(sq => sq.questionId);
@@ -1211,14 +1060,19 @@ export default class QuizRepository {
   // RETAKE SESSION FUNCTIONALITY
   // ==========================================
 
+  /**
+   * Create a retake session and its questions atomically
+   */
   async createRetakeSession(
     userId: number,
     title: string,
     type: SessionType,
     originalSessionId: number,
     retakeType: RetakeType,
+    questionIds: number[],
     quizType?: QuizType
   ): Promise<QuizSession> {
+    assertId(originalSessionId, 'originalSessionId');
     return await this.prisma.quizSession.create({
       data: {
         userId,
@@ -1228,46 +1082,71 @@ export default class QuizRepository {
         status: SessionStatus.NOT_STARTED,
         originalSessionId,
         retakeType,
-        isRetake: true
+        isRetake: true,
+        sessionQuestions: {
+          create: Array.from(new Set(questionIds)).map(questionId => ({ questionId }))
+        }
       }
     });
   }
 
+  /**
+   * Per-question outcome of a session, from both attempt tables. A question
+   * with an answer in either table counts as answered; it counts as correct
+   * when any of its answered attempts is correct.
+   */
+  private async getAnsweredOutcomes(sessionId: number): Promise<Map<number, boolean>> {
+    assertId(sessionId, 'sessionId');
+    const [singleAttempts, multipleAttempts] = await Promise.all([
+      this.prisma.quizAttempt.findMany({
+        where: {
+          sessionId,
+          OR: [{ selectedAnswerId: { not: null } }, { textAnswer: { not: null } }]
+        },
+        select: { questionId: true, isCorrect: true }
+      }),
+      this.prisma.multipleChoiceAttempt.findMany({
+        where: { sessionId },
+        select: { questionId: true, isCorrect: true, selectedAnswerIds: true }
+      })
+    ]);
+
+    const outcomes = new Map<number, boolean>();
+    const record = (questionId: number, isCorrect: boolean | null) => {
+      outcomes.set(questionId, (outcomes.get(questionId) ?? false) || isCorrect === true);
+    };
+    singleAttempts.forEach(attempt => record(attempt.questionId, attempt.isCorrect));
+    multipleAttempts
+      .filter(attempt => attempt.selectedAnswerIds && attempt.selectedAnswerIds !== '[]')
+      .forEach(attempt => record(attempt.questionId, attempt.isCorrect));
+    return outcomes;
+  }
+
+  /** Session questions answered incorrectly (single choice, multiple choice and QROC) */
   async getIncorrectQuestionIds(sessionId: number): Promise<number[]> {
-    const incorrectAttempts = await this.prisma.quizAttempt.findMany({
-      where: {
-        sessionId,
-        isCorrect: false,
-        selectedAnswerId: { not: null } // Only answered questions
-      },
-      select: { questionId: true }
-    });
-
-    return incorrectAttempts.map(attempt => attempt.questionId);
+    const [questionIds, outcomes] = await Promise.all([
+      this.getSessionQuestionIds(sessionId),
+      this.getAnsweredOutcomes(sessionId)
+    ]);
+    return questionIds.filter(id => outcomes.get(id) === false);
   }
 
+  /** Session questions answered correctly (single choice, multiple choice and QROC) */
   async getCorrectQuestionIds(sessionId: number): Promise<number[]> {
-    const correctAttempts = await this.prisma.quizAttempt.findMany({
-      where: {
-        sessionId,
-        isCorrect: true
-      },
-      select: { questionId: true }
-    });
-
-    return correctAttempts.map(attempt => attempt.questionId);
+    const [questionIds, outcomes] = await Promise.all([
+      this.getSessionQuestionIds(sessionId),
+      this.getAnsweredOutcomes(sessionId)
+    ]);
+    return questionIds.filter(id => outcomes.get(id) === true);
   }
 
+  /** Session questions with no answer in either attempt table */
   async getNotRespondedQuestionIds(sessionId: number): Promise<number[]> {
-    const notRespondedAttempts = await this.prisma.quizAttempt.findMany({
-      where: {
-        sessionId,
-        selectedAnswerId: null // Questions that were not answered
-      },
-      select: { questionId: true }
-    });
-
-    return notRespondedAttempts.map(attempt => attempt.questionId);
+    const [questionIds, outcomes] = await Promise.all([
+      this.getSessionQuestionIds(sessionId),
+      this.getAnsweredOutcomes(sessionId)
+    ]);
+    return questionIds.filter(id => !outcomes.has(id));
   }
 
   async getRetakeSessionHistory(originalSessionId: number): Promise<QuizSession[]> {
@@ -1359,7 +1238,7 @@ export default class QuizRepository {
   /**
    * Validate that all question IDs exist and are accessible to the user
    */
-  async validateQuestionAccess(questionIds: number[], accessibleStudyPackIds: number[]): Promise<{
+  async validateQuestionAccess(questionIds: number[], accessibleStudyPackIds: number[], allowCourseless: boolean): Promise<{
     existingQuestions: Question[];
     invalidIds: number[];
     inaccessibleIds: number[];
@@ -1389,9 +1268,20 @@ export default class QuizRepository {
     const existingIds = existingQuestions.map(q => q.id);
     const invalidIds = questionIds.filter(id => !existingIds.includes(id));
 
-    // Check which questions are not accessible (not in user's study packs)
+    // Check which questions are not accessible:
+    // - questions in a unite must belong to one of the user's study packs
+    // - questions in an independent module (no unite) are open to any subscriber (callers check the subscription)
+    // - questions with no course (residency questions) need residency access
     const inaccessibleIds = existingQuestions
-      .filter(q => q.course && q.course.module.unite && !accessibleStudyPackIds.includes(q.course.module.unite.studyPackId))
+      .filter(q => {
+        if (!q.course) {
+          return !allowCourseless;
+        }
+        if (q.course.module?.unite) {
+          return !accessibleStudyPackIds.includes(q.course.module.unite.studyPackId);
+        }
+        return false;
+      })
       .map(q => q.id);
 
     return {
@@ -1419,7 +1309,8 @@ export default class QuizRepository {
   }
 
   /**
-   * Create a quiz session with specific questions
+   * Create a quiz session with specific questions. Attempt rows are only
+   * written when the student answers, so unanswered questions have none.
    */
   async createSessionWithQuestions(
     userId: number,
@@ -1435,44 +1326,10 @@ export default class QuizRepository {
         status: SessionStatus.NOT_STARTED,
         score: 0,
         percentage: 0,
-        // Create session questions for the questions relationship
         sessionQuestions: {
-          create: questionIds.map((questionId) => ({
+          create: Array.from(new Set(questionIds)).map((questionId) => ({
             questionId
           }))
-        },
-        // Create quiz attempts for each question
-        quizAttempts: {
-          create: questionIds.map((questionId) => ({
-            questionId,
-            isCorrect: null // Will be set when answered
-          }))
-        }
-      },
-      include: {
-        sessionQuestions: {
-          include: {
-            question: {
-              include: {
-                source: {
-                  select: {
-                    id: true,
-                    name: true
-                  }
-                },
-                questionAnswers: {
-                  include: {
-                    explanationImages: true
-                  }
-                }
-              }
-            }
-          }
-        },
-        quizAttempts: {
-          include: {
-            question: true
-          }
         }
       }
     });
@@ -1826,13 +1683,19 @@ export default class QuizRepository {
 
   /**
    * GET /quizzes/questions-by-unite-or-module - Canonical spec
-   * Returns questions for a specific unite or module
+   * Returns one page of the questions of a unite or module: only the fields the
+   * question picker needs (no answers or explanations).
    */
   async getQuestionsByUniteOrModule(
     studyPackIds: number[],
     uniteId?: number,
-    moduleId?: number
-  ): Promise<{ questions: any[] }> {
+    moduleId?: number,
+    page: number = 1,
+    limit: number = MAX_QUESTIONS_PAGE_SIZE
+  ): Promise<{
+    questions: any[];
+    pagination: { page: number; limit: number; total: number; totalPages: number; hasMore: boolean };
+  }> {
     const whereClause: any = {
       course: {
         module: {
@@ -1852,63 +1715,47 @@ export default class QuizRepository {
       whereClause.course.moduleId = moduleId;
     }
 
-    const questions = await this.prisma.question.findMany({
-      where: whereClause,
-      include: {
-        questionAnswers: {
-          select: {
-            id: true,
-            answerText: true,
-            isCorrect: true,
-            explanation: true
-          }
-        },
-        questionImages: {
-          select: {
-            id: true,
-            imagePath: true,
-            altText: true
-          }
-        },
-        course: {
-          select: {
-            id: true,
-            name: true,
-            module: {
-              select: {
-                id: true,
-                name: true,
-                unite: {
-                  select: {
-                    id: true,
-                    name: true
+    const take = Math.min(Math.max(1, Math.floor(limit)), MAX_QUESTIONS_PAGE_SIZE);
+    const currentPage = Math.max(1, Math.floor(page));
+
+    const [total, questions] = await Promise.all([
+      this.prisma.question.count({ where: whereClause }),
+      this.prisma.question.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          questionType: true,
+          examYear: true,
+          course: {
+            select: {
+              id: true,
+              name: true,
+              module: {
+                select: {
+                  id: true,
+                  name: true,
+                  unite: {
+                    select: {
+                      id: true,
+                      name: true
+                    }
                   }
                 }
               }
             }
           }
-        }
-      }
-    });
+        },
+        orderBy: { id: 'asc' },
+        skip: (currentPage - 1) * take,
+        take
+      })
+    ]);
 
     return {
       questions: questions.map(q => ({
         id: q.id,
-        questionText: q.questionText,
         questionType: q.questionType,
-        explanation: q.explanation,
         examYear: q.examYear,
-        answers: q.questionAnswers.map(a => ({
-          id: a.id,
-          answerText: a.answerText,
-          isCorrect: a.isCorrect,
-          explanation: a.explanation
-        })),
-        images: q.questionImages.map(i => ({
-          id: i.id,
-          imagePath: i.imagePath,
-          altText: i.altText
-        })),
         course: q.course ? {
           id: q.course.id,
           name: q.course.name,
@@ -1921,14 +1768,21 @@ export default class QuizRepository {
             } : null
           } : null
         } : null
-      }))
+      })),
+      pagination: {
+        page: currentPage,
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+        hasMore: currentPage * take < total
+      }
     };
   }
 
   /**
    * POST /quizzes/sessions - Canonical spec
-   * Get questions for creating a canonical session
-   * @param questionCount - Optional limit for number of questions. If provided, questions are randomly selected.
+   * Get questions for creating a canonical session: a random selection of at
+   * most questionCount (never more than MAX_SESSION_QUESTIONS) matching questions.
    */
   async getQuestionsForCanonicalSession(
     studyPackIds: number[],
@@ -1936,12 +1790,13 @@ export default class QuizRepository {
       courseIds: number[];
       questionTypes?: string[];
       years?: number[];
+      rotations?: string[];
       universityIds?: number[];
       questionSourceIds?: number[];
       repetitionCountMin?: number;
       repetitionYears?: number[];
     },
-    questionCount?: number
+    questionCount: number = MAX_SESSION_QUESTIONS
   ): Promise<Array<{ id: number }>> {
     const whereClause: any = {
       courseId: { in: filters.courseIds },
@@ -1961,6 +1816,11 @@ export default class QuizRepository {
 
     if (filters.years && filters.years.length > 0) {
       whereClause.examYear = { in: filters.years };
+    }
+
+    // Rotations are the questions' year levels (same filter as POST /quizzes/question-count)
+    if (filters.rotations && filters.rotations.length > 0) {
+      whereClause.yearLevel = { in: filters.rotations };
     }
 
     if (filters.universityIds && filters.universityIds.length > 0) {
@@ -1983,30 +1843,21 @@ export default class QuizRepository {
       }));
     }
 
-    // If questionCount is specified, fetch all matching questions and randomly select
-    if (questionCount && questionCount > 0) {
-      const allQuestions = await this.prisma.question.findMany({
-        where: whereClause,
-        select: { id: true }
-      });
+    const limit = Math.min(Math.max(1, Math.floor(questionCount) || MAX_SESSION_QUESTIONS), MAX_SESSION_QUESTIONS);
 
-      // Shuffle questions using Fisher-Yates algorithm and take the requested count
-      const shuffled = [...allQuestions];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-
-      return shuffled.slice(0, questionCount);
-    }
-
-    // No limit specified - return all matching questions
-    const questions = await this.prisma.question.findMany({
+    // Only ids are loaded; shuffle them (Fisher-Yates) and keep the first `limit`
+    const allQuestions = await this.prisma.question.findMany({
       where: whereClause,
       select: { id: true }
     });
 
-    return questions;
+    const shuffled = [...allQuestions];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    return shuffled.slice(0, limit);
   }
 
   // ==========================================
@@ -2018,34 +1869,34 @@ export default class QuizRepository {
    * Returns array of residency sessions for the logged-in user
    */
   async getResidencySessionsOnlyCanonical(userId: number): Promise<any[]> {
+    const residencyQuestion = residencyQuestionWhere();
     const sessions = await this.prisma.quizSession.findMany({
       where: {
         userId,
-        // Sessions that have questions with universityId and examYear (residency-type)
+        // Sessions built from residency questions (see residencyQuestionWhere)
         sessionQuestions: {
-          some: {
-            question: {
-              universityId: { not: null },
-              examYear: { not: null }
-            }
-          }
+          some: { question: residencyQuestion }
         }
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        percentage: true,
+        createdAt: true,
+        completedAt: true,
+        // One representative residency question for the university and exam year
         sessionQuestions: {
-          include: {
+          where: { question: residencyQuestion },
+          orderBy: { id: 'asc' },
+          take: 1,
+          select: {
             question: {
-              include: {
-                university: {
-                  select: { id: true, name: true }
-                }
+              select: {
+                examYear: true,
+                university: { select: { id: true, name: true } }
               }
             }
-          }
-        },
-        quizAttempts: {
-          select: {
-            isCorrect: true
           }
         }
       },
@@ -2056,15 +1907,9 @@ export default class QuizRepository {
 
     // Transform to canonical format
     return sessions.map(session => {
-      // Get the first question's university and examYear as representative
       const firstQuestion = session.sessionQuestions[0]?.question;
       const university = firstQuestion?.university;
       const examYear = firstQuestion?.examYear;
-
-      // Calculate score
-      const totalAttempts = session.quizAttempts.length;
-      const correctAttempts = session.quizAttempts.filter(a => a.isCorrect === true).length;
-      const score = totalAttempts > 0 ? Math.round((correctAttempts / totalAttempts) * 100) : 0;
 
       return {
         id: session.id,
@@ -2072,8 +1917,9 @@ export default class QuizRepository {
         status: session.status,
         examYear: examYear || null,
         university: university ? { id: university.id, name: university.name } : null,
-        parts: ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"], // Default parts
-        score: session.status === 'COMPLETED' ? score : null,
+        parts: RESIDENCY_PARTS, // Default parts
+        // The stored percentage counts every answer type and partial credit
+        score: session.status === 'COMPLETED' ? Math.round(session.percentage) : null,
         createdAt: session.createdAt.toISOString(),
         completedAt: session.completedAt?.toISOString() || null
       };
@@ -2081,34 +1927,37 @@ export default class QuizRepository {
   }
 
   /**
-   * Get questions for residency session by universityId and examYear
+   * Get residency questions for a session by universityId and examYear.
+   * Parts only filter when some are given; questions without a part are
+   * included otherwise. At most MAX_SESSION_QUESTIONS are returned.
    */
   async getQuestionsForResidencySession(
     universityId: number,
     examYear: number,
-    parts: string[]
+    parts?: string[]
   ): Promise<Array<{ id: number }>> {
+    assertId(universityId, 'universityId');
+    assertId(examYear, 'examYear');
     const questions = await this.prisma.question.findMany({
       where: {
-        universityId,
-        examYear
+        AND: [residencyQuestionWhere(), { universityId, examYear }]
       },
-      select: { id: true, metadata: true }
+      select: { id: true, metadata: true },
+      orderBy: { id: 'asc' }
     });
 
-    // Filter locally by parsing metadata if parts are provided
-    if (parts && parts.length > 0) {
-      return questions.filter(q => {
+    const selected = parts && parts.length > 0
+      ? questions.filter(q => {
         if (!q.metadata) return false;
         try {
           const meta = JSON.parse(q.metadata);
-          return meta.part && parts.includes(meta.part);
+          return typeof meta.part === 'string' && parts.includes(meta.part);
         } catch {
           return false;
         }
-      }).map(q => ({ id: q.id }));
-    }
+      })
+      : questions;
 
-    return questions.map(q => ({ id: q.id }));
+    return selected.slice(0, MAX_SESSION_QUESTIONS).map(q => ({ id: q.id }));
   }
 }

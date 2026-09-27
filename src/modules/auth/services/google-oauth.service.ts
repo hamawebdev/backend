@@ -3,8 +3,28 @@ import { User, AuthProvider, UserRole, YearLevel } from "@prisma/client";
 import IUserRepository from "../../users/interfaces/IUserRepository";
 import IRefreshTokenRepository from "../interfaces/IRefreshTokenRepository";
 import JwtUtils from "../../../core/utils/jwt.utils";
-import { TAuthToken, TJwtPayload } from "../../../types/types";
-import { InternalServerError } from "../../../core/errors/AppError";
+import { TAuthToken } from "../../../types/types";
+import { buildJwtPayload } from "../jwt-payload.builder";
+import { AppError, InternalServerError } from "../../../core/errors/AppError";
+
+/**
+ * A Google sign-in refused for a reason the user can act on. `code` is sent to
+ * the web login page as ?reason=<code>.
+ */
+export class GoogleSignInRefusedError extends AppError {
+  constructor(
+    code: "email_missing" | "email_unverified" | "account_exists" | "account_deactivated",
+    message: string
+  ) {
+    super(message, 403, undefined, code);
+    this.name = "GoogleSignInRefusedError";
+  }
+}
+
+// passport-google-oauth20 copies email_verified from Google's userinfo (a boolean)
+function isVerifiedFlag(value: unknown): boolean {
+  return value === true || value === "true";
+}
 
 export interface GoogleProfile {
   id: string;
@@ -13,7 +33,7 @@ export interface GoogleProfile {
     familyName?: string;
     givenName?: string;
   };
-  emails: Array<{ value: string; verified?: boolean }>;
+  emails: Array<{ value: string; verified?: boolean | string }>;
   photos: Array<{ value: string }>;
 }
 
@@ -28,16 +48,18 @@ export class GoogleOAuthService {
   /**
    * Handle Google OAuth authentication
    * - Find existing user by googleId
-   * - If not found, find by email and link accounts
-   * - If no user exists, create new user
+   * - If not found and Google reports the email verified: link to an existing
+   *   account with that email only when that account's email is verified too,
+   *   otherwise create a new user
    */
   async authenticate(profile: GoogleProfile): Promise<{ user: User; tokens: TAuthToken; isNewUser: boolean }> {
     try {
-      const email = profile.emails?.[0]?.value;
+      const email = profile.emails?.[0]?.value?.trim().toLowerCase();
+      const googleEmailVerified = isVerifiedFlag(profile.emails?.[0]?.verified);
       const avatarUrl = profile.photos?.[0]?.value;
-      
+
       if (!email) {
-        throw new InternalServerError("Email not provided by Google");
+        throw new GoogleSignInRefusedError("email_missing", "Google did not provide an email address.");
       }
 
       // Try to find user by googleId first
@@ -45,16 +67,39 @@ export class GoogleOAuthService {
       let isNewUser = false;
 
       if (user) {
+        if (!user.isActive) {
+          throw new GoogleSignInRefusedError("account_deactivated", "Account is deactivated. Please contact support.");
+        }
         // Existing OAuth user - update avatar if changed
         if (avatarUrl && avatarUrl !== user.avatarUrl) {
           user = await this.userRepository.updateUser(user.id, { avatarUrl });
         }
       } else {
-        // Try to find user by email for account linking
+        // An email Google has not verified proves nothing about who owns it:
+        // never create or link an account from it
+        if (!googleEmailVerified) {
+          throw new GoogleSignInRefusedError(
+            "email_unverified",
+            "Your Google account's email address is not verified. Verify it with Google and try again."
+          );
+        }
+
         const existingUser = await this.userRepository.findByEmail(email);
-        
+
         if (existingUser) {
-          // Link Google account to existing user
+          // Registration does not prove ownership of the email, so an unverified
+          // account may have been created by someone else (pre-hijack). Only link
+          // when the existing account's email is verified; otherwise the owner
+          // must sign in with their password.
+          if (!existingUser.emailVerified) {
+            throw new GoogleSignInRefusedError(
+              "account_exists",
+              "An account with this email already exists. Log in with your email and password."
+            );
+          }
+          if (!existingUser.isActive) {
+            throw new GoogleSignInRefusedError("account_deactivated", "Account is deactivated. Please contact support.");
+          }
           user = await this.linkGoogleAccount(existingUser.id, profile.id, avatarUrl);
         } else {
           // Create new user
@@ -65,7 +110,7 @@ export class GoogleOAuthService {
 
       // Check if user is active
       if (!user.isActive) {
-        throw new InternalServerError("Account is deactivated. Please contact support.");
+        throw new GoogleSignInRefusedError("account_deactivated", "Account is deactivated. Please contact support.");
       }
 
       // Update last login
@@ -76,7 +121,8 @@ export class GoogleOAuthService {
 
       return { user, tokens, isNewUser };
     } catch (error) {
-      if (error instanceof InternalServerError) throw error;
+      if (error instanceof GoogleSignInRefusedError || error instanceof InternalServerError) throw error;
+      console.error("Google authentication error:", (error as Error)?.message || error);
       throw new InternalServerError("Failed to authenticate with Google");
     }
   }
@@ -146,7 +192,18 @@ export class GoogleOAuthService {
    * Generate JWT tokens for user
    */
   private async generateTokens(user: User): Promise<TAuthToken> {
-    const jwtPayload = await this.buildJwtPayload(user);
+    // Single device: a new sign-in ends the access tokens of any other session
+    // (refreshTokenRepository.create below also drops their refresh tokens)
+    const tokenVersion = await this.userRepository.revokeAccessTokens(user.id);
+
+    // Same payload rules as password login and refresh: currentYear comes from the
+    // subscriptions (not the editable profile field) and only ACTIVE, non-expired
+    // subscriptions count. The new token carries the tokenVersion set above.
+    const userWithSubscriptions = await this.userRepository.findByIdWithSubscriptions(user.id);
+    const jwtPayload = await buildJwtPayload(
+      { ...(userWithSubscriptions || user), tokenVersion } as any,
+      () => this.userRepository.getAllStudyPackIds()
+    );
     const accessToken = this.jwt.generateAccessToken(jwtPayload);
     const refreshToken = this.jwt.generateRefreshToken(user.id, user.email);
 
@@ -156,75 +213,5 @@ export class GoogleOAuthService {
     await this.refreshTokenRepository.create(user.id, refreshToken, expiresAt);
 
     return { accessToken, refreshToken };
-  }
-
-  /**
-   * Build JWT payload from user
-   */
-  private async buildJwtPayload(user: User): Promise<TJwtPayload> {
-    // Get user with subscriptions - cast to any to access subscriptions property
-    const userWithSubscriptions = await this.userRepository.findByIdWithSubscriptions(user.id) as any;
-    
-    const subscriptions = (userWithSubscriptions?.subscriptions || []).map((sub: any) => ({
-      id: sub.id,
-      study_pack_id: sub.studyPackId,
-      pack_name: sub.studyPack?.name || "",
-      pack_type: sub.studyPack?.type || "",
-      year_number: sub.studyPack?.yearNumber || undefined,
-      end_date: sub.endDate.toISOString(),
-      days_remaining: Math.max(0, Math.ceil((new Date(sub.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))),
-      accessible_year_levels: this.getAccessibleYearLevels(sub.studyPack?.type, sub.studyPack?.yearNumber),
-    }));
-
-    // Filter active subscriptions
-    const now = new Date();
-    const activeSubscriptions = subscriptions.filter((sub: any) => new Date(sub.end_date) >= now);
-
-    // Admin and Employee users don't need subscriptions
-    const isAdminOrEmployee = user.role === UserRole.ADMIN || user.role === UserRole.EMPLOYEE;
-    const hasActiveSubscription = isAdminOrEmployee || activeSubscriptions.length > 0;
-
-    return {
-      user_data: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-        universityId: user.universityId || undefined,
-        specialtyId: user.specialtyId || undefined,
-        currentYear: user.currentYear || YearLevel.ONE,
-        emailVerified: user.emailVerified,
-        isActive: user.isActive,
-      },
-      subscriptions,
-      payment_status: hasActiveSubscription ? "active" : "expired",
-      has_active_subscription: hasActiveSubscription,
-      accessible_study_packs: activeSubscriptions.map((sub: any) => sub.study_pack_id),
-    };
-  }
-
-  /**
-   * Get accessible year levels based on subscription type
-   */
-  private getAccessibleYearLevels(packType?: string, yearNumber?: string | null): YearLevel[] {
-    if (packType === "RESIDENCY") {
-      return [YearLevel.ONE, YearLevel.TWO, YearLevel.THREE, YearLevel.FOUR, YearLevel.FIVE, YearLevel.SIX, YearLevel.SEVEN];
-    }
-    
-    if (yearNumber) {
-      const yearMap: Record<string, YearLevel> = {
-        "1": YearLevel.ONE,
-        "2": YearLevel.TWO,
-        "3": YearLevel.THREE,
-        "4": YearLevel.FOUR,
-        "5": YearLevel.FIVE,
-        "6": YearLevel.SIX,
-        "7": YearLevel.SEVEN,
-      };
-      const yearLevel = yearMap[yearNumber];
-      return yearLevel ? [yearLevel] : [];
-    }
-    
-    return [];
   }
 }

@@ -154,18 +154,41 @@ export class CodeRedemptionService {
 
       // Start transaction for redemption
       const result = await this.prisma.$transaction(async (tx: TransactionClient) => {
-        // Create subscriptions for each study pack
-        const subscriptions = [];
-        const startDate = new Date();
-        const endDate = new Date();
-
-        // Calculate endDate based on durationType
-        const durationType = validation.code!.durationType || 'MONTHS';
-        if (durationType === 'DAYS' && validation.code!.durationDays) {
-          endDate.setDate(endDate.getDate() + validation.code!.durationDays);
-        } else {
-          endDate.setMonth(endDate.getMonth() + validation.code!.durationMonths);
+        // Claim one use of the code atomically. The row update is serialized by
+        // Postgres, so concurrent redeems cannot push currentUses past maxUses.
+        const claimed = await tx.activationCode.updateMany({
+          where: {
+            id: validation.code!.id,
+            isActive: true,
+            expiresAt: { gt: new Date() },
+            currentUses: { lt: validation.code!.maxUses }
+          },
+          data: {
+            currentUses: {
+              increment: 1
+            }
+          }
+        });
+        if (claimed.count === 0) {
+          throw new AppError("Activation code has reached its usage limit", 400);
         }
+
+        // Grant each study pack on the code: create a subscription, or extend the
+        // user's current one for that pack so a renewal never wastes the code
+        const subscriptions = [];
+        const now = new Date();
+
+        // Add the code's duration to a start date
+        const durationType = validation.code!.durationType || 'MONTHS';
+        const addCodeDuration = (from: Date): Date => {
+          const end = new Date(from);
+          if (durationType === 'DAYS' && validation.code!.durationDays) {
+            end.setDate(end.getDate() + validation.code!.durationDays);
+          } else {
+            end.setMonth(end.getMonth() + validation.code!.durationMonths);
+          }
+          return end;
+        };
 
         for (const studyPack of validation.studyPacks!) {
           // Check if user already has an active subscription to this study pack
@@ -175,19 +198,32 @@ export class CodeRedemptionService {
               studyPackId: studyPack.id,
               status: 'ACTIVE',
               endDate: {
-                gte: new Date()
+                gt: now
               }
-            }
+            },
+            orderBy: { endDate: 'desc' }
           });
 
-          if (!existingSubscription) {
+          if (existingSubscription) {
+            // Extend from the current (future) end date, so the remaining days are kept
+            const subscription = await tx.subscription.update({
+              where: { id: existingSubscription.id },
+              data: {
+                endDate: addCodeDuration(existingSubscription.endDate)
+              },
+              include: {
+                studyPack: true
+              }
+            });
+            subscriptions.push(subscription);
+          } else {
             const subscription = await tx.subscription.create({
               data: {
                 userId: userId,
                 studyPackId: studyPack.id,
                 status: 'ACTIVE',
-                startDate: startDate,
-                endDate: endDate,
+                startDate: now,
+                endDate: addCodeDuration(now),
                 amountPaid: 0, // Free through activation code
                 paymentMethod: 'ACTIVATION_CODE',
                 paymentReference: validation.code!.code
@@ -200,22 +236,13 @@ export class CodeRedemptionService {
           }
         }
 
-        // Create redemption record
+        // Create redemption record. (activationCodeId, userId) is unique, so a
+        // concurrent second redeem by the same user fails here and rolls back.
         const redemption = await tx.codeRedemption.create({
           data: {
             activationCodeId: validation.code!.id,
             userId: userId,
             subscriptionId: subscriptions.length > 0 ? subscriptions[0].id : null
-          }
-        });
-
-        // Update activation code usage count
-        await tx.activationCode.update({
-          where: { id: validation.code!.id },
-          data: {
-            currentUses: {
-              increment: 1
-            }
           }
         });
 
@@ -236,9 +263,12 @@ export class CodeRedemptionService {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof AppError) {
         throw error;
+      }
+      if (error?.code === 'P2002') {
+        throw new AppError("You have already redeemed this activation code", 400);
       }
       console.error("Error redeeming activation code:", error);
       throw new AppError("Failed to redeem activation code", 500);

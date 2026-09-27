@@ -4,8 +4,10 @@ import StudentRepository from "./student.repository";
 import { StudentProgressOverview } from "../../types/quiz.types";
 import { TJwtPayload } from "../../types/types";
 import { StudentSessionResultsFilters, StudentSessionResultsResponse, StudentQuestionResult } from "../../types/quiz.types";
-import { NotFoundError } from "../../core/errors/AppError";
+import { NotFoundError, ForbiddenError, BadRequestError } from "../../core/errors/AppError";
 import PrismaService from "../../config/db";
+import { AccessControlService } from "../../services/access-control.service";
+import { isAccessGrantingSubscription } from "../auth/jwt-payload.builder";
 
 @injectable()
 export default class StudentService {
@@ -16,6 +18,59 @@ export default class StudentService {
 
   private get prisma() {
     return this.prismaService.getClient();
+  }
+
+  /**
+   * Throw unless the question exists and belongs to content the user can access.
+   * Notes, labels and reports return question content, so they must not be
+   * attachable to questions outside the user's subscriptions.
+   */
+  private async assertQuestionAccessible(user: TJwtPayload, questionId: number): Promise<void> {
+    const location = await this.studentRepository.getQuestionLocation(questionId);
+    if (!location) {
+      throw new NotFoundError('Question', String(questionId));
+    }
+    if (!new AccessControlService().canAccessQuestion(user, location)) {
+      throw new ForbiddenError('You do not have access to this question');
+    }
+  }
+
+  /**
+   * Throw 403 when the course / module / unite belongs to a study pack the user
+   * cannot access (independent modules: any active subscription). Returns false
+   * when it does not exist, so callers keep returning an empty list for it.
+   */
+  private async assertPackContentAccessible(
+    user: TJwtPayload,
+    kind: 'Course' | 'Module' | 'Unite',
+    id: number
+  ): Promise<boolean> {
+    const location = kind === 'Course'
+      ? await this.studentRepository.getCourseStudyPack(id)
+      : kind === 'Module'
+        ? await this.studentRepository.getModuleStudyPack(id)
+        : await this.studentRepository.getUniteStudyPack(id);
+    if (!location) {
+      return false;
+    }
+    if (!new AccessControlService().canAccessPackContent(user, location.studyPackId)) {
+      throw new ForbiddenError(`You do not have access to this ${kind.toLowerCase()}`);
+    }
+    return true;
+  }
+
+  /**
+   * Throw unless every label id belongs to the user.
+   */
+  private async assertLabelsOwned(user: TJwtPayload, labelIds?: number[]): Promise<void> {
+    if (!labelIds || labelIds.length === 0) {
+      return;
+    }
+    const uniqueIds = Array.from(new Set(labelIds));
+    const owned = await this.studentRepository.countLabelsOwnedByUser(uniqueIds, user.user_data.id);
+    if (owned !== uniqueIds.length) {
+      throw new NotFoundError('Label');
+    }
   }
 
   async getProgressOverview(user: TJwtPayload): Promise<StudentProgressOverview> {
@@ -529,10 +584,10 @@ export default class StudentService {
       throw new NotFoundError('Study pack', packId.toString());
     }
 
-    // Check access (403 if no access)
-    const hasAccess = user.accessible_study_packs?.includes(packId) || false;
-    if (!hasAccess && !user.has_active_subscription) {
-      throw new Error('No access to this study pack');
+    // Check access (403 if no access): the pack must be one of the user's packs
+    // (residency, admin and employee access cover every pack)
+    if (!new AccessControlService().canAccessPackContent(user, packId)) {
+      throw new ForbiddenError('No access to this study pack');
     }
 
     // Flatten unites -> modules for canonical spec
@@ -572,6 +627,8 @@ export default class StudentService {
     limit: number;
     totalPages: number;
   }> {
+    await this.assertPackContentAccessible(user, 'Course', courseId);
+
     const { page, limit, type } = options;
     const { resources, total } = await this.studentRepository.getCourseResourcesPaginated(courseId, page, limit, type);
 
@@ -604,6 +661,12 @@ export default class StudentService {
   async getCoursesByModule(user: TJwtPayload, options: { moduleId?: number; uniteId?: number }): Promise<{
     courses: any[];
   }> {
+    if (options.moduleId) {
+      await this.assertPackContentAccessible(user, 'Module', options.moduleId);
+    } else if (options.uniteId) {
+      await this.assertPackContentAccessible(user, 'Unite', options.uniteId);
+    }
+
     const courses = await this.studentRepository.getCoursesByModuleOrUnite(options.moduleId, options.uniteId);
 
     return {
@@ -625,6 +688,8 @@ export default class StudentService {
    * Get all books for a module
    */
   async getModuleBooksCanonical(user: TJwtPayload, moduleId: number) {
+    await this.assertPackContentAccessible(user, 'Module', moduleId);
+
     const books = await this.prisma.moduleBook.findMany({
       where: { moduleId },
       orderBy: { createdAt: 'desc' }
@@ -758,15 +823,16 @@ export default class StudentService {
     }
 
     if (subscription.userId !== userId) {
-      throw new Error('You do not have permission to cancel this subscription');
+      throw new ForbiddenError('You do not have permission to cancel this subscription');
     }
 
     if (subscription.status !== 'ACTIVE') {
-      throw new Error('Subscription is not active and cannot be cancelled');
+      throw new BadRequestError('Subscription is not active and cannot be cancelled');
     }
 
-    // Cancel the subscription - access ends at current endDate
-    const cancellationDate = subscription.endDate;
+    // Cancel the subscription. Only ACTIVE subscriptions grant access, so access
+    // ends now (on every path: login, refresh and each request).
+    const cancellationDate = new Date();
 
     await this.prisma.subscription.update({
       where: { id: subscriptionId },
@@ -882,12 +948,9 @@ export default class StudentService {
     data: any;
     message: string;
   }> {
-    // Validate that questionId exists if provided
+    // Validate that questionId exists and is within the user's subscriptions
     if (questionId) {
-      const questionExists = await this.studentRepository.questionExists(questionId);
-      if (!questionExists) {
-        throw new Error(`Question with ID ${questionId} not found`);
-      }
+      await this.assertQuestionAccessible(user, questionId);
     }
 
     // Validate that quizId exists if provided
@@ -1014,6 +1077,29 @@ export default class StudentService {
       options
     );
 
+    const accessControl = new AccessControlService();
+    // Only return the answer key for questions the user can currently access
+    const withAnswerKeyIfAccessible = (question: any) => {
+      if (!question) {
+        return question;
+      }
+      const canAccess = accessControl.canAccessQuestion(user, {
+        hasCourse: question.courseId !== null && question.courseId !== undefined,
+        studyPackId: question.course?.module?.unite?.studyPackId ?? null
+      });
+      if (canAccess) {
+        return question;
+      }
+      const { explanation, questionExplanationImages, ...rest } = question;
+      return {
+        ...rest,
+        questionAnswers: (question.questionAnswers || []).map((answer: any) => {
+          const { isCorrect, explanation: answerExplanation, explanationImages, ...answerRest } = answer;
+          return answerRest;
+        })
+      };
+    };
+
     return notes.map(note => ({
       id: note.id,
       noteText: note.noteText,
@@ -1023,7 +1109,7 @@ export default class StudentService {
         id: nl.label.id,
         name: nl.label.name
       })) || [],
-      question: note.question,
+      question: withAnswerKeyIfAccessible(note.question),
       createdAt: note.createdAt,
       updatedAt: note.updatedAt
     }));
@@ -1070,12 +1156,9 @@ export default class StudentService {
     quizId?: number,
     labelIds?: number[]
   ): Promise<any> {
-    // Validate that questionId exists if provided
+    // Validate that questionId exists and is within the user's subscriptions
     if (questionId) {
-      const questionExists = await this.studentRepository.questionExists(questionId);
-      if (!questionExists) {
-        throw new Error(`Question with ID ${questionId} not found`);
-      }
+      await this.assertQuestionAccessible(user, questionId);
     }
 
     // Validate that quizId exists if provided
@@ -1085,6 +1168,8 @@ export default class StudentService {
         throw new Error(`Quiz with ID ${quizId} not found`);
       }
     }
+
+    await this.assertLabelsOwned(user, labelIds);
 
     const note = await this.studentRepository.createStudentNoteCanonical(
       user.user_data.id,
@@ -1115,6 +1200,7 @@ export default class StudentService {
     noteText?: string,
     labelIds?: number[]
   ): Promise<any> {
+    await this.assertLabelsOwned(user, labelIds);
     try {
       const note = await this.studentRepository.updateStudentNoteCanonical(
         noteId,
@@ -1438,11 +1524,8 @@ export default class StudentService {
 
   // Canonical: POST /students/questions/:questionId/labels/:labelId
   async addQuestionToLabelCanonical(user: TJwtPayload, questionId: number, labelId: number): Promise<void> {
-    // Validate question exists
-    const questionExists = await this.studentRepository.questionExists(questionId);
-    if (!questionExists) {
-      throw new Error(`Question with ID ${questionId} not found`);
-    }
+    // Validate question exists and is within the user's subscriptions
+    await this.assertQuestionAccessible(user, questionId);
 
     // Validate label exists and belongs to user
     const labelExists = await this.studentRepository.labelExistsForUser(labelId, user.user_data.id);
@@ -1543,11 +1626,8 @@ export default class StudentService {
     message: string;
   }> {
     try {
-      // Validate that questionId exists
-      const questionExists = await this.studentRepository.questionExists(questionId);
-      if (!questionExists) {
-        throw new Error(`Question with ID ${questionId} not found`);
-      }
+      // Validate that questionId exists and is within the user's subscriptions
+      await this.assertQuestionAccessible(user, questionId);
 
       // Validate that labelId exists and belongs to user
       const labelExists = await this.studentRepository.labelExistsForUser(labelId, user.user_data.id);
@@ -1843,11 +1923,8 @@ export default class StudentService {
     description?: string
   ): Promise<any> {
     try {
-      // Validate that question exists
-      const questionExists = await this.studentRepository.questionExists(questionId);
-      if (!questionExists) {
-        throw new Error(`Question with ID ${questionId} not found`);
-      }
+      // Validate that question exists and is within the user's subscriptions
+      await this.assertQuestionAccessible(user, questionId);
 
       const report = await this.studentRepository.createQuestionReport(
         user.user_data.id,
@@ -1879,11 +1956,8 @@ export default class StudentService {
     description?: string
   ): Promise<any> {
     try {
-      // Validate that question exists
-      const questionExists = await this.studentRepository.questionExists(questionId);
-      if (!questionExists) {
-        throw new Error(`Question with ID ${questionId} not found`);
-      }
+      // Validate that question exists and is within the user's subscriptions
+      await this.assertQuestionAccessible(user, questionId);
 
       const report = await this.studentRepository.createQuestionReport(
         user.user_data.id,
@@ -2008,9 +2082,9 @@ export default class StudentService {
         };
       }
 
-      // Filter subscriptions based on endDate (source of truth)
+      // Only ACTIVE subscriptions with a future endDate grant access
       const now = new Date();
-      const activeSubscriptions = subscriptions.filter(sub => new Date(sub.endDate) > now);
+      const activeSubscriptions = subscriptions.filter(sub => isAccessGrantingSubscription(sub, now));
 
       if (activeSubscriptions.length === 0) {
         return {
@@ -2071,10 +2145,10 @@ export default class StudentService {
         };
       }
 
-      // IMPROVED: Filter subscriptions based on endDate only (ignore status field)
-      // This ensures we use endDate as the single source of truth
-      const activeSubscriptions = subscriptions.filter(sub => new Date(sub.endDate) > now);
-      const expiredSubscriptions = subscriptions.filter(sub => new Date(sub.endDate) <= now);
+      // Only ACTIVE subscriptions with a future endDate grant access
+      // (a CANCELLED or EXPIRED status ends access even before endDate)
+      const activeSubscriptions = subscriptions.filter(sub => isAccessGrantingSubscription(sub, now));
+      const expiredSubscriptions = subscriptions.filter(sub => !isAccessGrantingSubscription(sub, now));
 
       if (activeSubscriptions.length === 0) {
         return {
@@ -2191,7 +2265,7 @@ export default class StudentService {
     const subscriptionValidation = await this.validateUserSubscriptionsImproved(user.user_data.id);
 
     if (!subscriptionValidation.hasActiveSubscription) {
-      throw new Error(`Access denied: ${subscriptionValidation.reason}`);
+      throw new ForbiddenError(`Access denied: ${subscriptionValidation.reason}`);
     }
 
     // Determine accessible study packs based on real-time subscription validation
@@ -2222,7 +2296,7 @@ export default class StudentService {
       );
 
       if (inaccessibleLevels.length > 0) {
-        throw new Error(`Access denied to year levels: ${inaccessibleLevels.join(', ')}. Your active subscriptions provide access to: ${accessibleYearLevels.join(', ')}`);
+        throw new ForbiddenError(`Access denied to year levels: ${inaccessibleLevels.join(', ')}. Your active subscriptions provide access to: ${accessibleYearLevels.join(', ')}`);
       }
     } else if (!hasResidencyAccess) {
       // For non-residency users, default to their accessible year levels

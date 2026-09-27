@@ -162,7 +162,8 @@ export const canonicalQuestionCountSchema = z.object({
   courseIds: z.array(z.number().int().positive()).min(1, "At least one courseId is required"),
   questionTypes: z.array(z.enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "QROC"])).optional(),
   years: z.array(z.number().int().positive()).optional(),
-  rotations: z.array(z.enum(["R1", "R2", "R3", "R4"])).optional(),
+  // Rotations are the questions' year levels: the values GET /quizzes/session-filters returns
+  rotations: z.array(z.nativeEnum(YearLevel)).optional(),
   universityIds: z.array(z.number().int().positive()).optional(),
   questionSourceIds: z.array(z.number().int().positive()).optional(),
   repetitionCountMin: z.number().int().min(0, "Repetition count must be non-negative").optional(),
@@ -177,7 +178,8 @@ export const canonicalCreateSessionSchema = z.object({
   questionCount: z.number().int().min(1, "Question count must be at least 1").max(MAX_SESSION_QUESTIONS, `Question count cannot exceed ${MAX_SESSION_QUESTIONS}`).optional(),
   questionTypes: z.array(z.enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "QROC"])).optional(),
   years: z.array(z.number().int().positive()).optional(),
-  rotations: z.array(z.enum(["R1", "R2", "R3", "R4"])).optional(),
+  // Rotations are the questions' year levels: the values GET /quizzes/session-filters returns
+  rotations: z.array(z.nativeEnum(YearLevel)).optional(),
   universityIds: z.array(z.number().int().positive()).optional(),
   questionSourceIds: z.array(z.number().int().positive()).optional(),
   repetitionCountMin: z.number().int().min(0, "Repetition count must be non-negative").optional(),
@@ -205,6 +207,10 @@ export const submitAnswersSchema = z.object({
     message: "Must provide exactly one of: selectedAnswerId (single choice), selectedAnswerIds (multiple choice), or textAnswer"
   })).min(1, "At least one answer must be provided")
     .max(MAX_SESSION_QUESTIONS, `Cannot submit more than ${MAX_SESSION_QUESTIONS} answers at once`)
+    .refine(
+      answers => new Set(answers.map(answer => answer.questionId)).size === answers.length,
+      "Each question can only be answered once per request"
+    )
 });
 
 export const updateAnswerSchema = z.object({
@@ -435,14 +441,57 @@ export function sanitizeString(str: string): string {
     .slice(0, 1000); // Limit length
 }
 
+/** Longest markdown text (explanations) accepted; schemas reject longer input with a 400 */
+export const MAX_MARKDOWN_LENGTH = 20000;
+
 export function sanitizeMarkdown(str: string): string {
   if (typeof str !== 'string') return '';
 
   return str
     .trim()
-    .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
-    .slice(0, 20000); // Higher limit for markdown content
+    // Remove control characters, keeping tab, line feed and carriage return (markdown needs them)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .slice(0, MAX_MARKDOWN_LENGTH); // Schemas enforce the limit first; this is a backstop
 }
+
+/** Optional markdown field: over-long input is rejected, then sanitized */
+export const markdownSchema = () => z.string()
+  .max(MAX_MARKDOWN_LENGTH, `Text cannot exceed ${MAX_MARKDOWN_LENGTH} characters`)
+  .optional()
+  .transform(val => val ? sanitizeMarkdown(val) : undefined);
+
+/** True for absolute http:// or https:// URLs only (no javascript:, data:, etc.) */
+export function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True for http(s) URLs and for site-relative paths such as the
+ * /api/v1/media/... URLs the upload routes return (not protocol-relative //host)
+ */
+export function isHttpUrlOrPath(value: string): boolean {
+  if (/^\/(?![\/\\])/.test(value)) {
+    return !/[\s\\]/.test(value);
+  }
+  return isHttpUrl(value);
+}
+
+/** A link rendered to users: must be an http(s) URL */
+export const httpUrlSchema = (message = 'Only http(s) URLs are allowed') => z.string()
+  .trim()
+  .max(2048, 'URL is too long')
+  .refine(isHttpUrl, message);
+
+/** A media link rendered to users: an http(s) URL or a site-relative /path */
+export const httpUrlOrPathSchema = (message = 'Only http(s) URLs or /paths are allowed') => z.string()
+  .trim()
+  .max(2048, 'URL is too long')
+  .refine(isHttpUrlOrPath, message);
 
 
 
@@ -836,7 +885,8 @@ export const resourceSchema = z.object({
     .positive("Course ID must be positive"),
 
   filePath: z.string().optional(),
-  externalUrl: z.string().url("Invalid external URL").optional(),
+  // Rendered as a link to admins and students: http(s) only (a javascript: URL would run in their session)
+  externalUrl: httpUrlSchema("External URL must be an http(s) URL").optional(),
   youtubeVideoId: z.string().regex(/^[a-zA-Z0-9_-]{11}$/, "Invalid YouTube video ID").optional(),
 
   isPaid: z.boolean().default(false),
@@ -1025,7 +1075,7 @@ export const quizSessionFiltersSchema = z.object({
   quizYears: z.array(z.number().int().min(1900).max(new Date().getFullYear() + 10)).optional()
 });
 
-// Retake Session Validation Schema
+// Retake Session Validation Schema (POST /quiz-sessions/retake)
 export const createRetakeSessionSchema = z.object({
   originalSessionId: z.number()
     .int("Original session ID must be an integer")
@@ -1037,10 +1087,20 @@ export const createRetakeSessionSchema = z.object({
 
   title: z.string()
     .trim()
-    .min(3, "Title must be at least 3 characters")
-    .max(100, "Title must not exceed 100 characters")
-    .regex(/^[a-zA-Z0-9\s\-_.,!?]+$/, "Title contains invalid characters")
+    .min(1, "Title cannot be empty")
+    .max(200, "Title must not exceed 200 characters")
     .optional()
+});
+
+// POST /exams/exam-sessions/from-modules
+export const examSessionFromModulesSchema = z.object({
+  moduleIds: z.array(z.number().int().positive("Invalid module ID"))
+    .min(1, "At least one module must be selected")
+    .max(20, "Cannot select more than 20 modules"),
+  year: z.coerce.number()
+    .int("Year must be an integer")
+    .min(1900, "Year must be 1900 or later")
+    .max(2100, "Year cannot exceed 2100")
 });
 
 // Exam Question Ordering Schema

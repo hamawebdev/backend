@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { randomInt } from "crypto";
 import { inject, injectable } from "tsyringe";
 import { AppError, NotFoundError, BadRequestError } from "../../../core/errors/AppError";
 import { IActivationCodeService } from "../interfaces/IActivationCodeService";
@@ -20,12 +21,12 @@ interface CreateActivationCodeData {
   isActive?: boolean;
 }
 
-// Helper to generate random activation code
+// Helper to generate random activation code (CSPRNG: codes grant paid access)
 function generateActivationCode(length: number = 12): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
   for (let i = 0; i < length; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(randomInt(chars.length));
   }
   // Add dashes for readability (e.g., XXXX-XXXX-XXXX)
   return code.match(/.{1,4}/g)?.join('-') || code;
@@ -33,10 +34,15 @@ function generateActivationCode(length: number = 12): string {
 
 interface UpdateActivationCodeData {
   code?: string;
-  studyPackId?: number;
-  expiryDate?: string;
+  description?: string | null;
+  studyPackId?: number;  // Legacy single study pack (replaces the code's packs)
+  studyPackIds?: number[];  // Replaces the code's packs
+  expiryDate?: string;  // Legacy field
+  expiresAt?: string;
   maxUses?: number;
+  durationType?: 'MONTHS' | 'DAYS';
   durationMonths?: number;
+  durationDays?: number;
   isActive?: boolean;
 }
 
@@ -306,13 +312,19 @@ export class ActivationCodeService implements IActivationCodeService {
       }
     }
 
-    // If studyPackId is being updated, verify it exists
-    if (data.studyPackId) {
-      const studyPack = await this.prisma.studyPack.findUnique({
-        where: { id: data.studyPackId }
+    // New study packs (studyPackIds, or the legacy single studyPackId) replace the current ones
+    const studyPackIds = data.studyPackIds && data.studyPackIds.length > 0
+      ? Array.from(new Set(data.studyPackIds))
+      : (data.studyPackId ? [data.studyPackId] : undefined);
+    if (studyPackIds) {
+      const found = await this.prisma.studyPack.findMany({
+        where: { id: { in: studyPackIds } },
+        select: { id: true }
       });
-      if (!studyPack) {
-        throw new NotFoundError("Study pack not found");
+      if (found.length !== studyPackIds.length) {
+        const foundIds = found.map(pack => pack.id);
+        const missingIds = studyPackIds.filter(packId => !foundIds.includes(packId));
+        throw new NotFoundError(`Study pack(s) not found: ${missingIds.join(', ')}`);
       }
     }
 
@@ -322,50 +334,57 @@ export class ActivationCodeService implements IActivationCodeService {
       updateData.code = data.code;
       updateData.hashedCode = data.code;
     }
-    if (data.expiryDate !== undefined) {
-      updateData.expiresAt = new Date(data.expiryDate);
+    if (data.description !== undefined) {
+      updateData.description = data.description;
+    }
+    const expiryDate = data.expiresAt ?? data.expiryDate;
+    if (expiryDate !== undefined) {
+      updateData.expiresAt = new Date(expiryDate);
     }
     if (data.maxUses !== undefined) {
       updateData.maxUses = data.maxUses;
     }
-    if (data.durationMonths !== undefined) {
-      updateData.durationMonths = data.durationMonths;
+
+    // Duration: same rules as create (DAYS needs durationDays; durationMonths stays >= 1)
+    const durationType = data.durationType ?? (existingCode.durationType as 'MONTHS' | 'DAYS');
+    if (data.durationType !== undefined) {
+      updateData.durationType = data.durationType;
+    }
+    if (durationType === 'DAYS') {
+      const durationDays = data.durationDays ?? existingCode.durationDays;
+      if (!durationDays) {
+        throw new BadRequestError("durationDays is required when durationType is DAYS");
+      }
+      updateData.durationDays = durationDays;
+    } else {
+      if (data.durationMonths !== undefined) {
+        updateData.durationMonths = data.durationMonths;
+      }
+      if (data.durationType === 'MONTHS') {
+        updateData.durationDays = null;
+      }
     }
     if (data.isActive !== undefined) {
       updateData.isActive = data.isActive;
     }
 
-    // Update activation code
-    const updatedCode = await this.prisma.activationCode.update({
-      where: { id },
-      data: updateData,
-      include: {
-        studyPacks: {
-          include: {
-            studyPack: true
-          }
-        },
-        redemptions: true
+    // Update the code and, when given, its study packs together
+    const updatedCode = await this.prisma.$transaction(async (tx) => {
+      await tx.activationCode.update({
+        where: { id },
+        data: updateData
+      });
+
+      if (studyPackIds) {
+        await tx.activationCodeStudyPack.deleteMany({
+          where: { activationCodeId: id }
+        });
+        await tx.activationCodeStudyPack.createMany({
+          data: studyPackIds.map(studyPackId => ({ activationCodeId: id, studyPackId }))
+        });
       }
-    });
 
-    // If studyPackId changed, update the relation
-    if (data.studyPackId) {
-      // Remove existing study pack relations
-      await this.prisma.activationCodeStudyPack.deleteMany({
-        where: { activationCodeId: id }
-      });
-
-      // Create new relation
-      await this.prisma.activationCodeStudyPack.create({
-        data: {
-          activationCodeId: id,
-          studyPackId: data.studyPackId
-        }
-      });
-
-      // Refetch with updated relations
-      const refreshedCode = await this.prisma.activationCode.findUnique({
+      return tx.activationCode.findUnique({
         where: { id },
         include: {
           studyPacks: {
@@ -376,11 +395,9 @@ export class ActivationCodeService implements IActivationCodeService {
           redemptions: true
         }
       });
+    });
 
-      return this.toCanonicalFormatWithUpdatedAt(refreshedCode!);
-    }
-
-    return this.toCanonicalFormatWithUpdatedAt(updatedCode);
+    return this.toCanonicalFormatWithUpdatedAt(updatedCode!);
   }
 
   /**

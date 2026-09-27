@@ -126,3 +126,36 @@ export const authRateLimit = rateLimit({
     });
   }
 });
+
+const forgotPasswordLimitHandler = (req: Request, res: Response) => {
+  res.status(429).json({
+    success: false,
+    error: 'Too many password reset requests',
+    message: 'Too many password reset requests. Please try again later.',
+    retryAfter: '15 minutes'
+  });
+};
+
+/**
+ * Password reset requests always look successful (the response never reveals
+ * whether the email exists), so authRateLimit, which only counts failures,
+ * would never limit them. These limiters count every request: per client IP,
+ * and per target email so one address cannot be flooded from many IPs.
+ */
+export const forgotPasswordIpRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 requests per IP per window (campus networks share one IP)
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: forgotPasswordLimitHandler,
+});
+
+export const forgotPasswordEmailRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 requests per email address per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Runs after validation, so the email is already trimmed and lowercased
+  keyGenerator: (req: Request) => `forgot-password:${String(req.body?.email ?? '').trim().toLowerCase()}`,
+  handler: forgotPasswordLimitHandler,
+});

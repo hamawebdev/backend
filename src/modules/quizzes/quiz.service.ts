@@ -1,6 +1,6 @@
 import { inject, injectable, container } from "tsyringe";
-import { SessionType, PackType, SessionStatus, RetakeType, YearLevel } from "@prisma/client";
-import QuizRepository from "./quiz.repository";
+import { SessionType, PackType, SessionStatus, RetakeType, YearLevel, QuestionType } from "@prisma/client";
+import QuizRepository, { MAX_SESSION_QUESTIONS, PreparedAnswer, SessionStats } from "./quiz.repository";
 import QuestionService from "../questions/question.service";
 import { AccessControlService } from "../../services/access-control.service";
 import {
@@ -38,8 +38,6 @@ import {
 } from "../../core/errors/QuizErrors";
 import { BadRequestError, ForbiddenError } from "../../core/errors/AppError";
 
-const MAX_SESSION_QUESTIONS = 1000;
-
 @injectable()
 export default class QuizService {
   constructor(
@@ -75,7 +73,8 @@ export default class QuizService {
       uniteIds: filters.uniteIds,
       questionTypes: filters.questionTypes,
       examYears: filters.examYears,
-      questionSourceIds: filters.questionSourceIds,
+      // The request schema names this filter quizSourceIds
+      questionSourceIds: filters.questionSourceIds ?? (filters as any).quizSourceIds,
       quizYears: (filters as any).quizYears // preserve optional quizYears if provided
     };
 
@@ -98,17 +97,14 @@ export default class QuizService {
       // Determine session type (default PRACTICE if not provided)
       const sessionType = type ?? SessionType.PRACTICE;
 
-      // Create quiz session with requested type
-      const session = await this.quizRepository.createQuizSession(
+      // Create the quiz session and its questions together
+      const session = await this.quizRepository.createSessionWithQuestionIds(
         user.user_data.id,
         title,
         sessionType,
+        questions.map(q => q.id),
         quizType
       );
-
-      // Add questions to session
-      const questionIds = questions.map(q => q.id);
-      await this.quizRepository.addQuestionsToSession(session.id, questionIds);
 
       return {
         success: true,
@@ -275,8 +271,11 @@ export default class QuizService {
       updatedAt: sq.question.updatedAt
     }));
 
-    // Combine single choice and multiple choice attempts
-    const singleChoiceAnswers: QuizSessionAnswer[] = sessionWithIncludes.quizAttempts.map((attempt: any) => ({
+    // Combine single choice and multiple choice attempts. Rows without an
+    // answer (placeholders written by older versions) are not answers.
+    const singleChoiceAnswers: QuizSessionAnswer[] = sessionWithIncludes.quizAttempts
+      .filter((attempt: any) => attempt.selectedAnswerId !== null || attempt.textAnswer !== null)
+      .map((attempt: any) => ({
       questionId: attempt.questionId,
       selectedAnswerId: attempt.selectedAnswerId || undefined,
       textAnswer: attempt.textAnswer || undefined,
@@ -316,10 +315,7 @@ export default class QuizService {
     user: TJwtPayload
   ): Promise<SubmitAnswerResponse> {
     // Verify session belongs to user
-    const session = await this.quizRepository.getQuizSessionById(
-      sessionId,
-      user.user_data.id
-    );
+    const session = await this.quizRepository.findOwnedSession(sessionId, user.user_data.id);
 
     if (!session) {
       throw new SessionNotFoundError(sessionId);
@@ -329,99 +325,140 @@ export default class QuizService {
       throw new SessionCompletedError(sessionId);
     }
 
-    // Validate answers belong to session questions
-    const sessionQuestionIds = await this.quizRepository.getSessionQuestionIds(sessionId);
-    const invalidQuestions = submitAnswerDto.answers.filter(
-      answer => !sessionQuestionIds.includes(answer.questionId)
-    );
-
-    if (invalidQuestions.length > 0) {
-      throw new QuestionNotInSessionError(
-        invalidQuestions[0].questionId,
-        sessionId
-      );
-    }
-
-    // Validate answers belong to questions
-    for (const answer of submitAnswerDto.answers) {
-      if (answer.selectedAnswerId !== undefined) {
-        // Single choice validation
-        const isValidAnswer = await this.quizRepository.validateAnswerBelongsToQuestion(
-          answer.selectedAnswerId,
-          answer.questionId
-        );
-
-        if (!isValidAnswer) {
-          throw new InvalidAnswerError(answer.selectedAnswerId, answer.questionId);
-        }
-      } else if (answer.selectedAnswerIds !== undefined) {
-        // Multiple choice validation
-        const areValidAnswers = await this.quizRepository.validateAnswersBelongToQuestion(
-          answer.selectedAnswerIds,
-          answer.questionId
-        );
-
-        if (!areValidAnswers) {
-          throw new InvalidAnswerError(answer.selectedAnswerIds[0], answer.questionId);
-        }
-      } else if (answer.textAnswer !== undefined) {
-        // QROC validation - implicit validity for text answers
-        // We can trust that if it has textAnswer, it's an attempt for QROC
-      }
-    }
-
-    // Submit answers and get results - Canonical spec format
-    const results = await this.quizRepository.submitAnswersWithResults(sessionId, submitAnswerDto.answers);
-
-    // Fetch refreshed session to get accurate cumulative stats (after upsert)
-    const refreshedSession = await this.quizRepository.getQuizSessionById(sessionId, user.user_data.id);
-    if (!refreshedSession) {
-      throw new SessionNotFoundError(sessionId);
-    }
-
-    // Cast to any to access included relations
-    const sessionWithIncludes = refreshedSession as any;
-
-    // Count total unique questions in the session
-    const totalQuestions = sessionWithIncludes.sessionQuestions.length;
-
-    // Count attempts from both single and multiple choice tables
-    // Note: getQuizSessionById generally includes quizAttempts (single) and multipleChoiceAttempts
-    // We need to count unique questions answered
-    const singleChoiceAttempts = sessionWithIncludes.quizAttempts || [];
-    const multipleChoiceAttempts = sessionWithIncludes.multipleChoiceAttempts || [];
-
-    // Calculate stats based on DB state
-    const singleCorrect = singleChoiceAttempts.filter((a: any) => a.isCorrect).length;
-    const multipleCorrect = multipleChoiceAttempts.filter((a: any) => a.isCorrect).length;
-
-    const correctAnswersCount = singleCorrect + multipleCorrect;
-    const totalAnsweredCount = singleChoiceAttempts.length + multipleChoiceAttempts.length;
-
-    const incorrectAnswersCount = totalAnsweredCount - correctAnswersCount;
-    const unansweredCount = totalQuestions - totalAnsweredCount;
-
-    // Use the score calculated by the repository (which handles partials)
-    const dbScore = refreshedSession.score; // This is the total points (including partials)
-
-    // Calculate score out of 20
-    const totalScore20 = totalQuestions > 0
-      ? Number(((dbScore / totalQuestions) * 20).toFixed(2))
-      : 0;
-
-    // Percentage score from DB
-    const score = refreshedSession.percentage;
+    // Validate, score and store every answer, then score the session once
+    const { results, stats } = await this.applyAnswers(sessionId, submitAnswerDto.answers);
 
     return {
       message: "Answers submitted successfully",
       results,
-      score,
-      totalScore20,
-      correctAnswersCount,
-      incorrectAnswersCount,
-      unansweredCount,
-      totalQuestions
+      ...this.formatSessionStats(stats)
+    };
+  }
 
+  /**
+   * Validate submitted answers against the session and their questions, score
+   * them and store them. The question's type decides where an answer is
+   * stored: multiple choice needs selectedAnswerIds, single choice a
+   * selectedAnswerId, QROC a textAnswer (a single id for a multiple-choice
+   * question, or a one-element list for a single-choice one, is accepted and
+   * converted). Each question may appear only once per request.
+   */
+  private async applyAnswers(
+    sessionId: number,
+    answers: SubmitAnswerDto['answers']
+  ): Promise<{ results: Array<{ questionId: number; isCorrect: boolean }>; stats: SessionStats }> {
+    const seen = new Set<number>();
+    for (const answer of answers) {
+      if (seen.has(answer.questionId)) {
+        throw new BadRequestError(`Question '${answer.questionId}' is answered more than once in this request`);
+      }
+      seen.add(answer.questionId);
+    }
+
+    // Validate answers belong to session questions
+    const sessionQuestionIds = new Set(await this.quizRepository.getSessionQuestionIds(sessionId));
+    const invalidQuestion = answers.find(answer => !sessionQuestionIds.has(answer.questionId));
+    if (invalidQuestion) {
+      throw new QuestionNotInSessionError(invalidQuestion.questionId, sessionId);
+    }
+
+    // One query for every question's type and answer options
+    const questions = await this.quizRepository.getQuestionsForScoring(Array.from(seen));
+    const questionById = new Map(questions.map(question => [question.id, question]));
+
+    const prepared = answers.map(answer => {
+      const question = questionById.get(answer.questionId);
+      if (!question) {
+        throw new QuestionNotInSessionError(answer.questionId, sessionId);
+      }
+      return this.prepareAnswer(answer, question);
+    });
+
+    const stats = await this.quizRepository.saveAnswers(sessionId, prepared);
+
+    return {
+      results: prepared.map(answer => ({ questionId: answer.questionId, isCorrect: answer.isCorrect })),
+      stats
+    };
+  }
+
+  private prepareAnswer(
+    answer: SubmitAnswerDto['answers'][number],
+    question: { id: number; questionType: QuestionType; questionAnswers: Array<{ id: number; isCorrect: boolean }> }
+  ): PreparedAnswer {
+    const optionIds = new Set(question.questionAnswers.map(option => option.id));
+    const correctIds = new Set(question.questionAnswers.filter(option => option.isCorrect).map(option => option.id));
+
+    if (question.questionType === QuestionType.MULTIPLE_CHOICE) {
+      const selected = answer.selectedAnswerIds
+        ?? (answer.selectedAnswerId !== undefined ? [answer.selectedAnswerId] : undefined);
+      if (!selected || selected.length === 0) {
+        throw new BadRequestError(`Question '${question.id}' is multiple choice: send selectedAnswerIds`);
+      }
+      const selectedIds = Array.from(new Set(selected));
+      const invalidId = selectedIds.find(id => !optionIds.has(id));
+      if (invalidId !== undefined) {
+        throw new InvalidAnswerError(invalidId, question.id);
+      }
+
+      // Correct only when exactly the correct answers are selected
+      const correctSelections = selectedIds.filter(id => correctIds.has(id)).length;
+      const incorrectSelections = selectedIds.length - correctSelections;
+      const isCorrect = correctIds.size > 0 && correctSelections === correctIds.size && incorrectSelections === 0;
+      // Partial scoring: (correct selections - incorrect selections) / total correct answers, minimum 0
+      const partialScore = correctIds.size > 0
+        ? Math.max(0, (correctSelections - incorrectSelections) / correctIds.size)
+        : 0;
+
+      return { kind: 'MULTIPLE', questionId: question.id, selectedAnswerIds: selectedIds, isCorrect, partialScore };
+    }
+
+    if (question.questionType === QuestionType.QROC && answer.textAnswer !== undefined) {
+      // Self-graded when the student reports isCorrect; otherwise needs manual correction
+      return {
+        kind: 'TEXT',
+        questionId: question.id,
+        textAnswer: answer.textAnswer,
+        isCorrect: answer.isCorrect === true,
+        userManualCorrection: answer.isCorrect !== undefined
+      };
+    }
+
+    // Single choice (or a QROC answered by picking an option)
+    let selectedAnswerId = answer.selectedAnswerId;
+    if (selectedAnswerId === undefined && answer.selectedAnswerIds?.length === 1) {
+      selectedAnswerId = answer.selectedAnswerIds[0];
+    }
+    if (selectedAnswerId === undefined) {
+      throw new BadRequestError(
+        question.questionType === QuestionType.QROC
+          ? `Question '${question.id}' is a QROC: send textAnswer`
+          : `Question '${question.id}' is single choice: send one selectedAnswerId`
+      );
+    }
+    if (!optionIds.has(selectedAnswerId)) {
+      throw new InvalidAnswerError(selectedAnswerId, question.id);
+    }
+
+    return { kind: 'SINGLE', questionId: question.id, selectedAnswerId, isCorrect: correctIds.has(selectedAnswerId) };
+  }
+
+  /**
+   * Response statistics shared by submit-answer and results: score is the
+   * percentage, totalScore20 the score out of 20
+   */
+  private formatSessionStats(stats: SessionStats) {
+    const totalScore20 = stats.totalQuestions > 0
+      ? Number(((stats.score / stats.totalQuestions) * 20).toFixed(2))
+      : 0;
+
+    return {
+      score: stats.percentage,
+      totalScore20,
+      correctAnswersCount: stats.correctCount,
+      incorrectAnswersCount: stats.answeredCount - stats.correctCount,
+      unansweredCount: stats.totalQuestions - stats.answeredCount,
+      totalQuestions: stats.totalQuestions
     };
   }
 
@@ -447,57 +484,21 @@ export default class QuizService {
     completedAt?: Date;
   }> {
     // Verify session belongs to user
-    const session = await this.quizRepository.getQuizSessionById(
-      sessionId,
-      user.user_data.id
-    );
+    const session = await this.quizRepository.findOwnedSession(sessionId, user.user_data.id);
 
     if (!session) {
       throw new SessionNotFoundError(sessionId);
     }
 
-    // Cast to any to access included relations
-    const sessionWithIncludes = session as any;
-
-    // Count total unique questions in the session
-    const totalQuestions = sessionWithIncludes.sessionQuestions.length;
-
-    // Count attempts from both single and multiple choice tables
-    const singleChoiceAttempts = sessionWithIncludes.quizAttempts || [];
-    const multipleChoiceAttempts = sessionWithIncludes.multipleChoiceAttempts || [];
-
-    // Calculate stats based on DB state
-    const singleCorrect = singleChoiceAttempts.filter((a: any) => a.isCorrect).length;
-    const multipleCorrect = multipleChoiceAttempts.filter((a: any) => a.isCorrect).length;
-
-    const correctAnswersCount = singleCorrect + multipleCorrect;
-    const totalAnsweredCount = singleChoiceAttempts.length + multipleChoiceAttempts.length;
-
-    const incorrectAnswersCount = totalAnsweredCount - correctAnswersCount;
-    const unansweredCount = totalQuestions - totalAnsweredCount;
-
-    // Use the score calculated by the repository (which handles partials)
-    const dbScore = session.score; // This is the total points (including partials)
-
-    // Calculate score out of 20
-    const totalScore20 = totalQuestions > 0
-      ? Number(((dbScore / totalQuestions) * 20).toFixed(2))
-      : 0;
-
-    // Percentage score from DB
-    const score = session.percentage;
+    // Each question counts once; rows without an answer are ignored
+    const stats = await this.quizRepository.getSessionStats(sessionId);
 
     return {
       sessionId: session.id,
       title: session.title,
       type: session.type,
       status: session.status,
-      score,
-      totalScore20,
-      correctAnswersCount,
-      incorrectAnswersCount,
-      unansweredCount,
-      totalQuestions,
+      ...this.formatSessionStats(stats),
       completedAt: session.completedAt || undefined
     };
   }
@@ -626,10 +627,7 @@ export default class QuizService {
     user: TJwtPayload
   ): Promise<{ success: true; message: string }> {
     // Verify session belongs to user
-    const session = await this.quizRepository.getQuizSessionById(
-      sessionId,
-      user.user_data.id
-    );
+    const session = await this.quizRepository.findOwnedSession(sessionId, user.user_data.id);
 
     if (!session) {
       throw new SessionNotFoundError(sessionId);
@@ -639,27 +637,8 @@ export default class QuizService {
       throw new SessionCompletedError(sessionId);
     }
 
-    // Validate question belongs to session
-    const sessionQuestionIds = await this.quizRepository.getSessionQuestionIds(sessionId);
-    if (!sessionQuestionIds.includes(questionId)) {
-      throw new QuestionNotInSessionError(questionId, sessionId);
-    }
-
-    // Validate answer belongs to question
-    const isValidAnswer = await this.quizRepository.validateAnswerBelongsToQuestion(
-      selectedAnswerId,
-      questionId
-    );
-
-    if (!isValidAnswer) {
-      throw new InvalidAnswerError(selectedAnswerId, questionId);
-    }
-
-    // Update single answer
-    await this.quizRepository.submitAnswers(sessionId, [{
-      questionId,
-      selectedAnswerId
-    }]);
+    // Same validation, scoring and storage as submit-answer
+    await this.applyAnswers(sessionId, [{ questionId, selectedAnswerId }]);
 
     return {
       success: true,
@@ -686,11 +665,17 @@ export default class QuizService {
       throw new SubscriptionRequiredError("retake sessions");
     }
 
+    // The route validates the body; guard anyway, since a missing id would
+    // otherwise match every session in the queries below
+    if (!Number.isInteger(originalSessionId) || originalSessionId <= 0) {
+      throw new BadRequestError("originalSessionId must be a positive integer");
+    }
+    if (!Object.values(RetakeType).includes(retakeType)) {
+      throw new InvalidQuizConfigurationError(`Invalid retake type: ${retakeType}`);
+    }
+
     // Get original session and verify ownership
-    const originalSession = await this.quizRepository.getQuizSessionById(
-      originalSessionId,
-      user.user_data.id
-    );
+    const originalSession = await this.quizRepository.findOwnedSession(originalSessionId, user.user_data.id);
 
     if (!originalSession) {
       throw new SessionNotFoundError(originalSessionId);
@@ -701,8 +686,8 @@ export default class QuizService {
       throw new SessionStatusError(originalSession.status, ["COMPLETED"]);
     }
 
-    // Get questions based on retake type
-    const questionIds = await this.getRetakeQuestionIds(originalSessionId, retakeType);
+    // Get questions based on retake type, from the verified session only
+    const questionIds = await this.getRetakeQuestionIds(originalSession.id, retakeType);
 
     if (questionIds.length === 0) {
       throw new NoQuestionsFoundError({ retakeType });
@@ -712,18 +697,16 @@ export default class QuizService {
       // Generate retake session title
       const retakeTitle = title || this.generateRetakeTitle(originalSession.title, retakeType);
 
-      // Create retake session
+      // Create the retake session and its questions atomically
       const retakeSession = await this.quizRepository.createRetakeSession(
         user.user_data.id,
         retakeTitle,
         originalSession.type,
-        originalSessionId,
+        originalSession.id,
         retakeType,
+        questionIds,
         originalSession.quizType || undefined
       );
-
-      // Add questions to retake session
-      await this.quizRepository.addQuestionsToSession(retakeSession.id, questionIds);
 
       // Canonical spec format
       return {
@@ -941,8 +924,10 @@ export default class QuizService {
       studyPackIds = user.accessible_study_packs;
     }
 
-    // Validate question access
-    const validation = await this.quizRepository.validateQuestionAccess(questionIds, studyPackIds);
+    // Validate question access (course-less residency questions need residency access)
+    const allowCourseless = accessControlService.hasResidencyAccess(user)
+      || user.user_data.role === 'ADMIN' || user.user_data.role === 'EMPLOYEE';
+    const validation = await this.quizRepository.validateQuestionAccess(questionIds, studyPackIds, allowCourseless);
 
     // Check for invalid question IDs
     if (validation.invalidIds.length > 0) {
@@ -996,8 +981,10 @@ export default class QuizService {
       studyPackIds = user.accessible_study_packs;
     }
 
-    // Validate question access
-    const validation = await this.quizRepository.validateQuestionAccess(questionIds, studyPackIds);
+    // Validate question access (course-less residency questions need residency access)
+    const allowCourseless = accessControlService.hasResidencyAccess(user)
+      || user.user_data.role === 'ADMIN' || user.user_data.role === 'EMPLOYEE';
+    const validation = await this.quizRepository.validateQuestionAccess(questionIds, studyPackIds, allowCourseless);
 
     // Check for invalid question IDs
     if (validation.invalidIds.length > 0) {
@@ -1146,8 +1133,10 @@ export default class QuizService {
   async getQuestionsByUniteOrModule(
     user: TJwtPayload,
     uniteId?: number,
-    moduleId?: number
-  ): Promise<{ questions: any[] }> {
+    moduleId?: number,
+    page?: number,
+    limit?: number
+  ): Promise<{ questions: any[]; pagination: { page: number; limit: number; total: number; totalPages: number; hasMore: boolean } }> {
     if (!user.has_active_subscription) {
       throw new SubscriptionRequiredError("questions");
     }
@@ -1162,7 +1151,7 @@ export default class QuizService {
       studyPackIds = user.accessible_study_packs;
     }
 
-    return await this.quizRepository.getQuestionsByUniteOrModule(studyPackIds, uniteId, moduleId);
+    return await this.quizRepository.getQuestionsByUniteOrModule(studyPackIds, uniteId, moduleId, page, limit);
   }
 
   /**
@@ -1202,30 +1191,31 @@ export default class QuizService {
     // Map sessionType to Prisma enum
     const sessionType = dto.sessionType === 'PRACTISE' ? SessionType.PRACTICE : SessionType.EXAM;
 
-    // Get questions matching the filters (with optional count limit)
+    // Get a random selection of matching questions. Without questionCount (the
+    // web omits it for EXAM sessions) the session is still capped.
+    const questionCount = Math.min(dto.questionCount ?? MAX_SESSION_QUESTIONS, MAX_SESSION_QUESTIONS);
     const questions = await this.quizRepository.getQuestionsForCanonicalSession(studyPackIds, {
       courseIds: dto.courseIds,
       questionTypes: dto.questionTypes,
       years: dto.years,
+      rotations: dto.rotations,
       universityIds: dto.universityIds,
       questionSourceIds: dto.questionSourceIds,
       repetitionCountMin: dto.repetitionCountMin,
       repetitionYears: dto.repetitionYears
-    }, dto.questionCount);
+    }, questionCount);
 
     if (questions.length === 0) {
       throw new NoQuestionsFoundError({ courseIds: dto.courseIds });
     }
 
-    // Create the session
-    const session = await this.quizRepository.createQuizSession(
+    // Create the session and its questions together
+    const session = await this.quizRepository.createSessionWithQuestionIds(
       user.user_data.id,
       dto.title,
-      sessionType
+      sessionType,
+      questions.map(q => q.id)
     );
-
-    // Add questions to session
-    await this.quizRepository.addQuestionsToSession(session.id, questions.map(q => q.id));
 
     return { sessionId: session.id };
   }
@@ -1276,14 +1266,12 @@ export default class QuizService {
       throw new ForbiddenError("Access denied. This endpoint is only available for users with active residency subscriptions.");
     }
 
-    // Default parts to all if not specified
-    const parts = dto.parts || ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"];
-
-    // Get questions matching the filters (universityId and examYear)
+    // Residency questions of that university and exam year; parts only filter
+    // when some are given, so questions without a part are included otherwise
     const questions = await this.quizRepository.getQuestionsForResidencySession(
       dto.universityId,
       dto.examYear,
-      parts
+      dto.parts && dto.parts.length > 0 ? dto.parts : undefined
     );
 
     if (questions.length === 0) {

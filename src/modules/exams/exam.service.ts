@@ -1,5 +1,6 @@
 import { inject, injectable } from "tsyringe";
-import { PackType, SessionType } from "@prisma/client";
+import { PackType, SessionType, YearLevel } from "@prisma/client";
+import { AccessControlService } from "../../services/access-control.service";
 import ExamRepository from "./exam.repository";
 import { AvailableExamsResponse } from "../../types/quiz.types";
 import { TJwtPayload } from "../../types/types";
@@ -37,7 +38,7 @@ export default class ExamService {
     const examData = await this.examRepository.getAvailableExams(
       year,
       user.accessible_study_packs,
-      user.user_data.currentYear,
+      this.accessibleYearLevels(user),
       hasResidencyAccess,
       moduleId
     );
@@ -141,11 +142,14 @@ export default class ExamService {
     // Check if user can access this exam
     const hasResidencyAccess = this.hasResidencyAccess(user);
     const canAccess = hasResidencyAccess ||
-      exam.yearLevel === user.user_data.currentYear;
+      this.accessibleYearLevels(user).includes(exam.yearLevel);
 
     if (!canAccess) {
       throw new AccessDeniedError("this exam", "insufficient subscription level or year mismatch");
     }
+
+    // Questions linked through the join table or Question.examId
+    const questionCount = await this.examRepository.countExamQuestions(exam.id);
 
     // Canonical spec format: flat exam object
     return {
@@ -165,7 +169,7 @@ export default class ExamService {
       startDate: null, // Field not in schema
       endDate: null, // Field not in schema
       duration: null, // Field not in schema
-      questionCount: (exam as any).examQuestions.length,
+      questionCount,
       passingScore: null // Field not in schema
     };
   }
@@ -207,7 +211,7 @@ export default class ExamService {
     // Check if user can access this exam
     const hasResidencyAccess = this.hasResidencyAccess(user);
     const canAccess = hasResidencyAccess ||
-      exam.yearLevel === user.user_data.currentYear;
+      this.accessibleYearLevels(user).includes(exam.yearLevel);
 
     if (!canAccess) {
       throw new AccessDeniedError("this exam", "insufficient subscription level or year mismatch");
@@ -265,7 +269,7 @@ export default class ExamService {
     const exams = await this.examRepository.getExamsByModuleAndYear(
       moduleId,
       year,
-      user.user_data.currentYear,
+      this.accessibleYearLevels(user),
       hasResidencyAccess
     );
 
@@ -312,7 +316,7 @@ export default class ExamService {
     // Check if user can access this exam
     const hasResidencyAccess = this.hasResidencyAccess(user);
     const canAccess = hasResidencyAccess ||
-      exam.yearLevel === user.user_data.currentYear;
+      this.accessibleYearLevels(user).includes(exam.yearLevel);
 
     if (!canAccess) {
       throw new AccessDeniedError("this exam", "insufficient subscription level or year mismatch");
@@ -364,41 +368,55 @@ export default class ExamService {
     }
 
     const hasResidencyAccess = this.hasResidencyAccess(user);
+    const yearLevels = this.accessibleYearLevels(user);
+    const uniqueModuleIds = Array.from(new Set(moduleIds));
 
     // Get all exams from the selected modules and year
-    const allExams = [];
-    for (const moduleId of moduleIds) {
+    const allExams: any[] = [];
+    for (const moduleId of uniqueModuleIds) {
       const moduleExams = await this.examRepository.getExamsByModuleAndYear(
         moduleId,
         year,
-        user.user_data.currentYear,
+        yearLevels,
         hasResidencyAccess
       );
       allExams.push(...moduleExams);
     }
 
     if (allExams.length === 0) {
-      throw new NoQuestionsFoundError({ moduleIds, year });
+      throw new NoQuestionsFoundError({ moduleIds: uniqueModuleIds, year });
     }
 
-    // Collect all questions from all exams
-    const allQuestions = [];
+    // Collect all questions from all exams, once each. "Virtual" exams (id null)
+    // group questions of a course that are not linked to an Exam.
+    const questionIds = new Set<number>();
+    const seenExams = new Set<string>();
     for (const exam of allExams) {
-      const questions = await this.examRepository.getExamQuestions(exam.id);
-      allQuestions.push(...questions);
+      if (exam.id !== null && exam.id !== undefined) {
+        if (seenExams.has(`exam_${exam.id}`)) continue;
+        seenExams.add(`exam_${exam.id}`);
+        const questions = await this.examRepository.getExamQuestions(exam.id);
+        questions.forEach(question => questionIds.add(question.id));
+      } else if (exam.courseId) {
+        if (seenExams.has(`course_${exam.courseId}`)) continue;
+        seenExams.add(`course_${exam.courseId}`);
+        const ids = await this.examRepository.getUnlinkedCourseQuestionIds(exam.courseId, year, yearLevels, hasResidencyAccess);
+        ids.forEach(id => questionIds.add(id));
+      }
     }
 
-    if (allQuestions.length === 0) {
-      throw new NoQuestionsFoundError({ moduleIds, year });
+    if (questionIds.size === 0) {
+      throw new NoQuestionsFoundError({ moduleIds: uniqueModuleIds, year });
     }
 
-    // Create a combined exam session
-    const sessionTitle = `Mixed Practice - ${moduleIds.length} Module(s) - ${year}`;
+    // Create a combined exam session, referencing the first real exam if any
+    const firstRealExam = allExams.find(exam => exam.id !== null && exam.id !== undefined);
+    const sessionTitle = `Mixed Practice - ${uniqueModuleIds.length} Module(s) - ${year}`;
     const sessionId = await this.examRepository.createExamSession(
       user.user_data.id,
-      allExams[0].id, // Use first exam as reference
+      firstRealExam ? firstRealExam.id : null,
       sessionTitle,
-      allQuestions.map(q => q.id)
+      Array.from(questionIds)
     );
 
     return {
@@ -407,9 +425,17 @@ export default class ExamService {
         sessionId,
         message: `Exam session created successfully from ${allExams.length} exams`,
         examCount: allExams.length,
-        questionCount: allQuestions.length
+        questionCount: questionIds.size
       }
     };
+  }
+
+  /**
+   * Year levels the user's subscriptions grant. Deliberately not
+   * user_data.currentYear: students can edit that field through their profile.
+   */
+  private accessibleYearLevels(user: TJwtPayload): YearLevel[] {
+    return new AccessControlService().getAccessibleYearLevels(user);
   }
 
   private hasResidencyAccess(user: TJwtPayload): boolean {

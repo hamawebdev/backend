@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { YearLevel } from "@prisma/client";
 
+// Emails are compared case-insensitively: store and look them up trimmed and lowercased
+const emailSchema = z.string().trim().toLowerCase().email("A valid email is required");
+
 export const registrationSchema = z.object({
-  email: z.string().email("A valid email is required"),
+  email: emailSchema,
   password: z.string().min(4, "Password must be at least 4 characters long"),
   fullName: z.string().min(2, "Full name must be at least 2 characters long"),
   phoneNumber: z.string().optional(),
@@ -13,7 +16,7 @@ export const registrationSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().email("A valid email is required"),
+  email: emailSchema,
   password: z.string().min(1, "Password is required"),
   deviceFingerprint: z.string().optional(),
 });
@@ -28,11 +31,11 @@ export const changePasswordSchema = z.object({
 });
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().email("A valid email is required"),
+  email: emailSchema,
 });
 
 export const resetPasswordSchema = z.object({
-  email: z.string().email("A valid email is required"),
+  email: emailSchema,
   code: z.string().min(1, "Verification code is required"),
   newPassword: z.string().min(4, "New password must be at least 4 characters long")
 });

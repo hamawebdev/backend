@@ -3,7 +3,7 @@ import { container } from "tsyringe";
 import ExamController from "./exam.controller";
 import authMiddleware from "../../core/middlewares/auth.middleware";
 import { checkPayment } from "../../core/middlewares/paymentCheck.middleware";
-// import { validateRequest, createExamSessionSchema } from "../../middleware/validation.middleware";
+import { validateRequest, examSessionFromModulesSchema } from "../../middleware/validation.middleware";
 
 const router = Router();
 const examController = container.resolve(ExamController);
@@ -20,6 +20,7 @@ router.post("/exam-sessions",
 
 // Create exam session from multiple modules
 router.post("/exam-sessions/from-modules",
+  validateRequest(examSessionFromModulesSchema),
   (req, res) => examController.createExamSessionFromModules(req, res)
 );
 

@@ -19,7 +19,7 @@ export default class ExamRepository {
   async getAvailableExams(
     year?: string,
     accessibleStudyPackIds?: number[],
-    userCurrentYear?: YearLevel,
+    userYearLevels?: YearLevel[],
     hasResidencyAccess?: boolean,
     moduleId?: number
   ): Promise<{
@@ -97,9 +97,9 @@ export default class ExamRepository {
       whereConditions.moduleId = moduleId;
     }
 
-    // Filter by user's accessible content if not residency subscriber
-    if (!hasResidencyAccess && userCurrentYear) {
-      whereConditions.yearLevel = userCurrentYear;
+    // Filter by the year levels the user's subscriptions grant, if not residency subscriber
+    if (!hasResidencyAccess && userYearLevels) {
+      whereConditions.yearLevel = { in: userYearLevels };
     }
 
     // Get regular exams
@@ -262,65 +262,115 @@ export default class ExamRepository {
             }
           }
         },
-        university: true,
-        examQuestions: {
-          include: {
-            question: {
-              include: {
-                questionAnswers: {
-                  include: {
-                    explanationImages: true
-                  }
-                }
-              }
-            }
-          }
-        }
+        university: true
       }
     });
   }
 
-  async getExamQuestions(examId: number): Promise<any[]> {
-    const examQuestions = await this.prisma.examQuestion.findMany({
-      where: { examId },
-      include: {
-        question: {
-          include: {
-            questionAnswers: {
-              include: {
-                explanationImages: true
-              }
-            },
-            questionImages: true // Include question images for canonical spec
-          }
-        }
-      },
-      orderBy: [
-        { orderInExam: 'asc' },
-        { createdAt: 'asc' } // Fallback for questions without manual order
+  /**
+   * An exam's questions are linked either through the exam_questions join
+   * table (admin-built exams) or through Question.examId (question create and
+   * bulk import). Both count.
+   */
+  private examQuestionsWhere(examId: number) {
+    return {
+      OR: [
+        { examId },
+        { examQuestions: { some: { examId } } }
       ]
+    };
+  }
+
+  async countExamQuestions(examId: number): Promise<number> {
+    return await this.prisma.question.count({ where: this.examQuestionsWhere(examId) });
+  }
+
+  async getExamQuestions(examId: number): Promise<any[]> {
+    if (!Number.isInteger(examId) || examId <= 0) {
+      throw new Error('examId must be a positive integer');
+    }
+
+    const questions = await this.prisma.question.findMany({
+      where: this.examQuestionsWhere(examId),
+      include: {
+        questionAnswers: {
+          include: {
+            explanationImages: true
+          }
+        },
+        questionImages: true, // Include question images for canonical spec
+        examQuestions: {
+          where: { examId },
+          select: { orderInExam: true, createdAt: true }
+        }
+      }
     });
 
-    return examQuestions.map(eq => eq.question);
+    // Join-table questions keep their manual order (then insertion order); questions
+    // linked only through Question.examId follow, by id
+    const rank = (q: typeof questions[number]) => {
+      const link = q.examQuestions[0];
+      return link
+        ? [0, link.orderInExam ?? Number.MAX_SAFE_INTEGER, link.createdAt.getTime(), q.id]
+        : [1, 0, 0, q.id];
+    };
+    questions.sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      for (let i = 0; i < ra.length; i++) {
+        if (ra[i] !== rb[i]) return ra[i] - rb[i];
+      }
+      return 0;
+    });
+
+    return questions.map(({ examQuestions, ...question }) => question);
+  }
+
+  /**
+   * Questions of a module for one exam year that are not linked to an Exam,
+   * grouped under a course ("virtual" exams in getExamsByModuleAndYear)
+   */
+  async getUnlinkedCourseQuestionIds(
+    courseId: number,
+    year: number,
+    userYearLevels?: YearLevel[],
+    hasResidencyAccess?: boolean
+  ): Promise<number[]> {
+    const where: any = {
+      courseId,
+      examYear: year,
+      examId: null
+    };
+    if (!hasResidencyAccess && userYearLevels) {
+      where.yearLevel = { in: userYearLevels };
+    }
+    const questions = await this.prisma.question.findMany({
+      where,
+      select: { id: true },
+      orderBy: { id: 'asc' }
+    });
+    return questions.map(q => q.id);
   }
 
   async getExamsByModuleAndYear(
     moduleId: number,
     year: number,
-    userCurrentYear?: YearLevel,
+    userYearLevels?: YearLevel[],
     hasResidencyAccess?: boolean
   ): Promise<any[]> {
-    // Build where conditions for questions
+    // Build where conditions for questions: in a course of the module, or
+    // linked to an exam of the module
     const questionWhereConditions: any = {
       examYear: year,
-      course: {
-        moduleId: moduleId
-      }
+      OR: [
+        { course: { moduleId: moduleId } },
+        { exam: { moduleId: moduleId } }
+      ]
     };
 
-    // Filter by user's accessible content if not residency subscriber
-    if (!hasResidencyAccess && userCurrentYear) {
-      questionWhereConditions.yearLevel = userCurrentYear;
+    // Filter by the year levels the user's subscriptions grant, if not residency subscriber
+    if (!hasResidencyAccess && userYearLevels) {
+      questionWhereConditions.yearLevel = { in: userYearLevels };
     }
 
     // First, get all questions that match the criteria
@@ -396,6 +446,7 @@ export default class ExamRepository {
         examKey = `course_${question.course?.id || 'unknown'}`;
         examData = {
           id: null, // No specific exam ID
+          courseId: question.course?.id ?? null, // Used to load the questions of this virtual exam
           title: `${question.course?.name || 'Unknown Course'} - ${year}`,
           description: `Questions from ${question.course?.name || 'Unknown Course'} for year ${year}`,
           yearLevel: question.yearLevel,
@@ -435,10 +486,11 @@ export default class ExamRepository {
 
   async createExamSession(
     userId: number,
-    examId: number,
+    examId: number | null,
     examTitle: string,
     questionIds: number[]
   ): Promise<number> {
+    // Attempt rows are only written when the student answers
     const session = await this.prisma.quizSession.create({
       data: {
         userId,
@@ -446,12 +498,7 @@ export default class ExamRepository {
         title: `${examTitle} - Practice Session`,
         type: SessionType.EXAM,
         sessionQuestions: {
-          create: questionIds.map(questionId => ({
-            questionId
-          }))
-        },
-        quizAttempts: {
-          create: questionIds.map(questionId => ({
+          create: Array.from(new Set(questionIds)).map(questionId => ({
             questionId
           }))
         }

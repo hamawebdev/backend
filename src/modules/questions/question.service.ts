@@ -15,6 +15,7 @@ import {
   QuestionExplanationImageResponse
 } from "../../types/quiz.types";
 import { BadRequestError, NotFoundError } from "../../core/errors/AppError";
+import { syncQuestionAnswers } from "./question-answers.sync";
 
 @injectable()
 export default class QuestionService {
@@ -355,8 +356,10 @@ export default class QuestionService {
     // Validate references if provided
     await this.validateReferences(update);
 
-    // If answers provided, we will upsert minimal fields
-    const answersUpdate = Array.isArray(update.answers) ? update.answers : [];
+    // When answers are provided they become the question's answer list: answers with an
+    // id are updated, answers without one are created, and missing ones are deleted
+    // (refused when students chose them)
+    const answersUpdate = Array.isArray(update.answers) ? update.answers : undefined;
 
     const result = await this.prisma.$transaction(async (tx: TransactionClient) => {
       // Build update data object
@@ -379,27 +382,8 @@ export default class QuestionService {
         data: updateData
       });
 
-      // Upsert answers if provided
-      for (const ans of answersUpdate) {
-        if (ans.id) {
-          await tx.questionAnswer.update({
-            where: { id: ans.id },
-            data: {
-              answerText: ans.answerText,
-              isCorrect: ans.isCorrect,
-              explanation: ans.explanation
-            }
-          });
-        } else {
-          await tx.questionAnswer.create({
-            data: {
-              questionId: questionId,
-              answerText: ans.answerText || '',
-              isCorrect: ans.isCorrect || false,
-              explanation: ans.explanation || null
-            }
-          });
-        }
+      if (answersUpdate) {
+        await syncQuestionAnswers(tx, questionId, answersUpdate);
       }
 
       return updatedQuestion;
@@ -812,9 +796,11 @@ export default class QuestionService {
     }
 
     if (filters.uniteIds && filters.uniteIds.length > 0) {
+      // Merge into the existing module filter so the study-pack restriction is kept
       whereConditions.course = {
         ...whereConditions.course,
         module: {
+          ...whereConditions.course.module,
           uniteId: { in: filters.uniteIds }
         }
       };

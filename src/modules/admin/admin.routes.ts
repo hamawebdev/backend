@@ -46,7 +46,8 @@ import {
   getActivationCodesSchema,
   createResidencyQuestionSchema,
   updateResidencyQuestionSchema,
-  bulkCreateResidencyQuestionsSchema
+  bulkCreateResidencyQuestionsSchema,
+  createBooksSchema
 } from "./validations/admin.validation";
 
 const router = Router();
@@ -540,6 +541,18 @@ router.patch("/activation-codes/:id/deactivate",
 // RESIDENCY QUESTION MANAGEMENT (Canonical spec)
 // ==========================================
 
+// The residency create/update/bulk routes take JSON only. A multipart body (sent when
+// images are attached) would otherwise reach validation empty; images go through
+// PUT /admin/image/:questionId/question-images and /explanation-images instead.
+const residencyJsonOnly = (req: Request, _res: Response, next: NextFunction) => {
+  if (req.is('multipart/form-data')) {
+    return next(new BadRequestError(
+      "Send residency questions as JSON. Upload images afterwards through PUT /admin/image/:questionId/question-images or /explanation-images."
+    ));
+  }
+  next();
+};
+
 // GET /admin/residency-questions - List residency questions with filters
 router.get("/residency-questions",
   adminOnly,
@@ -556,6 +569,7 @@ router.get("/residency-questions/:id",
 // POST /admin/residency-questions/bulk - Bulk create residency questions
 router.post("/residency-questions/bulk",
   adminOnly,
+  residencyJsonOnly,
   validateRequest(bulkCreateResidencyQuestionsSchema),
   (req, res, next) => adminController.bulkCreateResidencyQuestions(req, res, next)
 );
@@ -563,6 +577,7 @@ router.post("/residency-questions/bulk",
 // POST /admin/residency-questions - Create residency question
 router.post("/residency-questions",
   adminOnly,
+  residencyJsonOnly,
   validateRequest(createResidencyQuestionSchema),
   (req, res, next) => adminController.createResidencyQuestion(req, res, next)
 );
@@ -571,6 +586,7 @@ router.post("/residency-questions",
 router.put("/residency-questions/:id",
   adminOnly,
   validateParams({ id: idSchema }),
+  residencyJsonOnly,
   validateRequest(updateResidencyQuestionSchema),
   (req, res, next) => adminController.updateResidencyQuestion(req, res, next)
 );
@@ -597,6 +613,7 @@ router.get("/modules/:id/books",
 router.post("/modules/:id/books",
   adminOnly,
   validateParams({ id: idSchema }),
+  validateRequest(createBooksSchema),
   (req, res, next) => adminController.createModuleBooks(req, res, next)
 );
 
@@ -604,6 +621,7 @@ router.post("/modules/:id/books",
 router.post("/sub-modules/:id/books",
   adminOnly,
   validateParams({ id: idSchema }),
+  validateRequest(createBooksSchema),
   (req, res, next) => adminController.createSubModuleBooks(req, res, next)
 );
 

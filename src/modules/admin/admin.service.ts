@@ -17,12 +17,15 @@ import {
   YearLevel,
   PackType,
   QuizType,
-  SubscriptionStatus
+  SubscriptionStatus,
+  ReportStatus,
+  ReportType
 } from "@prisma/client";
 import { TransactionClient } from "../../types/prisma.types";
 import PrismaService from "../../config/db";
 import bcrypt from "bcrypt";
-import { InternalServerError, NotFoundError, BadRequestError } from "../../core/errors/AppError";
+import { InternalServerError, NotFoundError, BadRequestError, ConflictError } from "../../core/errors/AppError";
+import { syncQuestionAnswers } from "../questions/question-answers.sync";
 import { QuestionType } from "../../types/quiz.types";
 
 interface UserFilters {
@@ -104,6 +107,7 @@ interface CreateExamData {
   questions: {
     questionText: string;
     explanation?: string;
+    questionType?: QuestionType;
     answers: {
       answerText: string;
       isCorrect: boolean;
@@ -153,6 +157,7 @@ interface UpdateResidencyQuestionData {
   repetitionCount?: number;
   repetitionYears?: number[];
   questionAnswers?: {
+    id?: number;
     answerText: string;
     isCorrect: boolean;
   }[];
@@ -515,10 +520,15 @@ export default class AdminService {
         throw new NotFoundError("User");
       }
 
-      await this.prisma.user.update({
-        where: { id },
-        data: { isActive: false }
-      });
+      // Deactivate and end every session: refresh tokens are deleted and access
+      // tokens issued before are rejected (tokenVersion)
+      await this.prisma.$transaction([
+        this.prisma.user.update({
+          where: { id },
+          data: { isActive: false, tokenVersion: { increment: 1 } }
+        }),
+        this.prisma.refreshToken.deleteMany({ where: { userId: id } })
+      ]);
 
       // Log admin activity
       await this.prisma.employeeActivity.create({
@@ -544,10 +554,15 @@ export default class AdminService {
 
       const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-      await this.prisma.user.update({
-        where: { id },
-        data: { passwordHash: hashedPassword }
-      });
+      // End every existing session: refresh tokens are deleted and access tokens
+      // issued before the reset are rejected (tokenVersion)
+      await this.prisma.$transaction([
+        this.prisma.user.update({
+          where: { id },
+          data: { passwordHash: hashedPassword, tokenVersion: { increment: 1 } }
+        }),
+        this.prisma.refreshToken.deleteMany({ where: { userId: id } })
+      ]);
 
       // Log admin activity
       await this.prisma.employeeActivity.create({
@@ -698,9 +713,28 @@ export default class AdminService {
 
   async deleteStudyPack(id: number, deletedById: number): Promise<void> {
     try {
-      const studyPack = await this.prisma.studyPack.findUnique({ where: { id } });
+      const studyPack = await this.prisma.studyPack.findUnique({
+        where: { id },
+        include: {
+          _count: { select: { unites: true, subscriptions: true, activationCodes: true } }
+        }
+      });
       if (!studyPack) {
         throw new NotFoundError("Study pack");
+      }
+
+      // Deleting would cascade through its whole content tree and erase subscription
+      // (payment) records, so a pack in use can only be deactivated
+      const { unites, subscriptions, activationCodes } = studyPack._count;
+      if (unites > 0 || subscriptions > 0 || activationCodes > 0) {
+        const inUse = [
+          unites > 0 ? `${unites} unite(s)` : null,
+          subscriptions > 0 ? `${subscriptions} subscription(s)` : null,
+          activationCodes > 0 ? `${activationCodes} activation code(s)` : null
+        ].filter(Boolean).join(', ');
+        throw new ConflictError(
+          `Cannot delete study pack "${studyPack.name}": it has ${inUse}. Deactivate it instead (set isActive to false).`
+        );
       }
 
       await this.prisma.studyPack.delete({ where: { id } });
@@ -715,9 +749,12 @@ export default class AdminService {
         }
       });
     } catch (error) {
-      if (error instanceof NotFoundError) throw error;
+      if (error instanceof NotFoundError || error instanceof ConflictError) throw error;
       if ((error as any).code === 'P2025') {
         throw new NotFoundError("Study pack");
+      }
+      if ((error as any).code === 'P2003') {
+        throw new ConflictError("Cannot delete study pack: it is still referenced. Deactivate it instead (set isActive to false).");
       }
       throw new InternalServerError("Failed to delete study pack");
     }
@@ -1089,7 +1126,7 @@ export default class AdminService {
       const existingModule = await this.prisma.module.findUnique({
         where: { id },
         include: {
-          courses: true
+          _count: { select: { courses: true, exams: true, books: true, subModules: true } }
         }
       });
 
@@ -1097,9 +1134,17 @@ export default class AdminService {
         throw new NotFoundError(`Module with ID ${id} not found`);
       }
 
-      // Check if module has courses
-      if (existingModule.courses.length > 0) {
-        throw new BadRequestError(`Cannot delete module. It contains ${existingModule.courses.length} courses. Please delete all courses first.`);
+      // Courses, exams (with their question links), books and sub-modules would be
+      // deleted with the module, so it must be empty first
+      const { courses, exams, books, subModules } = existingModule._count;
+      if (courses > 0 || exams > 0 || books > 0 || subModules > 0) {
+        const contents = [
+          courses > 0 ? `${courses} course(s)` : null,
+          exams > 0 ? `${exams} exam(s)` : null,
+          books > 0 ? `${books} book(s)` : null,
+          subModules > 0 ? `${subModules} sub-module(s)` : null
+        ].filter(Boolean).join(', ');
+        throw new ConflictError(`Cannot delete module. It contains ${contents}. Please delete or move them first.`);
       }
 
       await this.prisma.module.delete({
@@ -1108,7 +1153,7 @@ export default class AdminService {
 
       return { message: "Module deleted successfully" };
     } catch (error) {
-      if (error instanceof NotFoundError || error instanceof BadRequestError) {
+      if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof ConflictError) {
         throw error;
       }
       throw new InternalServerError("Failed to delete module");
@@ -1412,10 +1457,12 @@ export default class AdminService {
         }
       }
 
+      const imagePath = data.imagePath !== undefined ? data.imagePath : data.logoUrl;
       const module = await this.prisma.module.create({
         data: {
           name: data.name,
-          ...(data.uniteId && { uniteId: data.uniteId })
+          ...(data.uniteId && { uniteId: data.uniteId }),
+          ...(imagePath ? { imagePath } : {})
         }
       });
 
@@ -1435,6 +1482,8 @@ export default class AdminService {
         id: module.id,
         name: module.name,
         uniteId: module.uniteId,
+        imagePath: module.imagePath,
+        logoUrl: module.imagePath,
         createdAt: module.createdAt
       };
     } catch (error) {
@@ -1509,10 +1558,13 @@ export default class AdminService {
         throw new NotFoundError("Module");
       }
 
+      // imagePath (or its alias logoUrl): a new image URL, or null to remove it
+      const imagePath = data.imagePath !== undefined ? data.imagePath : data.logoUrl;
       const module = await this.prisma.module.update({
         where: { id },
         data: {
           name: data.name,
+          ...(imagePath !== undefined ? { imagePath } : {}),
           updatedAt: new Date()
         }
       });
@@ -1521,6 +1573,8 @@ export default class AdminService {
         id: module.id,
         name: module.name,
         uniteId: module.uniteId,
+        imagePath: module.imagePath,
+        logoUrl: module.imagePath,
         createdAt: module.createdAt,
         updatedAt: module.updatedAt
       };
@@ -1632,6 +1686,7 @@ export default class AdminService {
         select: {
           id: true,
           name: true,
+          studyPackId: true,
           modules: {
             select: {
               id: true,
@@ -1653,6 +1708,7 @@ export default class AdminService {
         unites: unites.map(u => ({
           id: u.id,
           name: u.name,
+          studyPackId: u.studyPackId,
           modules: u.modules.map(m => ({
             id: m.id,
             name: m.name,
@@ -2018,8 +2074,12 @@ export default class AdminService {
             data: {
               questionText: questionData.questionText,
               explanation: questionData.explanation,
+              questionType: questionData.questionType ?? QuestionType.SINGLE_CHOICE,
               universityId: data.universityId,
               yearLevel: data.yearLevel,
+              // Linked to the exam directly as well, so exam listings (by module and year) find it
+              examId: exam.id,
+              examYear: data.year,
               createdById
             }
           });
@@ -2205,8 +2265,18 @@ export default class AdminService {
 
       // Build where clause with filters
       const where: any = {};
-      if (filters.status) where.status = filters.status;
-      if (filters.reportType) where.reportType = filters.reportType;
+      if (filters.status) {
+        if (!(Object.values(ReportStatus) as string[]).includes(filters.status)) {
+          throw new BadRequestError(`status must be one of ${Object.values(ReportStatus).join(', ')}`);
+        }
+        where.status = filters.status;
+      }
+      if (filters.reportType) {
+        if (!(Object.values(ReportType) as string[]).includes(filters.reportType)) {
+          throw new BadRequestError(`reportType must be one of ${Object.values(ReportType).join(', ')}`);
+        }
+        where.reportType = filters.reportType;
+      }
       if (filters.questionId) where.questionId = filters.questionId;
       if (filters.userId) where.userId = filters.userId;
       if (filters.search) {
@@ -2259,6 +2329,7 @@ export default class AdminService {
         totalPages: Math.ceil(total / limit)
       };
     } catch (error) {
+      if (error instanceof BadRequestError) throw error;
       throw new InternalServerError("Failed to fetch question reports");
     }
   }
@@ -2825,7 +2896,7 @@ export default class AdminService {
         where: { id },
         include: {
           _count: {
-            select: { users: true, questions: true }
+            select: { users: true, questions: true, exams: true, quizzes: true }
           }
         }
       });
@@ -2833,9 +2904,17 @@ export default class AdminService {
         throw new NotFoundError("University");
       }
 
-      // Check for associated users/questions (optional safety check)
-      if (existing._count.users > 0) {
-        throw new BadRequestError(`Cannot delete university with ${existing._count.users} associated users`);
+      // Deleting would delete its exams and detach its questions and quizzes (residency
+      // questions without a university disappear), so it must be unused
+      const { users, questions, exams, quizzes } = existing._count;
+      if (users > 0 || questions > 0 || exams > 0 || quizzes > 0) {
+        const inUse = [
+          users > 0 ? `${users} user(s)` : null,
+          questions > 0 ? `${questions} question(s)` : null,
+          exams > 0 ? `${exams} exam(s)` : null,
+          quizzes > 0 ? `${quizzes} quiz(zes)` : null
+        ].filter(Boolean).join(', ');
+        throw new ConflictError(`Cannot delete university "${existing.name}": it has ${inUse}.`);
       }
 
       await this.prisma.university.delete({ where: { id } });
@@ -2851,7 +2930,7 @@ export default class AdminService {
 
       return { message: "University deleted successfully" };
     } catch (error) {
-      if (error instanceof NotFoundError || error instanceof BadRequestError) throw error;
+      if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof ConflictError) throw error;
       if ((error as any).code === 'P2025') {
         throw new NotFoundError("University");
       }
@@ -3419,7 +3498,7 @@ export default class AdminService {
         id: q.id,
         questionText: q.questionText,
         explanation: q.explanation,
-        questionType: 'SINGLE_CHOICE' as const,
+        questionType: q.questionType,
         questionImages: [],
         questionExplanationImages: [],
         questionAnswers: []
@@ -3487,6 +3566,7 @@ export default class AdminService {
       questionText: question.questionText,
       part: this.extractPartFromMetadata(question.metadata),
       explanation: question.explanation,
+      questionType: question.questionType,
       examYear: question.examYear,
       universityId: question.universityId,
       university: question.university,
@@ -3514,7 +3594,7 @@ export default class AdminService {
     }
 
     // Store part in metadata
-    const metadataObj: any = data.metadata ? JSON.parse(data.metadata) : {};
+    const metadataObj: any = this.parseMetadataObject(data.metadata);
     if (data.part) {
       metadataObj.part = data.part;
     }
@@ -3523,6 +3603,7 @@ export default class AdminService {
     const question = await this.prisma.question.create({
       data: {
         questionText: data.questionText,
+        questionType: this.residencyQuestionType(data.questionAnswers),
         explanation: data.explanation,
         examYear: data.examYear,
         universityId: data.universityId,
@@ -3567,6 +3648,7 @@ export default class AdminService {
       id: question.id,
       questionText: question.questionText,
       part: data.part,
+      questionType: question.questionType,
       explanation: question.explanation,
       examYear: question.examYear,
       universityId: question.universityId,
@@ -3618,31 +3700,28 @@ export default class AdminService {
     if (data.repetitionCount !== undefined) updateData.repetitionCount = data.repetitionCount;
     if (data.repetitionYears !== undefined) updateData.repetitionYears = JSON.stringify(data.repetitionYears);
 
-    // Handle part in metadata
-    if (data.part !== undefined) {
-      const existingMetadata = existingQuestion.metadata ? JSON.parse(existingQuestion.metadata) : {};
-      updateData.metadata = JSON.stringify({ ...existingMetadata, part: data.part });
-    } else if (data.metadata !== undefined) {
-      updateData.metadata = data.metadata;
+    // Metadata: new metadata (if sent) merged over the stored one; the part is
+    // always kept (the new one if sent, otherwise the existing one), since a
+    // question without a valid part disappears from every residency list
+    if (data.part !== undefined || data.metadata !== undefined) {
+      const existingMetadata = this.parseMetadataObject(existingQuestion.metadata);
+      const submittedMetadata = data.metadata !== undefined ? this.parseMetadataObject(data.metadata) : {};
+      const part = data.part ?? existingMetadata.part;
+      updateData.metadata = JSON.stringify({
+        ...(data.metadata !== undefined ? submittedMetadata : existingMetadata),
+        ...(part !== undefined ? { part } : {})
+      });
+    }
+
+    if (data.questionAnswers) {
+      updateData.questionType = this.residencyQuestionType(data.questionAnswers);
     }
 
     // Update question and answers in a transaction
     const question = await this.prisma.$transaction(async (tx: TransactionClient) => {
-      // Update answers if provided
+      // Update answers in place (ids stay stable, so students' recorded answers stay valid)
       if (data.questionAnswers) {
-        // Delete existing answers
-        await tx.questionAnswer.deleteMany({
-          where: { questionId }
-        });
-
-        // Create new answers
-        await tx.questionAnswer.createMany({
-          data: data.questionAnswers.map(answer => ({
-            questionId,
-            answerText: answer.answerText,
-            isCorrect: answer.isCorrect
-          }))
-        });
+        await syncQuestionAnswers(tx, questionId, data.questionAnswers);
       }
 
       // Update question
@@ -3679,6 +3758,7 @@ export default class AdminService {
       id: question.id,
       questionText: question.questionText,
       part: this.extractPartFromMetadata(question.metadata),
+      questionType: question.questionType,
       explanation: question.explanation,
       examYear: question.examYear,
       universityId: question.universityId,
@@ -3759,6 +3839,27 @@ export default class AdminService {
     }
   }
 
+  /** Metadata JSON as an object; free text or invalid JSON is kept under `original` */
+  private parseMetadataObject(metadata: string | null | undefined): Record<string, any> {
+    if (!metadata) return {};
+    try {
+      const parsed = JSON.parse(metadata);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { original: parsed };
+    } catch {
+      return { original: metadata };
+    }
+  }
+
+  /**
+   * Residency questions are QCM when more than one answer is correct: the student
+   * UI shows checkboxes and scoring expects every correct answer
+   */
+  private residencyQuestionType(answers: Array<{ isCorrect: boolean }>): QuestionType {
+    return answers.filter(answer => answer.isCorrect).length > 1
+      ? QuestionType.MULTIPLE_CHOICE
+      : QuestionType.SINGLE_CHOICE;
+  }
+
   /**
    * POST /admin/residency-questions/bulk
    * Bulk create residency questions
@@ -3789,6 +3890,7 @@ export default class AdminService {
         const question = await tx.question.create({
           data: {
             questionText: q.questionText,
+            questionType: this.residencyQuestionType(q.questionAnswers),
             explanation: q.explanation,
             examYear,
             universityId,
@@ -3836,7 +3938,7 @@ export default class AdminService {
             id: question.id,
             questionText: question.questionText,
             explanation: question.explanation,
-            questionType: 'SINGLE_CHOICE' as const,
+            questionType: question.questionType,
             universityId: question.universityId,
             yearLevel: 'SEVEN' as const,
             examYear: question.examYear,
@@ -3851,7 +3953,7 @@ export default class AdminService {
       }
 
       return results;
-    });
+    }, { maxWait: 10000, timeout: 120000 }); // a large paper takes longer than the 5 s default
 
     return {
       questions: createdQuestions,

@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
+import { NotFoundError } from "../../core/errors/AppError";
 import {
   CourseProgress,
   QuizScore,
@@ -1081,6 +1082,8 @@ export default class StudentRepository {
       where: whereConditions,
       include: {
         noteLabels: {
+          // Only the caller's own labels
+          where: { userId },
           include: {
             label: {
               select: {
@@ -1195,6 +1198,71 @@ export default class StudentRepository {
       select: { id: true }
     });
     return question !== null;
+  }
+
+  /**
+   * Where a question sits in the content tree, for access checks.
+   * Returns null when the question does not exist.
+   */
+  async getQuestionLocation(questionId: number): Promise<{ hasCourse: boolean; studyPackId: number | null } | null> {
+    const question = await this.prisma.question.findUnique({
+      where: { id: questionId },
+      select: {
+        courseId: true,
+        course: { select: { module: { select: { unite: { select: { studyPackId: true } } } } } }
+      }
+    });
+    if (!question) {
+      return null;
+    }
+    return {
+      hasCourse: question.courseId !== null,
+      studyPackId: question.course?.module?.unite?.studyPackId ?? null
+    };
+  }
+
+  /**
+   * Study pack that a course / module / unite belongs to, for access checks.
+   * Returns null when the entity does not exist, and { studyPackId: null } for
+   * independent modules (no unite).
+   */
+  async getCourseStudyPack(courseId: number): Promise<{ studyPackId: number | null } | null> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { module: { select: { unite: { select: { studyPackId: true } } } } }
+    });
+    if (!course) {
+      return null;
+    }
+    return { studyPackId: course.module?.unite?.studyPackId ?? null };
+  }
+
+  async getModuleStudyPack(moduleId: number): Promise<{ studyPackId: number | null } | null> {
+    const module = await this.prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { unite: { select: { studyPackId: true } } }
+    });
+    if (!module) {
+      return null;
+    }
+    return { studyPackId: module.unite?.studyPackId ?? null };
+  }
+
+  async getUniteStudyPack(uniteId: number): Promise<{ studyPackId: number | null } | null> {
+    const unite = await this.prisma.unite.findUnique({
+      where: { id: uniteId },
+      select: { studyPackId: true }
+    });
+    if (!unite) {
+      return null;
+    }
+    return { studyPackId: unite.studyPackId };
+  }
+
+  async countLabelsOwnedByUser(labelIds: number[], userId: number): Promise<number> {
+    return await this.prisma.studentLabel.count({
+      where: { id: { in: labelIds }, userId }
+    });
   }
 
   async quizExists(quizId: number): Promise<boolean> {
@@ -1541,6 +1609,15 @@ export default class StudentRepository {
     noteText?: string,
     labelIds?: number[]
   ): Promise<any> {
+    // The note must belong to the caller before anything is read or changed
+    const owned = await this.prisma.studentNote.findFirst({
+      where: { id: noteId, userId },
+      select: { id: true }
+    });
+    if (!owned) {
+      throw new NotFoundError('Note');
+    }
+
     // Update note text if provided
     if (noteText !== undefined) {
       await this.prisma.studentNote.update({
@@ -1588,8 +1665,8 @@ export default class StudentRepository {
     }
 
     // Return updated note with labels
-    return await this.prisma.studentNote.findUnique({
-      where: { id: noteId },
+    return await this.prisma.studentNote.findFirst({
+      where: { id: noteId, userId },
       include: {
         noteLabels: {
           include: {

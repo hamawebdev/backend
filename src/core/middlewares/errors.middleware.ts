@@ -3,6 +3,7 @@ import { injectable } from "tsyringe";
 import { AppError } from "../errors/AppError";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
+import multer from "multer";
 
 @injectable()
 export default class GlobalErrorHandler {
@@ -51,6 +52,22 @@ export default class GlobalErrorHandler {
       return;
     }
 
+    // Handle upload errors (file too large, too many files, unexpected field)
+    if (error instanceof multer.MulterError) {
+      const statusCode = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+      res.status(statusCode).json({
+        success: false,
+        error: {
+          type: "UPLOAD_ERROR",
+          message: this.multerMessage(error),
+          code: error.code,
+          timestamp: new Date().toISOString(),
+          requestId: this.generateRequestId(),
+        },
+      });
+      return;
+    }
+
     // Handle JSON parsing errors
     if (error instanceof SyntaxError && error.message.includes('JSON')) {
       res.status(400).json({
@@ -59,6 +76,24 @@ export default class GlobalErrorHandler {
           type: "JSON_PARSE_ERROR",
           message: "Invalid JSON format in request body",
           details: "Please check your JSON syntax and try again",
+          timestamp: new Date().toISOString(),
+          requestId: this.generateRequestId(),
+        },
+      });
+      return;
+    }
+
+    // Client errors raised by Express middleware (body-parser: 413 payload too large,
+    // 415 unsupported charset, 400 bad encoding, ...) carry their own 4xx status
+    const status = (error as any).status ?? (error as any).statusCode;
+    if (Number.isInteger(status) && status >= 400 && status < 500) {
+      res.status(status).json({
+        success: false,
+        error: {
+          type: (error as any).type || error.name,
+          message: status === 413
+            ? "Request body is too large. Split the import into smaller batches."
+            : error.message,
           timestamp: new Date().toISOString(),
           requestId: this.generateRequestId(),
         },
@@ -92,6 +127,19 @@ export default class GlobalErrorHandler {
           statusCode: 500,
           message: "Database error occurred"
         };
+    }
+  }
+
+  private multerMessage(error: multer.MulterError): string {
+    switch (error.code) {
+      case 'LIMIT_FILE_SIZE':
+        return 'File is too large';
+      case 'LIMIT_FILE_COUNT':
+        return 'Too many files';
+      case 'LIMIT_UNEXPECTED_FILE':
+        return `Unexpected file field${error.field ? `: ${error.field}` : ''}`;
+      default:
+        return error.message;
     }
   }
 

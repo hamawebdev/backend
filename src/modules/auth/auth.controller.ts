@@ -4,6 +4,10 @@ import IAuthService from "./interfaces/IAuthService";
 import ResponseUtils from "../../core/utils/response.utils";
 import { RequestWithUser } from "../../types/types";
 
+function clientBaseUrl(): string {
+  return (process.env.CLIENT_URL || "http://localhost:3000").replace(/\/+$/, "");
+}
+
 @injectable()
 export default class AuthController {
   constructor(
@@ -174,34 +178,42 @@ export default class AuthController {
   }
 
   /**
-   * Google OAuth callback handler
-   * Redirects to frontend with tokens in query params
+   * Google OAuth callback handler (after passport has authenticated the user).
+   * Tokens go to the web app in the URL fragment, which browsers never send to a
+   * server, never put in a Referer header and which the web callback page removes
+   * from history right away.
    */
-  async googleCallback(req: Request, res: Response): Promise<void> {
-    try {
-      const oauthResult = (req as any).user;
-      
-      if (!oauthResult || !oauthResult.tokens) {
-        const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
-        return res.redirect(`${clientUrl}/login?error=oauth_failed`);
-      }
-
-      const { tokens, isNewUser } = oauthResult;
-      const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
-      
-      // Redirect to frontend with tokens
-      const redirectUrl = new URL(`${clientUrl}/auth/callback`);
-      redirectUrl.searchParams.set("accessToken", tokens.accessToken);
-      redirectUrl.searchParams.set("refreshToken", tokens.refreshToken);
-      
-      if (isNewUser) {
-        redirectUrl.searchParams.set("isNewUser", "true");
-      }
-
-      res.redirect(redirectUrl.toString());
-    } catch (error) {
-      const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
-      res.redirect(`${clientUrl}/login?error=oauth_failed`);
+  googleCallback(req: Request, res: Response): void {
+    const oauthResult = (req as any).user;
+    if (!oauthResult || !oauthResult.tokens) {
+      this.googleFailure(res);
+      return;
     }
+
+    const { tokens, isNewUser } = oauthResult;
+    const fragment = new URLSearchParams({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    });
+    if (isNewUser) {
+      fragment.set("isNewUser", "true");
+    }
+
+    res.set("Cache-Control", "no-store");
+    res.redirect(`${clientBaseUrl()}/auth/callback#${fragment.toString()}`);
+  }
+
+  /**
+   * Send the browser back to the web login page after a failed or refused Google
+   * sign-in (instead of leaving it on an API JSON error page). `reason` is a
+   * short code such as account_exists or email_unverified.
+   */
+  googleFailure(res: Response, reason?: string): void {
+    const params = new URLSearchParams({ error: "oauth_failed" });
+    if (reason) {
+      params.set("reason", reason);
+    }
+    res.set("Cache-Control", "no-store");
+    res.redirect(`${clientBaseUrl()}/login?${params.toString()}`);
   }
 }

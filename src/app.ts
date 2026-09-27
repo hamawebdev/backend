@@ -80,9 +80,13 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: "unsafe-none" },
 }));
 
-// Middleware to parse JSON
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json({ verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
+// Middleware to parse JSON. Admin routes take bulk imports (hundreds of questions
+// with explanations), so they get a larger limit than the rest of the API.
+const keepRawBody = (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; };
+app.use("/api/v1/admin", express.json({ limit: "10mb", verify: keepRawBody }));
+app.use("/api/v1/admin", express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+app.use(express.json({ limit: "1mb", verify: keepRawBody }));
 
 
 // Logging middleware

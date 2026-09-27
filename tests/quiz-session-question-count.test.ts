@@ -3,12 +3,16 @@ import request from 'supertest';
 import app from '../src/app';
 import { PrismaClient, YearLevel, SessionType } from '@prisma/client';
 
+// Ids of the records created in beforeAll; the mocked auth reads them lazily so the
+// test does not depend on running first against an empty database
+const mockAuthIds = { userId: 0, studyPackId: 0 };
+
 // Mock authentication middleware
 jest.mock('../src/core/middlewares/auth.middleware', () => {
     return jest.fn((req: any, res: any, next: any) => {
         req.user = {
             user_data: {
-                id: 1,
+                id: mockAuthIds.userId,
                 email: 'test-student@example.com',
                 fullName: 'Test Student',
                 role: 'STUDENT',
@@ -18,7 +22,7 @@ jest.mock('../src/core/middlewares/auth.middleware', () => {
             },
             subscriptions: [{
                 id: 1,
-                study_pack_id: 1,
+                study_pack_id: mockAuthIds.studyPackId,
                 pack_name: 'Test Study Pack',
                 pack_type: 'standard',
                 year_number: '3',
@@ -27,7 +31,7 @@ jest.mock('../src/core/middlewares/auth.middleware', () => {
             }],
             payment_status: 'active',
             has_active_subscription: true,
-            accessible_study_packs: [1]
+            accessible_study_packs: [mockAuthIds.studyPackId]
         };
         next();
     });
@@ -60,6 +64,7 @@ describe('Quiz Session Question Count API', () => {
             }
         });
         userId = testUser.id;
+        mockAuthIds.userId = testUser.id;
 
         // Create test data structure: StudyPack -> Unite -> Module -> Course
         const studyPack = await prisma.studyPack.create({
@@ -72,6 +77,7 @@ describe('Quiz Session Question Count API', () => {
                 isActive: true
             }
         });
+        mockAuthIds.studyPackId = studyPack.id;
 
         const unite = await prisma.unite.create({
             data: {

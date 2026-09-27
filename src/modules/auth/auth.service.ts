@@ -16,13 +16,15 @@ import {
   VerifyEmailDto
 } from "../../types/types";
 import {
+  AppError,
   ConflictError,
   NotFoundError,
   InternalServerError,
   UnauthorizedError,
   BadRequestError,
 } from "../../core/errors/AppError";
-import { User, SubscriptionStatus, UserRole, YearLevel } from "@prisma/client";
+import { Prisma, User } from "@prisma/client";
+import { buildJwtPayload } from "./jwt-payload.builder";
 
 @injectable()
 export default class AuthService implements IAuthService {
@@ -51,8 +53,11 @@ export default class AuthService implements IAuthService {
       // Generate email verification token
       const emailVerificationToken = this.jwt.generateEmailVerificationToken(user.id, user.email);
 
-      // TODO: Send email verification email
-      console.log(`Email verification token for ${user.email}: ${emailVerificationToken}`);
+      // TODO: Send email verification email (no mail provider yet).
+      // Never write the token to production logs.
+      if (process.env.NODE_ENV === "development") {
+        console.log(`Email verification token for ${user.email}: ${emailVerificationToken}`);
+      }
 
       const deviceFingerprint = userData.deviceFingerprint || 'unknown';
       const jwtPayload = await this.buildJwtPayload(user);
@@ -72,6 +77,7 @@ export default class AuthService implements IAuthService {
       return { accessToken, refreshToken };
     } catch (error) {
       if (error instanceof ConflictError) throw error;
+      mapUserWriteError(error);
       throw new InternalServerError("Failed to register user");
     }
   }
@@ -113,8 +119,12 @@ export default class AuthService implements IAuthService {
       // Update last login
       await this.userRepository.updateLastLogin(user.id);
 
+      // Single device: a new login ends the access tokens of any other session
+      // (refreshTokenRepository.create below also drops their refresh tokens)
+      const tokenVersion = await this.userRepository.revokeAccessTokens(user.id);
+
       const deviceFingerprint = loginData.deviceFingerprint || 'unknown';
-      const jwtPayload = await this.buildJwtPayload(user);
+      const jwtPayload = await this.buildJwtPayload({ ...user, tokenVersion });
       const accessToken = this.jwt.generateAccessToken(jwtPayload);
       const refreshToken = this.jwt.generateRefreshToken(user.id, user.email, deviceFingerprint);
 
@@ -199,12 +209,17 @@ export default class AuthService implements IAuthService {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 25);
 
-      await this.refreshTokenRepository.updateByUserId(
-        user.id,
+      // Rotate only if the presented token is still the stored one: a concurrent
+      // refresh with the same token (e.g. a second tab) gets a clean 401, not a 500
+      const rotated = await this.refreshTokenRepository.rotate(
+        refreshToken,
         newRefreshToken,
         expiresAt,
         deviceFingerprint,
       );
+      if (!rotated) {
+        throw new UnauthorizedError("Session expired. You may have logged in on another device. Please log in again.");
+      }
 
       return { accessToken: newAccessToken, refreshToken: newRefreshToken };
     } catch (error) {
@@ -224,6 +239,8 @@ export default class AuthService implements IAuthService {
     try {
       const userId = this.jwt.getUserIdFromToken(token);
       await this.refreshTokenRepository.deleteByUserId(userId);
+      // Also end access tokens already issued (authMiddleware checks token_version)
+      await this.userRepository.revokeAccessTokens(userId);
     } catch (error) {
       if (error instanceof UnauthorizedError) {
         throw error;
@@ -243,10 +260,30 @@ export default class AuthService implements IAuthService {
   }
 
   async forgotPassword(data: ForgotPasswordDto): Promise<void> {
+    // There is no email provider yet, so outside development the code could never
+    // reach the user. Say so instead of claiming an email was sent.
+    // TODO: send the code by email once a provider is configured, then remove this.
+    if (process.env.NODE_ENV !== "development") {
+      throw new AppError(
+        "Password reset by email is not available yet. Please contact support to reset your password.",
+        503
+      );
+    }
+
     try {
       const user = await this.userRepository.findByEmail(data.email);
       if (!user) {
         // Don't reveal if email exists for security
+        return;
+      }
+
+      // Keep a code that is still valid: repeated requests (by the user or by
+      // someone else) must not invalidate the code the user just received
+      if (user.resetCode && user.resetCodeExpiresAt && user.resetCodeExpiresAt > new Date()) {
+        // TODO: re-send the existing code by email once a provider is configured
+        if (process.env.NODE_ENV === "development") {
+          console.log(`Password reset code for ${user.email}: ${user.resetCode}`);
+        }
         return;
       }
 
@@ -259,8 +296,11 @@ export default class AuthService implements IAuthService {
 
       await this.userRepository.setResetCode(user.id, resetCode, expiresAt);
 
-      // TODO: Send password reset email with code
-      console.log(`Password reset code for ${user.email}: ${resetCode}`);
+      // TODO: Send password reset email with code (no mail provider yet).
+      // Never write the code to production logs: anyone with log access could take over the account.
+      if (process.env.NODE_ENV === "development") {
+        console.log(`Password reset code for ${user.email}: ${resetCode}`);
+      }
     } catch (error) {
       throw new InternalServerError("Failed to process password reset request");
     }
@@ -368,6 +408,7 @@ export default class AuthService implements IAuthService {
       return await this.userRepository.updateUser(userId, data);
     } catch (error) {
       if (error instanceof NotFoundError) throw error;
+      mapUserWriteError(error);
       throw new InternalServerError("Failed to update profile");
     }
   }
@@ -384,149 +425,23 @@ export default class AuthService implements IAuthService {
   }
 
   private async buildJwtPayload(user: User & { subscriptions?: any[] }): Promise<TJwtPayload> {
-    // Use date-based filtering for active subscriptions (endDate is the source of truth)
-    const now = new Date();
-    const activeSubscriptions = user.subscriptions?.filter(
-      (sub: any) => new Date(sub.endDate) > now
-    ) || [];
-
-    // Collect primary year levels from active subscriptions for currentYear determination
-    const primaryYearLevels = new Set<YearLevel>();
-
-    // Build subscriptions with accessible year levels (fully optimized - no database queries)
-    const subscriptions = activeSubscriptions.map((sub: any) => {
-      const endDate = new Date(sub.endDate);
-      const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-      // Determine accessible year levels directly from study pack metadata (no DB queries)
-      let accessibleYearLevels: YearLevel[] = [];
-      let primaryYearLevel: YearLevel | null = null;
-
-      if (sub.studyPack.type === 'RESIDENCY') {
-        // Residency subscriptions have access to all year levels
-        accessibleYearLevels = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN'] as YearLevel[];
-        // For residency, we don't add a specific primary year - let it use user's original year
-      } else if (sub.studyPack.type === 'YEAR') {
-        // Year-specific packs: determine accessible years from study pack's yearNumber
-        if (sub.studyPack.yearNumber) {
-          // Use the study pack's year number as the primary year for currentYear determination
-          primaryYearLevel = sub.studyPack.yearNumber as YearLevel;
-          primaryYearLevels.add(primaryYearLevel);
-
-          // For accessible year levels, use comprehensive access as per business logic
-          accessibleYearLevels = this.getAccessibleYearLevelsForYearPack(primaryYearLevel);
-        } else {
-          // If pack doesn't specify a year, grant access to all years (fallback)
-          accessibleYearLevels = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN'] as YearLevel[];
-        }
-      } else {
-        // Unknown pack type - grant access to all years (fallback)
-        accessibleYearLevels = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN'] as YearLevel[];
-      }
-
-      return {
-        id: sub.id,
-        study_pack_id: sub.studyPackId,
-        pack_name: sub.studyPack.name,
-        pack_type: sub.studyPack.type.toLowerCase(),
-        year_number: sub.studyPack.yearNumber,
-        end_date: sub.endDate.toISOString(),
-        days_remaining: Math.max(0, daysRemaining),
-        accessible_year_levels: accessibleYearLevels
-      };
-    });
-
-    // Admin and Employee users don't need subscriptions - they have full access
-    const isAdminOrEmployee = user.role === UserRole.ADMIN || user.role === UserRole.EMPLOYEE;
-    const hasActiveSubscription = isAdminOrEmployee || activeSubscriptions.length > 0;
-    const paymentStatus = isAdminOrEmployee || hasActiveSubscription ? 'active' : 'pending';
-
-    // For admin/employee users, give access to all study packs
-    let accessibleStudyPacks: number[];
-    if (isAdminOrEmployee) {
-      // Get all study pack IDs for admin/employee access
-      const allStudyPacks = await this.userRepository.getAllStudyPackIds();
-      accessibleStudyPacks = allStudyPacks;
-      // Admin/Employee users have access to all year levels - add highest year as primary
-      primaryYearLevels.add('SEVEN');
-    } else {
-      accessibleStudyPacks = activeSubscriptions.map((sub: any) => sub.studyPackId);
-    }
-
-    // Determine currentYear from subscription-based year levels
-    const currentYear = this.determineCurrentYearFromSubscriptions(primaryYearLevels, user.currentYear || 'ONE');
-
-
-    return {
-      user_data: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role,
-        universityId: user.universityId || undefined,
-        specialtyId: user.specialtyId || undefined,
-        currentYear: currentYear,
-        emailVerified: user.emailVerified,
-        isActive: user.isActive,
-      },
-      subscriptions,
-      payment_status: paymentStatus,
-      has_active_subscription: hasActiveSubscription,
-      accessible_study_packs: accessibleStudyPacks,
-    };
+    // Shared with Google login and authMiddleware: only ACTIVE, non-expired subscriptions count
+    return buildJwtPayload(user, () => this.userRepository.getAllStudyPackIds());
   }
+}
 
-  /**
-   * Determine accessible year levels for year-specific study packs
-   * Year-specific subscriptions should only grant access to their specific year level
-   */
-  private getAccessibleYearLevelsForYearPack(primaryYear: YearLevel): YearLevel[] {
-    // Year-specific subscriptions grant access only to their specific year level
-    // This ensures proper access control and prevents unauthorized access to other year levels
-    return [primaryYear];
-  }
-
-  /**
-   * Determine the currentYear field for JWT token based on active subscription year levels
-   * Handles multiple active subscriptions with different year levels appropriately
-   */
-  private determineCurrentYearFromSubscriptions(allYearLevels: Set<YearLevel>, fallbackYear: YearLevel): YearLevel {
-    // If no year levels from subscriptions, use the fallback (original user.currentYear)
-    if (allYearLevels.size === 0) {
-      return fallbackYear;
+/**
+ * Turn Prisma write errors caused by the request into client errors: a
+ * duplicate email (e.g. two concurrent registrations) is a 409 and an unknown
+ * universityId or specialtyId is a 400. Anything else is left to the caller.
+ */
+function mapUserWriteError(error: unknown): void {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      throw new ConflictError("User already exists");
     }
-
-    // Convert Set to Array for easier processing
-    const yearLevelsArray = Array.from(allYearLevels);
-
-    // If user has only one year level from subscriptions, use it
-    if (yearLevelsArray.length === 1) {
-      return yearLevelsArray[0];
+    if (error.code === "P2003") {
+      throw new BadRequestError("Invalid universityId or specialtyId");
     }
-
-    // If user has multiple year levels, prioritize based on business logic:
-    // 1. If the user's original currentYear is among the accessible years, keep it
-    if (allYearLevels.has(fallbackYear)) {
-      return fallbackYear;
-    }
-
-    // 2. Otherwise, choose the highest year level (most advanced)
-    // Define year level order for comparison
-    const yearOrder: { [key in YearLevel]: number } = {
-      'ONE': 1,
-      'TWO': 2,
-      'THREE': 3,
-      'FOUR': 4,
-      'FIVE': 5,
-      'SIX': 6,
-      'SEVEN': 7
-    };
-
-    // Find the highest year level
-    const highestYear = yearLevelsArray.reduce((highest, current) => {
-      return yearOrder[current] > yearOrder[highest] ? current : highest;
-    });
-
-    return highestYear;
   }
 }

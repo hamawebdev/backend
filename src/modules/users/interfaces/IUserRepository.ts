@@ -18,6 +18,8 @@ export default interface IUserRepository {
   updateLastLogin(id: number): Promise<void>;
   verifyEmail(id: number): Promise<User>;
   updatePassword(id: number, passwordHash: string): Promise<User>;
+  // Invalidate every access token issued so far (bumps tokenVersion); returns the new tokenVersion
+  revokeAccessTokens(id: number): Promise<number>;
   getAllStudyPackIds(): Promise<number[]>;
   setResetCode(id: number, code: string, expiresAt: Date): Promise<User>;
   clearResetCode(id: number): Promise<User>;

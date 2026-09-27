@@ -54,6 +54,8 @@ model User {
   googleId      String?        @unique @map("google_id")
   avatarUrl     String?        @map("avatar_url")
   authProvider  AuthProvider   @default(LOCAL) @map("auth_provider")
+  // Bumped on logout and password changes to revoke access tokens issued before
+  tokenVersion  Int            @default(0) @map("token_version")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
 
@@ -321,7 +323,8 @@ model Subscription {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  studyPack       StudyPack @relation(fields: [studyPackId], references: [id], onDelete: Cascade)
+  // Restrict: deleting a study pack must never erase subscription (payment) records
+  studyPack       StudyPack @relation(fields: [studyPackId], references: [id], onDelete: Restrict)
   codeRedemptions CodeRedemption[]
 
   @@map("subscriptions")
@@ -737,6 +740,7 @@ model CodeRedemption {
   subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   @@map("code_redemptions")
+  @@unique([activationCodeId, userId])
   @@index([activationCodeId])
   @@index([userId])
   @@index([subscriptionId])

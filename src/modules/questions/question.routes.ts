@@ -1,14 +1,35 @@
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { container } from "tsyringe";
 import { z } from "zod";
 import QuestionController from "./question.controller";
 import authMiddleware from "../../core/middlewares/auth.middleware";
 import { adminOrEmployee } from "../../core/middlewares/roleCheck.middleware";
 import { validateRequest } from "../../middleware/validation.middleware";
+import MediaHandler, { FileType } from "../../core/utils/media.utils";
 import { QuestionType, YearLevel } from "@prisma/client";
 
 const router = Router();
 const questionController = container.resolve(QuestionController);
+const mediaHandler = container.resolve<MediaHandler>("mediaHandler");
+
+/**
+ * PUT /:id/explanation accepts JSON ({ explanation, explanationImages: [{ imagePath }] })
+ * or multipart (field `explanation` plus up to 10 `explanationImages` files). For
+ * multipart, the stored files become the explanationImages list.
+ */
+const explanationUpload = mediaHandler.uploadMultipleFiles(FileType.EXPLANATION, 'explanationImages', 10);
+const explanationFilesToBody = (req: Request, _res: Response, next: NextFunction) => {
+  const files = req.files as Express.Multer.File[] | undefined;
+  if (Array.isArray(files) && files.length > 0) {
+    req.body.explanationImages = files.map(file => ({
+      imagePath: mediaHandler.getFileUrl(file.filename, FileType.EXPLANATION)
+    }));
+  } else if (req.is('multipart/form-data') && req.body && typeof req.body.explanationImages === 'string') {
+    // A multipart request with no files but a stray text field: ignore it
+    delete req.body.explanationImages;
+  }
+  next();
+};
 
 // Validation schemas
 const imageSchema = z.object({
@@ -198,6 +219,8 @@ router.put("/:id",
 );
 
 router.put("/:id/explanation",
+  explanationUpload,
+  explanationFilesToBody,
   validateRequest(updateQuestionExplanationSchema),
   (req, res, next) => questionController.updateQuestionExplanation(req, res, next)
 );
