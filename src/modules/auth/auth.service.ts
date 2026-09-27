@@ -1,5 +1,5 @@
 import { inject, injectable } from "tsyringe";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import IAuthService from "./interfaces/IAuthService";
 import IUserRepository from "../users/interfaces/IUserRepository";
 import IRefreshTokenRepository from "./interfaces/IRefreshTokenRepository";

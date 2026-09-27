@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { TransactionClient } from '../../types/prisma.types';
 import { inject, injectable } from 'tsyringe';
 import PrismaService from '../../config/db';
@@ -107,7 +107,7 @@ export class PaymentsService {
     // Construct valid absolute URLs
     const successUrl = joinUrl(appBaseUrl, successPath);
     const failureUrl = joinUrl(appBaseUrl, failurePath);
-    const webhookEndpoint = webhookUrl || 'https://med-adn.com/api/v1/payments/webhook';
+    const webhookEndpoint = webhookUrl || 'https://api.med-adn.com/api/v1/payments/webhook';
 
     // Debug logging for URL values and character lengths
     console.log('=== Chargily URL Debug Info ===');
@@ -165,13 +165,7 @@ export class PaymentsService {
    * Handle Chargily webhook events
    */
   public async handleWebhook(rawBody: Buffer, signature: string | undefined) {
-    console.log('Received webhook event');
-    console.log('Raw body length:', rawBody?.length || 0);
-    console.log('Signature provided:', !!signature);
-
-    // TEMPORARILY DISABLED FOR TESTING - RE-ENABLE AFTER TESTING IS COMPLETE
-    // Verify signature
-    if (!signature || !rawBody) {
+    if (!signature || !rawBody || rawBody.length === 0) {
       throw new Error('Missing signature or body');
     }
 
@@ -180,87 +174,61 @@ export class PaymentsService {
       .update(rawBody)
       .digest('hex');
 
-    // Constant-time comparison
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(computedSignature))) {
-      console.error('Invalid signature');
+    // Constant-time comparison; timingSafeEqual throws on length mismatch, so check first
+    const provided = Buffer.from(signature);
+    const expected = Buffer.from(computedSignature);
+    if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) {
       throw new Error('Invalid signature');
     }
 
-    // Parse event
     const event = JSON.parse(rawBody.toString());
-    console.log('Parsed webhook event:', event);
+    console.log('Webhook event received:', event.type, event.id);
 
-    // Idempotency check
     try {
-      await (this.prisma as any).paymentEvent.create({
-        data: {
-          id: event.id,
-          type: event.type,
-          checkoutId: event.data?.id || null
+      // Record the event and apply its effect atomically: a failed update rolls back the
+      // idempotency record too, so Chargily's retry is processed instead of skipped.
+      await this.prisma.$transaction(async (tx: TransactionClient) => {
+        await tx.paymentEvent.create({
+          data: { id: event.id, type: event.type, checkoutId: event.data?.id || null },
+        });
+
+        const metadata = event.data?.metadata || {};
+        const subscriptionId = Number(metadata.subscriptionId);
+
+        if (event.type === 'checkout.paid') {
+          const paymentDurationMonths = Number(metadata.paymentDurationMonths) || 1;
+          const now = new Date();
+          const endDate = new Date(now);
+          endDate.setMonth(endDate.getMonth() + paymentDurationMonths);
+
+          await tx.subscription.update({
+            where: { id: subscriptionId },
+            data: {
+              status: 'ACTIVE',
+              startDate: now,
+              endDate,
+              paymentReference: event.data?.id ?? null,
+              paymentMethod: event.data?.payment_method ?? undefined,
+              amountPaid: event.data?.amount ?? undefined,
+            },
+          });
+          console.log('Activated subscription', subscriptionId, 'until', endDate.toISOString());
+        }
+
+        if (event.type === 'checkout.failed' && Number.isFinite(subscriptionId)) {
+          await tx.subscription.update({
+            where: { id: subscriptionId },
+            data: { status: 'CANCELLED', endDate: new Date() },
+          });
+          console.log('Cancelled subscription', subscriptionId);
         }
       });
     } catch (error) {
-      // Event already processed
-      console.log('Event already processed:', event.id);
-      return;
-    }
-
-    // Process events
-    if (event.type === 'checkout.paid') {
-      console.log('Processing checkout.paid event');
-      const metadata = event.data?.metadata || {};
-      const subscriptionId = Number(metadata.subscriptionId);
-      const paymentDurationMonths = Number(metadata.paymentDurationMonths) || 1;
-
-      await this.prisma.$transaction(async (tx: TransactionClient) => {
-        // Calculate the actual end date based on payment duration from metadata
-        const now = new Date();
-        const endDate = new Date(now);
-        endDate.setMonth(endDate.getMonth() + paymentDurationMonths);
-
-        console.log('Calculating subscription end date:');
-        console.log('- Start date:', now.toISOString());
-        console.log('- Duration months:', paymentDurationMonths);
-        console.log('- Calculated end date:', endDate.toISOString());
-
-        // Activate subscription and set calculated end date
-        await tx.subscription.update({
-          where: { id: subscriptionId },
-          data: {
-            status: 'ACTIVE',
-            startDate: now, // Update start date to actual payment time
-            endDate: endDate,
-            paymentReference: event.data?.id ?? null,
-            paymentMethod: event.data?.payment_method ?? undefined,
-            amountPaid: event.data?.amount ?? undefined,
-          }
-        });
-
-        console.log('Successfully activated subscription:', subscriptionId);
-        console.log('Subscription updated with:');
-        console.log('- Status: ACTIVE');
-        console.log('- Start Date:', now.toISOString());
-        console.log('- End Date:', endDate.toISOString());
-        console.log('- Payment Reference:', event.data?.id);
-        console.log('- Amount Paid:', event.data?.amount);
-      });
-    }
-
-    if (event.type === 'checkout.failed') {
-      console.log('Processing checkout.failed event');
-      const metadata = event.data?.metadata || {};
-      const subscriptionId = Number(metadata.subscriptionId);
-
-      if (Number.isFinite(subscriptionId)) {
-        await this.prisma.subscription.update({
-          where: { id: subscriptionId },
-          data: {
-            status: 'CANCELLED',
-            endDate: new Date(),
-          }
-        });
-        console.log('Successfully cancelled subscription:', subscriptionId);
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        console.log('Webhook event already processed:', event.id);
+        return;
       }
+      throw error;
     }
   }
 }

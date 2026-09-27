@@ -22,24 +22,24 @@ import '../modules/payments/payments.container';
 
 // Register core utilities
 container.register("responseUtils", {
-  useClass: ResponseUtils,
+  useToken: ResponseUtils,
 });
 
 container.register("jwt", {
-  useClass: JwtUtils,
+  useToken: JwtUtils,
 });
 
 container.register("mediaHandler", {
-  useClass: MediaHandler,
+  useToken: MediaHandler,
 });
 
 container.register("globalErrorHandler", {
-  useClass: GlobalErrorHandler,
+  useToken: GlobalErrorHandler,
 });
 
 // Register database
 container.register("db", {
-  useClass: PrismaService,
+  useToken: PrismaService,
 });
 
 export { container };

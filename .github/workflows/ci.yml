@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Runs on main are serialized so each deploy waits for the previous one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/hamawebdev/backend
+  HEALTH_URL: https://api.med-adn.com/api/v1/health
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: medadn_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Throwaway CI database and dummy JWT secrets, not real credentials
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/medadn_ci
+      NODE_ENV: test
+      JWT_SECRET: ci-only-jwt-secret
+      REFRESH_TOKEN_SECRET: ci-only-refresh-secret
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma validate
+      - run: npx prisma generate
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=critical
+      - name: Migrations apply to an empty database
+        run: npx prisma migrate deploy
+      - name: Migrations match schema.prisma
+        run: npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code
+      - name: Tests
+        run: npm test
+
+  image:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=main,enable={{is_default_branch}}
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: local/backend:ci
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Check the image for secrets
+        run: bash .github/scripts/scan-image-secrets.sh local/backend:ci /app
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+
+  deploy:
+    needs: image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Trigger Dokploy deployment
+        env:
+          DOKPLOY_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          body=$(jq -n --arg id "$GITHUB_SHA" --arg message "${COMMIT_MESSAGE%%$'\n'*}" \
+            '{head_commit: {id: $id, message: $message}}')
+          curl -fsS --retry 3 -X POST "$DOKPLOY_DEPLOY_WEBHOOK" \
+            -H 'Content-Type: application/json' -H 'x-github-event: push' -d "$body"
+      - name: Wait until the new version is healthy
+        run: |
+          for i in $(seq 1 60); do
+            commit=$(curl -fsS --max-time 10 "$HEALTH_URL" | jq -r '.commit // empty' || true)
+            if [ "$commit" = "$GITHUB_SHA" ]; then
+              echo "Live and healthy at $GITHUB_SHA"
+              exit 0
+            fi
+            echo "Waiting (live commit: ${commit:-none})"
+            sleep 10
+          done
+          echo "::error::$GITHUB_SHA did not become healthy at $HEALTH_URL"
+          exit 1

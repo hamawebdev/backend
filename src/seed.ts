@@ -1,6 +1,12 @@
 import { PrismaClient, YearLevel, PackType, QuestionType } from '@prisma/client';
 import bcrypt from 'bcrypt';
 
+// Seeding clears and rewrites tables: never run it against production by accident
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
+  console.error('Refusing to seed: NODE_ENV is production (set ALLOW_PRODUCTION_SEED=true to override)');
+  process.exit(1);
+}
+
 const prisma = new PrismaClient();
 
 // Helper function to safely delete from tables that might not exist

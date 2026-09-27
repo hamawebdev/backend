@@ -106,3 +106,23 @@ export const strictRateLimit = rateLimit({
     });
   }
 });
+
+/**
+ * Brute-force protection for public auth endpoints (login, register, password reset).
+ * Only failed requests count, so many students behind one campus IP can still sign in.
+ */
+export const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // 30 failed attempts per IP per window
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      success: false,
+      error: 'Too many attempts',
+      message: 'Too many failed attempts. Please try again in 15 minutes.',
+      retryAfter: '15 minutes'
+    });
+  }
+});

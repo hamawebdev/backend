@@ -15,6 +15,9 @@ export default class JwtUtils {
   private readonly REFRESH_TOKEN_EXPIRY: string = process.env.REFRESH_TOKEN_EXPIRY || "25d";
 
   constructor() {
+    if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || !process.env.REFRESH_TOKEN_SECRET)) {
+      throw new Error("JWT_SECRET and REFRESH_TOKEN_SECRET must be set in production");
+    }
     if (!process.env.JWT_SECRET) {
       console.warn("⚠️ WARNING: JWT_SECRET is not set. Using default value. This is a security risk.");
     }

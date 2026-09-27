@@ -14,6 +14,7 @@ import {
 } from "./validations/auth.validation";
 import authMiddleware from "../../core/middlewares/auth.middleware";
 import passport from "../../config/passport";
+import { authRateLimit } from "../../middleware/rate-limit.middleware";
 
 const authRouter = Router();
 const authController = container.resolve(AuthController);
@@ -21,12 +22,14 @@ const authController = container.resolve(AuthController);
 // Public routes
 authRouter.post(
   "/register",
+  authRateLimit,
   validateRequest(registrationSchema),
   (req, res, next) => authController.register(req, res, next)
 );
 
 authRouter.post(
   "/login",
+  authRateLimit,
   validateRequest(loginSchema),
   (req, res, next) => authController.login(req, res, next)
 );
@@ -39,18 +42,21 @@ authRouter.post(
 
 authRouter.post(
   "/verify-email",
+  authRateLimit,
   validateRequest(verifyEmailSchema),
   (req, res, next) => authController.verifyEmail(req, res, next)
 );
 
 authRouter.post(
   "/forgot-password",
+  authRateLimit,
   validateRequest(forgotPasswordSchema),
   (req, res, next) => authController.forgotPassword(req, res, next)
 );
 
 authRouter.post(
   "/reset-password",
+  authRateLimit,
   validateRequest(resetPasswordSchema),
   (req, res, next) => authController.resetPassword(req, res, next)
 );

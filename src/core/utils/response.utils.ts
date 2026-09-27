@@ -116,7 +116,9 @@ class ResponseUtils {
 
     // Handle generic errors
     const status = error.statusCode || HttpStatusCode.INTERNAL_SERVER_ERROR;
-    const message = error.message || "An unexpected error occurred";
+    // Never expose internal messages (Prisma queries, DB host, file paths) to clients in production
+    const exposeMessage = status < 500 || process.env.NODE_ENV !== "production";
+    const message = (exposeMessage && error.message) || "An unexpected error occurred";
     
     return res.status(status).json({
       success: false,

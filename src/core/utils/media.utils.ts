@@ -89,7 +89,9 @@ export default class MediaHandler {
         }
       });
     } catch (error) {
-      throw new InternalServerError("Failed to initialize media storage");
+      throw new InternalServerError(
+        `Failed to initialize media storage at ${this.uploadDirectory}: ${(error as Error).message}`
+      );
     }
   }
 
@@ -170,7 +172,12 @@ export default class MediaHandler {
         throw new BadRequestError("Invalid file type");
       }
 
-      const filePath = path.join(this.subDirectories[fileType as FileType], filename);
+      // Only plain file names inside the upload directory: blocks ../ path traversal
+      const safeName = path.basename(filename);
+      if (safeName !== filename || safeName.startsWith(".")) {
+        throw new BadRequestError("Invalid filename");
+      }
+      const filePath = path.join(this.subDirectories[fileType as FileType], safeName);
 
       try {
         await fs.promises.access(filePath);
@@ -257,7 +264,7 @@ export default class MediaHandler {
 
   // Utility method to get file URL
   public getFileUrl = (filename: string, fileType: FileType): string => {
-    return `/api/media/${fileType}/${filename}`;
+    return `/api/v1/media/${fileType}/${filename}`;
   };
 
   // Method to process uploaded files and return file info
