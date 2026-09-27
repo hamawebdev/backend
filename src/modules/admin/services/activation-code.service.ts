@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { randomInt } from "crypto";
 import { inject, injectable } from "tsyringe";
-import { AppError, NotFoundError, BadRequestError } from "../../../core/errors/AppError";
+import { AppError, NotFoundError, BadRequestError, ConflictError } from "../../../core/errors/AppError";
 import { IActivationCodeService } from "../interfaces/IActivationCodeService";
 import { ActivationCode } from "@prisma/client";
 import PrismaService from "../../../config/db";
@@ -411,6 +411,14 @@ export class ActivationCodeService implements IActivationCodeService {
 
     if (!activationCode) {
       throw new NotFoundError("Activation code not found");
+    }
+
+    // Deleting a redeemed code would cascade away its redemption history
+    const redemptions = await this.prisma.codeRedemption.count({ where: { activationCodeId: id } });
+    if (redemptions > 0) {
+      throw new ConflictError(
+        `Cannot delete activation code ${activationCode.code}: it has been redeemed ${redemptions} time(s). Deactivate it instead.`
+      );
     }
 
     await this.prisma.activationCode.delete({

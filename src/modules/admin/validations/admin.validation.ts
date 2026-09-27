@@ -615,8 +615,9 @@ export const createResidencyQuestionSchema = z.object({
   questionText: z.string().min(1, 'Question text is required'),
   part: residencyPartSchema,
   explanation: markdownSchema(),
-  examYear: z.number().int().positive().optional(),
-  universityId: z.number().int().positive().optional(),
+  // Residency sessions select by university and exam year, so both are required
+  examYear: z.number().int().min(1900, 'Exam year is required').max(2100),
+  universityId: z.number().int().positive('University is required'),
   metadata: z.string().optional(),
   tags: z.array(z.string()).optional(),
   repetitionCount: z.number().int().min(0).optional(),

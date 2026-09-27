@@ -267,4 +267,26 @@ describe('Admin security and integrity regressions', () => {
     const u = await prisma.user.findUnique({ where: { id: student2 } });
     expect(u!.tokenVersion).toBe(1);
   });
+  it('residency create requires university and exam year; redeemed activation codes are not deletable', async () => {
+    const base = { questionText: 'Q', part: 'Dossier clinique', questionAnswers: [{ answerText: 'a', isCorrect: true }] };
+    const noUniversity = await api().post('/api/v1/admin/residency-questions').set('Authorization', tokenFor(admin))
+      .send({ ...base, examYear: 2020 });
+    expect(noUniversity.status).toBe(400);
+    const noYear = await api().post('/api/v1/admin/residency-questions').set('Authorization', tokenFor(admin))
+      .send({ ...base, universityId: univ });
+    expect(noYear.status).toBe(400);
+
+    const makeCode = (suffix: string) => prisma.activationCode.create({ data: {
+      code: `${tag}${suffix}`.toUpperCase(), hashedCode: 'x', durationMonths: 1,
+      expiresAt: new Date(Date.now() + 86400000), createdById: admin } });
+    const redeemed = await makeCode('R');
+    await prisma.codeRedemption.create({ data: { activationCodeId: redeemed.id, userId: student } });
+    const blocked = await api().delete(`/api/v1/admin/activation-codes/${redeemed.id}`).set('Authorization', tokenFor(admin));
+    expect(blocked.status).toBe(409);
+    expect(await prisma.codeRedemption.count({ where: { activationCodeId: redeemed.id } })).toBe(1);
+
+    const unused = await makeCode('U');
+    const deleted = await api().delete(`/api/v1/admin/activation-codes/${unused.id}`).set('Authorization', tokenFor(admin));
+    expect(deleted.status).toBe(200);
+  });
 });
