@@ -44,8 +44,10 @@ LABEL org.opencontainers.image.source="https://github.com/hamawebdev/backend"
 
 USER node
 EXPOSE 8080
-HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# busybox wget starts instantly (a node process can take seconds on a loaded host);
+# the start period covers migrations, which run before the server listens
+HEALTHCHECK --interval=15s --timeout=10s --start-period=300s --retries=3 \
+  CMD wget -q -O /dev/null -T 8 "http://127.0.0.1:${PORT:-8080}/api/v1/health" || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--", "/app/scripts/docker-entrypoint.sh"]
 CMD ["node", "build/app.js"]
