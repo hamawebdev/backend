@@ -121,18 +121,20 @@ describe('Quiz Session Question Count API', () => {
     });
 
     afterAll(async () => {
-        // Clean up test data
-        await prisma.quizAttempt.deleteMany({});
-        await prisma.quizSessionQuestion.deleteMany({});
-        await prisma.quizSession.deleteMany({});
-        await prisma.question.deleteMany({});
-        await prisma.course.deleteMany({});
-        await prisma.module.deleteMany({});
-        await prisma.unite.deleteMany({});
-        await prisma.studyPack.deleteMany({});
-        await prisma.user.deleteMany({
-            where: { email: 'count-test-student@example.com' }
-        });
+        // Clean up only this suite's data; other suites share the database
+        const sessionIds = (await prisma.quizSession.findMany({
+            where: { userId },
+            select: { id: true }
+        })).map(session => session.id);
+        await prisma.quizAttempt.deleteMany({ where: { sessionId: { in: sessionIds } } });
+        await prisma.quizSessionQuestion.deleteMany({ where: { sessionId: { in: sessionIds } } });
+        await prisma.quizSession.deleteMany({ where: { id: { in: sessionIds } } });
+        await prisma.question.deleteMany({ where: { id: { in: questionIds } } });
+        await prisma.course.deleteMany({ where: { id: courseId } });
+        await prisma.module.deleteMany({ where: { unite: { studyPackId: mockAuthIds.studyPackId } } });
+        await prisma.unite.deleteMany({ where: { studyPackId: mockAuthIds.studyPackId } });
+        await prisma.studyPack.deleteMany({ where: { id: mockAuthIds.studyPackId } });
+        await prisma.user.deleteMany({ where: { id: userId } });
         await prisma.$disconnect();
     });
 
