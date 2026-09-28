@@ -112,21 +112,26 @@ jobs:
     needs: image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    # Builds from source on the Dokploy host take up to ~60 min; image pulls take ~2 min
-    timeout-minutes: 100
+    # Dokploy only pulls the image built above and restarts the service (a few minutes)
+    timeout-minutes: 30
     steps:
       - name: Trigger Dokploy deployment
         env:
           DOKPLOY_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_DEPLOY_WEBHOOK }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
+          live=$(curl -fsS --max-time 10 "$HEALTH_URL" | jq -r '.commit // empty' || true)
+          if [ "$live" = "$GITHUB_SHA" ]; then
+            echo "Already live at $GITHUB_SHA; not triggering another deployment"
+            exit 0
+          fi
           body=$(jq -n --arg id "$GITHUB_SHA" --arg message "${COMMIT_MESSAGE%%$'\n'*}" \
             '{ref: "refs/heads/main", head_commit: {id: $id, message: $message}, commits: []}')
           curl -fsS --retry 3 -X POST "$DOKPLOY_DEPLOY_WEBHOOK" \
             -H 'Content-Type: application/json' -H 'x-github-event: push' -d "$body"
       - name: Wait until the new version is healthy
         run: |
-          for i in $(seq 1 180); do
+          for i in $(seq 1 50); do
             commit=$(curl -fsS --max-time 10 "$HEALTH_URL" | jq -r '.commit // empty' || true)
             if [ "$commit" = "$GITHUB_SHA" ]; then
               echo "Live and healthy at $GITHUB_SHA"
