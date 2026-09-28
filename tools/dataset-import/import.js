@@ -8,30 +8,36 @@ const { run, PHASES } = require('./lib/run');
 
 const HELP = `Usage: node import.js --dataset <dir> [--api <url>] (--sample | --full) [options]
 
-  --dataset <dir>        dataset folder (holds index.json and images/)
-  --api <url>            API base, e.g. https://api.med-adn.com/api/v1 (not needed with --dry-run)
-  --sample               import a small set covering every kind of data
-  --full                 import everything
-  --dry-run              no request at all: print the plan and the totals
-  --state <file>         resume state (JSON lines), default ./import-state.jsonl
-  --report <file>        JSON report, default ./import-report-<time>.json
-  --batch <n>            questions per request, 1-200 (default 200)
-  --min-delay-ms <n>     minimum pause between requests (default 1500)
-  --max-delay-ms <n>     cap of the adaptive pause (default 60000)
-  --slow-ms <n>          a request slower than this backs off (default 4000)
-  --retries <n>          retries per request on 429/5xx/network errors (default 8)
-  --phases <list>        comma list among ${PHASES.join(',')} (default all)
-  --force                send every question and exam even if the state says unchanged
-  --update-hierarchy     let the API rename existing universities/modules/courses (updateExisting)
-  --skip-image-hash      do not re-hash image files (existence and size are still checked)
-  --ignore-errors        import even if the dataset has validation errors
-  --print-modules        print the canonical module table
+  --dataset <dir>          dataset folder (holds index.json and images/)
+  --api <url>              API base, e.g. https://api.med-adn.com/api/v1 (not needed with --dry-run)
+  --sample                 import a small set covering every kind of data
+  --full                   import everything
+  --dry-run                no request at all: print the plan and the totals
+  --state <file>           resume state (JSON lines), default ./import-state.jsonl
+  --report <file>          JSON report, default ./import-report-<time>.json
+  --batch <n>              questions per request, 1-200 (default 200)
+  --concurrency <n>        parallel requests (question batches, state queries, exams), 1-32 (default 4)
+  --image-concurrency <n>  parallel image uploads, 1-64 (default 8)
+  --min-delay-ms <n>       minimum pause between request starts (default 0)
+  --max-delay-ms <n>       cap of the retry backoff (default 60000)
+  --slow-ms <n>            an answer slower than this halves the concurrency (default 30000)
+  --timeout-ms <n>         request timeout, retried like a network error (default 180000; uploads at least 300000)
+  --retries <n>            retries per request on 408/429/5xx, network errors and timeouts (default 8)
+  --repair-rounds <n>      verify phase: rounds of re-sending what is missing or different, 0-10 (default 3)
+  --progress-sec <n>       progress line every n seconds, 0 = only at the end of each phase (default 30)
+  --phases <list>          comma list among ${PHASES.join(',')} (default all)
+  --force                  send the hierarchy and every question and exam even if the state says unchanged
+  --update-hierarchy       let the API rename existing universities/modules/courses (updateExisting)
+  --skip-image-hash        do not re-hash image files (existence and size are still checked)
+  --ignore-errors          import even if the dataset has validation errors
+  --print-modules          print the canonical module table
   --help
 
 Credentials come from IMPORT_EMAIL and IMPORT_PASSWORD.
-Exit codes: 0 ok, 1 fatal, 2 some items failed, 3 reconciliation mismatch, 130 interrupted.`;
+Exit codes: 0 ok (ends with a VERIFIED line when the verify phase ran), 1 fatal,
+2 some items failed, 3 reconciliation mismatch, 4 verification failed, 130 interrupted.`;
 
-const VALUE_FLAGS = new Set(['dataset', 'api', 'state', 'report', 'batch', 'min-delay-ms', 'max-delay-ms', 'slow-ms', 'retries', 'phases']);
+const VALUE_FLAGS = new Set(['dataset', 'api', 'state', 'report', 'batch', 'concurrency', 'image-concurrency', 'min-delay-ms', 'max-delay-ms', 'slow-ms', 'timeout-ms', 'retries', 'repair-rounds', 'progress-sec', 'phases']);
 const BOOL_FLAGS = new Set(['sample', 'full', 'dry-run', 'force', 'update-hierarchy', 'skip-image-hash', 'ignore-errors', 'print-modules', 'help']);
 
 function parseArgs(argv) {
@@ -60,6 +66,13 @@ function intOption(raw, name, fallback, min, max) {
   return n;
 }
 
+function numberOption(raw, name, fallback, min, max) {
+  if (raw[name] === undefined) return fallback;
+  const n = Number(raw[name]);
+  if (!Number.isFinite(n) || n < min || n > max) throw new Error(`--${name} must be a number between ${min} and ${max}`);
+  return n;
+}
+
 function buildOptions(raw, env) {
   if (!raw.dataset) throw new Error('--dataset is required');
   if (raw.sample && raw.full) throw new Error('choose one of --sample and --full');
@@ -76,10 +89,15 @@ function buildOptions(raw, env) {
     state: raw.state || 'import-state.jsonl',
     report: raw.report || `import-report-${stamp}.json`,
     batch: intOption(raw, 'batch', 200, 1, 200),
-    minDelayMs: intOption(raw, 'min-delay-ms', 1500, 0, 600000),
+    concurrency: intOption(raw, 'concurrency', 4, 1, 32),
+    imageConcurrency: intOption(raw, 'image-concurrency', 8, 1, 64),
+    minDelayMs: intOption(raw, 'min-delay-ms', 0, 0, 600000),
     maxDelayMs: intOption(raw, 'max-delay-ms', 60000, 0, 3600000),
-    slowMs: intOption(raw, 'slow-ms', 4000, 1, 3600000),
+    slowMs: intOption(raw, 'slow-ms', 30000, 1, 3600000),
+    timeoutMs: intOption(raw, 'timeout-ms', 180000, 100, 3600000),
     retries: intOption(raw, 'retries', 8, 0, 100),
+    repairRounds: intOption(raw, 'repair-rounds', 3, 0, 10),
+    progressSec: numberOption(raw, 'progress-sec', 30, 0, 86400),
     phases,
     force: Boolean(raw.force),
     updateHierarchy: Boolean(raw['update-hierarchy']),
@@ -89,7 +107,6 @@ function buildOptions(raw, env) {
     email: env.IMPORT_EMAIL,
     password: env.IMPORT_PASSWORD,
   };
-  if (options.maxDelayMs < options.minDelayMs) options.maxDelayMs = options.minDelayMs;
   if (!options.dryRun && (!options.email || !options.password)) throw new Error('set IMPORT_EMAIL and IMPORT_PASSWORD');
   return options;
 }

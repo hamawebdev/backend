@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { sha1, chunk } = require('./util');
+const { runPool, fromList } = require('./pool');
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const MIME = {
@@ -59,77 +60,124 @@ function verifyImages(datasetDir, paths, { hash = true, known = new Set(), log =
   return result;
 }
 
+const CHECK_CHUNK = 10000; // MAX_MEDIA_CHECK_FILES of the API
+
+/**
+ * Names among `names` that the server already stores (POST /media/check, 10,000 per
+ * request; a chunk the API refuses as too large is split).
+ */
+async function checkImages({ api, names, concurrency = 1, shouldStop = () => false }) {
+  const existing = new Set();
+  const queue = chunk(names, CHECK_CHUNK);
+  await runPool({
+    size: concurrency,
+    next: () => (queue.length ? queue.shift() : null),
+    shouldStop,
+    worker: async (group) => {
+      let res;
+      try {
+        res = await api.request('POST', '/admin/import/media/check', { json: { files: group } });
+      } catch (error) {
+        if (group.length > 1 && (error.status === 400 || error.status === 413)) {
+          const half = Math.ceil(group.length / 2);
+          queue.unshift(group.slice(0, half), group.slice(half));
+          return;
+        }
+        throw error;
+      }
+      for (const name of (res.data && res.data.existing) || []) existing.add(name);
+    },
+  });
+  return existing;
+}
+
+/**
+ * Uploads `items` ([{ name, path }]) with `concurrency` parallel requests. A 4xx other
+ * than 401/403/429 fails that image only (reported, returned in `failed`); anything
+ * else still failing after the retries stops the run. Returns { uploaded, bytes, failed }.
+ */
+async function uploadImages({ api, datasetDir, items, state, report, concurrency, shouldStop, progress, phase = 'media' }) {
+  const failed = new Set();
+  let uploaded = 0;
+  let bytes = 0;
+  await runPool({
+    size: concurrency,
+    next: fromList(items),
+    shouldStop,
+    worker: async (item) => {
+      const [sha, ext] = item.name.split('.');
+      let buffer;
+      try {
+        buffer = await fs.promises.readFile(path.join(datasetDir, item.path));
+      } catch (error) {
+        failed.add(item.name);
+        report.failure(phase, item.name, `cannot read: ${error.message}`);
+        if (progress) progress.add();
+        return;
+      }
+      try {
+        const res = await api.request('POST', '/admin/import/media', {
+          lane: 'images',
+          bytes: buffer.length,
+          timeoutMs: Math.max(api.timeoutMs || 0, 300000),
+          form: () => {
+            const form = new FormData();
+            form.append('sha1', sha);
+            form.append('file', new Blob([buffer], { type: MIME[ext] }), item.name);
+            return form;
+          },
+        });
+        const url = (res.data && res.data.url) || imageUrlForName(item.name);
+        if (url !== imageUrlForName(item.name)) report.warning(phase, item.name, `server url ${url} differs from ${imageUrlForName(item.name)}`);
+        state.put('image', item.name, { url, existed: Boolean(res.data && res.data.existed) });
+        state.flush();
+        uploaded++;
+        bytes += buffer.length;
+      } catch (error) {
+        if (!error.status || error.status >= 500 || error.status === 429 || error.status === 401 || error.status === 403) throw error;
+        failed.add(item.name);
+        report.failure(phase, item.name, error.message);
+      }
+      if (progress) progress.add();
+    },
+  });
+  return { uploaded, bytes, failed };
+}
+
 /**
  * Makes sure every image in `items` ([{ name, path, size }]) is on the server:
  * names already acknowledged in the state are skipped, the rest are checked in bulk
- * and the missing ones uploaded one by one. Returns the set of names that failed.
+ * and the missing ones uploaded, `concurrency` at a time. Returns the set of names
+ * that failed.
  */
-async function syncImages({ api, datasetDir, items, state, report, log, shouldStop }) {
-  const failed = new Set();
+async function syncImages({ api, datasetDir, items, state, report, log, shouldStop, concurrency = 1, progress = null }) {
   const counts = report.phase('media');
   counts.referenced = items.length;
-  const todo = items.filter((item) => !state.has('image', item.name));
+  const todo = items.filter((item) => !state.acknowledged('image', item.name));
   counts.alreadyUploaded = items.length - todo.length;
 
+  const existing = todo.length ? await checkImages({ api, names: todo.map((i) => i.name), shouldStop }) : new Set();
   const missing = [];
-  for (const group of chunk(todo, 500)) {
-    if (shouldStop()) break;
-    const res = await api.request('POST', '/admin/import/media/check', { json: { files: group.map((i) => i.name) } });
-    const existing = new Set((res.data && res.data.existing) || []);
-    for (const item of group) {
-      if (existing.has(item.name)) {
-        state.put('image', item.name, { url: imageUrlForName(item.name), existed: true });
-        counts.existing = (counts.existing || 0) + 1;
-      } else {
-        missing.push(item);
-      }
-    }
-    state.flush();
-  }
-  log(`  ${counts.alreadyUploaded} known from state, ${counts.existing || 0} already on the server, ${missing.length} to upload`);
-
-  let uploaded = 0;
-  let bytes = 0;
-  for (const item of missing) {
-    if (shouldStop()) break;
-    const [sha, ext] = item.name.split('.');
-    let buffer;
-    try {
-      buffer = fs.readFileSync(path.join(datasetDir, item.path));
-    } catch (error) {
-      failed.add(item.name);
-      report.failure('media', item.name, `cannot read: ${error.message}`);
-      continue;
-    }
-    try {
-      const res = await api.request('POST', '/admin/import/media', {
-        bytes: buffer.length,
-        timeoutMs: 300000,
-        form: () => {
-          const form = new FormData();
-          form.append('sha1', sha);
-          form.append('file', new Blob([buffer], { type: MIME[ext] }), item.name);
-          return form;
-        },
-      });
-      const url = (res.data && res.data.url) || imageUrlForName(item.name);
-      if (url !== imageUrlForName(item.name)) report.warning('media', item.name, `server url ${url} differs from ${imageUrlForName(item.name)}`);
-      state.put('image', item.name, { url, existed: Boolean(res.data && res.data.existed) });
-      uploaded++;
-      bytes += buffer.length;
-      counts.uploaded = uploaded;
-      if (uploaded % 20 === 0) state.flush();
-      if (uploaded % 100 === 0) log(`  uploaded ${uploaded}/${missing.length} images (${(bytes / 1048576).toFixed(0)} MB)`);
-    } catch (error) {
-      if (!error.status || error.status >= 500 || error.status === 429 || error.status === 401 || error.status === 403) throw error;
-      failed.add(item.name);
-      report.failure('media', item.name, error.message);
+  for (const item of todo) {
+    if (existing.has(item.name)) {
+      state.put('image', item.name, { url: imageUrlForName(item.name), existed: true });
+      counts.existing = (counts.existing || 0) + 1;
+    } else {
+      missing.push(item);
     }
   }
   state.flush();
-  counts.failed = failed.size;
-  counts.uploadedBytes = bytes;
-  return failed;
+  log(`  ${counts.alreadyUploaded} known from state, ${counts.existing || 0} already on the server, ${missing.length} to upload`);
+  if (shouldStop()) return new Set();
+
+  if (progress) progress.begin('media', missing.length, 'uploads');
+  const result = await uploadImages({ api, datasetDir, items: missing, state, report, concurrency, shouldStop, progress });
+  if (progress) progress.end();
+  state.flush();
+  counts.uploaded = result.uploaded;
+  counts.failed = result.failed.size;
+  counts.uploadedBytes = result.bytes;
+  return result.failed;
 }
 
-module.exports = { verifyImages, syncImages, imageName, imageUrlForName, MIME, MAX_BYTES, URL_PREFIX };
+module.exports = { verifyImages, syncImages, checkImages, uploadImages, imageName, imageUrlForName, MIME, MAX_BYTES, URL_PREFIX };

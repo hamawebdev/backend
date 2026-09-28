@@ -8,15 +8,16 @@ const { verifyImages, syncImages, imageName } = require('./images');
 const { StateStore } = require('./state');
 const { ApiClient } = require('./api');
 const { Report } = require('./report');
+const { Progress } = require('./progress');
 const { compare, formatTable } = require('./reconcile');
-const { chunk, formatDuration } = require('./util');
+const { sendHierarchy, sendQuestions, sendExams, hierarchyHash, COURSES_PER_HIERARCHY_REQUEST, EXAMS_PER_REQUEST } = require('./send');
+const { phaseVerify, fetchQuestionState, STATE_QUERY_SIZE } = require('./verify');
+const { formatDuration } = require('./util');
 
-const PHASES = ['hierarchy', 'media', 'questions', 'exams', 'reconcile'];
-const COURSES_PER_HIERARCHY_REQUEST = 2000;
-const STATE_QUERY_SIZE = 5000;
-const EXAMS_PER_REQUEST = 50;
-const MIN_BATCH = 20;
-const MAX_BATCH_BYTES = 4 * 1024 * 1024;
+// verify is the final check; reconcile alone (--phases reconcile) only prints the totals
+// table, and is part of verify when both run
+const PHASES = ['hierarchy', 'media', 'questions', 'exams', 'verify', 'reconcile'];
+const MEDIA_CHECK_SIZE = 10000;
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 
@@ -45,6 +46,7 @@ function moduleTable(dataset, plan) {
   return lines.join('\n');
 }
 
+
 function summarisePlan(plan, dataset, state, options) {
   const t = plan.totals;
   const types = {};
@@ -54,22 +56,28 @@ function summarisePlan(plan, dataset, state, options) {
     const s = state.get('question', i.payload.sourceKey);
     return s && s.hash === i.hash;
   }).length;
-  const imagesKnown = plan.images.filter((i) => state.has('image', i.name)).length;
+  const imagesKnown = plan.images.filter((i) => state.acknowledged('image', i.name)).length;
+  const concurrency = options.concurrency || 1;
+  const imageConcurrency = options.imageConcurrency || 1;
   const questionBatches = Math.ceil((plan.questions.length - knownSame) / options.batch);
-  const examBatches = Math.ceil(plan.exams.length / EXAMS_PER_REQUEST);
-  const hierarchyRequests = Math.max(1, Math.ceil(h.courses.length / COURSES_PER_HIERARCHY_REQUEST));
-  const checkRequests = Math.ceil((plan.images.length - imagesKnown) / 500);
+  const examsKnown = plan.exams.filter((e) => (state.get('exam', e.sourceKey) || {}).hash === e.hash).length;
+  const examBatches = Math.ceil((plan.exams.length - examsKnown) / EXAMS_PER_REQUEST);
+  const hierarchyUnchanged = !options.force && (state.get('hierarchy', 'hierarchy') || {}).hash === hierarchyHash(h, options.updateHierarchy);
+  const hierarchyRequests = hierarchyUnchanged ? 0 : Math.max(1, Math.ceil(h.courses.length / COURSES_PER_HIERARCHY_REQUEST));
+  const imageUploads = plan.images.length - imagesKnown;
+  const checkRequests = Math.ceil(imageUploads / MEDIA_CHECK_SIZE);
   const stateRequests = state.loaded ? 0 : Math.ceil(plan.questions.length / STATE_QUERY_SIZE);
-  const requests = 1 + hierarchyRequests + checkRequests + (plan.images.length - imagesKnown) + stateRequests + questionBatches + examBatches + 1;
+  const verifyRequests = Math.ceil(plan.questions.length / STATE_QUERY_SIZE) + Math.ceil(plan.images.length / MEDIA_CHECK_SIZE) + 1;
+  const requests = 1 + hierarchyRequests + checkRequests + imageUploads + stateRequests + questionBatches + examBatches + verifyRequests;
   const lines = [
     `Plan (${plan.mode}):`,
     `  questions      ${fmt(t.questions)} (published ${fmt(t.published)}, unpublished ${fmt(t.unpublished)}, with English ${fmt(t.withEnglish)})`,
     `  types          ${Object.entries(types).sort().map(([k, v]) => `${k} ${fmt(v)}`).join(', ')}`,
-    `  hierarchy      ${h.universities.length} universities, ${h.sources.length} sources, ${h.studyPacks.length} study packs, ${h.unites.length} unites, ${fmt(h.modules.length)} modules, ${fmt(h.courses.length)} courses`,
+    `  hierarchy      ${h.universities.length} universities, ${h.sources.length} sources, ${h.studyPacks.length} study packs, ${h.unites.length} unites, ${fmt(h.modules.length)} modules, ${fmt(h.courses.length)} courses${hierarchyUnchanged ? ' (unchanged since the last acknowledged import)' : ''}`,
     `  images         ${fmt(plan.images.length)} distinct (${fmt(imagesKnown)} already acknowledged in the state file)`,
-    `  exams          ${fmt(plan.exams.length)} module exam papers (${plan.examErrors.length} without a usable year or module)`,
+    `  exams          ${fmt(plan.exams.length)} module exam papers (${plan.examErrors.length} without a usable year or module; ${fmt(examsKnown)} acknowledged in the state file)`,
     `  state          ${state.loaded ? `${fmt(knownSame)} questions unchanged since the last acknowledged import` : 'no state file yet (the API will be asked for known hashes)'}`,
-    `  requests       about ${fmt(requests)} (at least ${formatDuration(requests * options.minDelayMs)} at ${options.minDelayMs} ms between requests, before server time)`,
+    `  requests       about ${fmt(requests)}: ${fmt(questionBatches)} question batches of up to ${options.batch} (${concurrency} in flight), at most ${fmt(imageUploads)} image uploads (${imageConcurrency} in flight), ${fmt(examBatches)} exam batches, ${fmt(verifyRequests)} to verify${options.minDelayMs ? `; at least ${options.minDelayMs} ms between request starts` : ''}`,
     '',
     countTable('By source (university x kind):', t.bySource),
     '',
@@ -84,7 +92,10 @@ function summarisePlan(plan, dataset, state, options) {
     lines.push('', 'Sample coverage:');
     for (const [name, value] of Object.entries(plan.coverage)) lines.push(`  ${name.padEnd(55)} ${value || 'NOT FOUND'}`);
   }
-  return { text: lines.join('\n'), estimate: { requests, questionBatches, examBatches, hierarchyRequests, imageChecks: checkRequests, stateRequests, unchangedQuestions: knownSame } };
+  return {
+    text: lines.join('\n'),
+    estimate: { requests, questionBatches, examBatches, hierarchyRequests, imageChecks: checkRequests, imageUploads, stateRequests, verifyRequests, unchangedQuestions: knownSame },
+  };
 }
 
 // Never let credentials reach the report
@@ -95,34 +106,8 @@ function sanitizeOptions(options) {
   return rest;
 }
 
-async function phaseHierarchy({ api, plan, options, report, log }) {
-  const counts = report.phase('hierarchy');
-  const h = plan.hierarchy;
-  const groups = ['universities', 'sources', 'studyPacks', 'unites', 'modules', 'courses'];
-  for (const g of groups) counts[g] = h[g].length;
-  const courseChunks = h.courses.length ? chunk(h.courses, COURSES_PER_HIERARCHY_REQUEST) : [[]];
-  let missing = 0;
-  for (let i = 0; i < courseChunks.length; i++) {
-    const body = { ...h, courses: courseChunks[i], updateExisting: Boolean(options.updateHierarchy) };
-    const res = await api.request('PUT', '/admin/import/hierarchy', { json: body });
-    const data = res.data || {};
-    for (const g of groups) {
-      const sent = g === 'courses' ? courseChunks[i] : h[g];
-      const ids = data[g] || {};
-      for (const e of sent) {
-        if (ids[e.sourceKey] === undefined || ids[e.sourceKey] === null) {
-          missing++;
-          report.warning('hierarchy', e.sourceKey, `no id returned for ${g} entry`);
-        }
-      }
-    }
-    log(`  hierarchy request ${i + 1}/${courseChunks.length} done`);
-  }
-  counts.requests = courseChunks.length;
-  counts.missingIds = missing;
-}
-
-async function phaseQuestions({ api, plan, state, options, report, log, deferred, shouldStop }) {
+async function phaseQuestions(ctx, deferred) {
+  const { plan, state, options, report, log, shouldStop, progress } = ctx;
   const counts = report.phase('questions');
   counts.total = plan.questions.length;
   const ready = [];
@@ -140,18 +125,16 @@ async function phaseQuestions({ api, plan, state, options, report, log, deferred
     const unknown = ready.filter((i) => !state.has('question', i.payload.sourceKey)).map((i) => i.payload.sourceKey);
     if (unknown.length) {
       log(`  asking the API for the state of ${fmt(unknown.length)} questions not in the state file`);
+      const server = await fetchQuestionState(ctx, unknown);
+      if (shouldStop()) return;
       let known = 0;
-      for (const keys of chunk(unknown, STATE_QUERY_SIZE)) {
-        if (shouldStop()) return;
-        const res = await api.request('POST', '/admin/import/questions/state', { json: { sourceKeys: keys } });
-        for (const it of (res.data && res.data.items) || []) {
-          if (it && it.sourceKey && it.contentHash) {
-            state.put('question', it.sourceKey, { hash: it.contentHash, id: it.id });
-            known++;
-          }
+      for (const [key, s] of server) {
+        if (s.contentHash) {
+          state.put('question', key, { hash: s.contentHash, id: s.id });
+          known++;
         }
-        state.flush();
       }
+      state.flush();
       counts.knownFromApi = known;
     }
   }
@@ -159,81 +142,16 @@ async function phaseQuestions({ api, plan, state, options, report, log, deferred
   const pending = ready.filter((i) => options.force || (state.get('question', i.payload.sourceKey) || {}).hash !== i.hash);
   counts.skippedUnchanged = ready.length - pending.length;
   counts.sent = 0;
-  log(`  ${fmt(pending.length)} to send, ${fmt(counts.skippedUnchanged)} unchanged`);
-
-  const queue = [];
-  let size = options.batch;
-  let fast = 0;
-  let index = 0;
-  const started = Date.now();
-  let lastLog = 0;
-  const nextBatch = () => {
-    if (queue.length) return queue.shift();
-    const batch = [];
-    let bytes = 0;
-    while (index < pending.length && batch.length < size) {
-      const item = pending[index];
-      const itemBytes = item.bytes || (item.bytes = Buffer.byteLength(JSON.stringify(item.payload)));
-      if (batch.length && bytes + itemBytes > MAX_BATCH_BYTES) break;
-      batch.push(item);
-      bytes += itemBytes;
-      index++;
-    }
-    return batch.length ? batch : null;
-  };
-
-  for (let batch = nextBatch(); batch; batch = nextBatch()) {
-    if (shouldStop()) return;
-    let res;
-    try {
-      res = await api.request('PUT', '/admin/import/questions', { json: { questions: batch.map((i) => i.payload) } });
-    } catch (error) {
-      if (error.status && error.status >= 400 && error.status < 500 && ![401, 403, 404, 429].includes(error.status)) {
-        if (batch.length > 1) {
-          const half = Math.ceil(batch.length / 2);
-          queue.unshift(batch.slice(0, half), batch.slice(half));
-          log(`  batch of ${batch.length} refused (${error.message}); splitting it`);
-        } else {
-          report.failure('questions', batch[0].payload.sourceKey, error.message);
-          counts.failed = (counts.failed || 0) + 1;
-        }
-        continue;
-      }
-      throw error;
-    }
-    counts.sent += batch.length;
-    const results = new Map(((res.data && res.data.results) || []).map((r) => [r.sourceKey, r]));
-    for (const item of batch) {
-      const r = results.get(item.payload.sourceKey);
-      if (!r) {
-        report.failure('questions', item.payload.sourceKey, 'no result returned for this question');
-        counts.failed = (counts.failed || 0) + 1;
-      } else if (r.action === 'failed') {
-        report.failure('questions', item.payload.sourceKey, r.error || 'failed');
-        counts.failed = (counts.failed || 0) + 1;
-      } else {
-        counts[r.action] = (counts[r.action] || 0) + 1;
-        state.put('question', item.payload.sourceKey, { hash: item.hash, id: r.id });
-      }
-    }
-    state.flush();
-
-    if (res.latency > options.slowMs) {
-      size = Math.max(MIN_BATCH, Math.floor(size / 2));
-      fast = 0;
-    } else if (++fast >= 3 && size < options.batch) {
-      size = Math.min(options.batch, size + Math.ceil(options.batch / 8));
-      fast = 0;
-    }
-    const done = counts.sent;
-    const rate = done / Math.max(1, Date.now() - started);
-    if (Date.now() - lastLog < 10000 && index < pending.length) continue;
-    lastLog = Date.now();
-    log(`  questions ${fmt(done)}/${fmt(pending.length)} sent (created ${fmt(counts.created)}, updated ${fmt(counts.updated)}, unchanged ${fmt(counts.unchanged)}, failed ${fmt(counts.failed)}); batch ${size}; ~${formatDuration((pending.length - done) / rate)} left`);
-  }
+  log(`  ${fmt(pending.length)} to send, ${fmt(counts.skippedUnchanged)} unchanged (batches of up to ${options.batch}, ${options.concurrency} in flight)`);
+  if (!pending.length) return;
+  if (progress) progress.begin('questions', pending.length, 'questions');
+  await sendQuestions(ctx, pending, counts);
+  if (progress) progress.end();
+  log(`  questions ${fmt(counts.sent)}/${fmt(pending.length)} sent (created ${fmt(counts.created)}, updated ${fmt(counts.updated)}, unchanged ${fmt(counts.unchanged)}, failed ${fmt(counts.failed)})`);
 }
 
-async function phaseExams({ api, plan, state, options, report, log, shouldStop }) {
+async function phaseExams(ctx) {
+  const { plan, state, options, report, log, progress } = ctx;
   const counts = report.phase('exams');
   counts.total = plan.exams.length + plan.examErrors.length;
   for (const e of plan.examErrors) {
@@ -242,47 +160,14 @@ async function phaseExams({ api, plan, state, options, report, log, shouldStop }
   }
   const pending = plan.exams.filter((e) => options.force || (state.get('exam', e.sourceKey) || {}).hash !== e.hash);
   counts.skippedUnchanged = plan.exams.length - pending.length;
-  const queue = chunk(pending, EXAMS_PER_REQUEST);
-  while (queue.length) {
-    if (shouldStop()) return;
-    const batch = queue.shift();
-    let res;
-    try {
-      res = await api.request('PUT', '/admin/import/exams', { json: { exams: batch.map((e) => e.payload) } });
-    } catch (error) {
-      if (error.status && error.status >= 400 && error.status < 500 && ![401, 403, 404, 429].includes(error.status)) {
-        if (batch.length > 1) {
-          const half = Math.ceil(batch.length / 2);
-          queue.unshift(batch.slice(0, half), batch.slice(half));
-        } else {
-          report.failure('exams', batch[0].sourceKey, error.message);
-          counts.failed = (counts.failed || 0) + 1;
-        }
-        continue;
-      }
-      throw error;
-    }
-    const results = new Map(((res.data && res.data.results) || []).map((r) => [r.sourceKey, r]));
-    for (const exam of batch) {
-      const r = results.get(exam.sourceKey);
-      const missing = r && (Array.isArray(r.missingQuestions) ? r.missingQuestions.length : Number(r.missingQuestions) || 0);
-      if (!r || r.action === 'failed') {
-        report.failure('exams', exam.sourceKey, (r && r.error) || 'no result returned for this exam');
-        counts.failed = (counts.failed || 0) + 1;
-      } else {
-        counts[r.action] = (counts[r.action] || 0) + 1;
-        if (missing) {
-          const list = Array.isArray(r.missingQuestions) ? `: ${r.missingQuestions.slice(0, 20).join(', ')}` : '';
-          report.failure('exams', exam.sourceKey, `${missing} question(s) missing on the server${list}`);
-          counts.incomplete = (counts.incomplete || 0) + 1;
-        } else {
-          state.put('exam', exam.sourceKey, { hash: exam.hash, id: r.id });
-        }
-      }
-    }
-    state.flush();
-    log(`  exams ${fmt(counts.created)} created, ${fmt(counts.updated)} updated, ${fmt(counts.unchanged)} unchanged, ${fmt(counts.failed)} failed`);
+  if (!pending.length) {
+    log(`  ${fmt(counts.skippedUnchanged)} unchanged, none to send`);
+    return;
   }
+  if (progress) progress.begin('exams', pending.length, 'exams');
+  await sendExams(ctx, pending, counts);
+  if (progress) progress.end();
+  log(`  exams ${fmt(counts.created)} created, ${fmt(counts.updated)} updated, ${fmt(counts.unchanged)} unchanged, ${fmt(counts.failed)} failed, ${fmt(counts.incomplete)} incomplete`);
 }
 
 async function phaseReconcile({ api, plan, report, log }) {
@@ -295,29 +180,56 @@ async function phaseReconcile({ api, plan, report, log }) {
   return result.mismatches;
 }
 
+// Defaults of the CLI (import.js), for callers of run() that leave options out
+const DEFAULTS = { batch: 200, concurrency: 4, imageConcurrency: 8, minDelayMs: 0, maxDelayMs: 60000, slowMs: 30000, timeoutMs: 180000, retries: 8, repairRounds: 3, progressSec: 30 };
+
 /**
  * Runs the importer. Returns the process exit code:
- * 0 ok, 1 fatal error / invalid dataset, 2 some items failed, 3 reconciliation mismatch.
+ * 0 ok, 1 fatal error / invalid dataset, 2 some items failed, 3 reconciliation mismatch,
+ * 4 verification failed (items still missing or different on the server after the repairs),
+ * 130 interrupted.
  */
-async function run(options, io = {}) {
+async function run(givenOptions, io = {}) {
+  const options = { ...givenOptions };
+  for (const [k, v] of Object.entries(DEFAULTS)) if (options[k] === undefined || options[k] === null) options[k] = v;
   const log = io.log || ((m) => console.log(m));
   const report = new Report(sanitizeOptions(options));
+  const startedAt = Date.now();
   let stopping = false;
   const shouldStop = () => stopping;
   const onSignal = () => {
     if (stopping) process.exit(130);
     stopping = true;
-    log('Stopping after the current request (Ctrl-C again to quit now)...');
+    log('Stopping after the requests in flight (signal again to quit now)...');
   };
-  if (io.handleSignals !== false) process.on('SIGINT', onSignal);
+  if (io.handleSignals !== false) {
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
+  }
+  let state;
+  let progress = null;
+  let verdict = null;
   const finish = (code) => {
-    if (io.handleSignals !== false) process.removeListener('SIGINT', onSignal);
+    if (progress) progress.stop();
+    if (io.handleSignals !== false) {
+      process.removeListener('SIGINT', onSignal);
+      process.removeListener('SIGTERM', onSignal);
+    }
+    report.set('seconds', Math.round((Date.now() - startedAt) / 100) / 10);
     report.write(options.report, code);
+    if (state) state.unlock();
     if (options.report) log(`Report written to ${options.report}`);
+    // The verdict is the last line of a run
+    if (verdict) log(verdict);
     return code;
   };
+  const timed = async (name, fn) => {
+    const t = Date.now();
+    const result = await fn();
+    report.phase(name).seconds = Math.round((Date.now() - t) / 100) / 10;
+    return result;
+  };
 
-  let state;
   try {
     const t0 = Date.now();
     log(`Reading ${options.dataset}`);
@@ -333,7 +245,7 @@ async function run(options, io = {}) {
       return finish(1);
     }
 
-    state = new StateStore(options.state, { readOnly: options.dryRun }).load();
+    state = new StateStore(options.state, { readOnly: options.dryRun }).lock().load();
     if (!options.dryRun && state.compact()) log('  state file compacted');
 
     const selection = selectRecords(dataset, options.mode);
@@ -342,13 +254,13 @@ async function run(options, io = {}) {
     const imagePaths = referencedImagePaths(selection.records);
     if (fs.existsSync(imagesDir)) {
       log(`Checking ${fmt(imagePaths.length)} images${options.skipImageHash ? ' (no hashing)' : ''}`);
-      const known = new Set([...state.entries.values()].filter((e) => e.type === 'image').map((e) => e.key));
+      const known = new Set([...state.entries.values()].filter((e) => e.type === 'image' && !e.missing).map((e) => e.key));
       imageStatus = verifyImages(options.dataset, imagePaths, { hash: !options.skipImageHash, known, log });
       const bad = [...imageStatus.values()].filter((s) => !s.ok);
       report.phase('validate').invalidImages = bad.length;
       for (const [p, s] of imageStatus) if (!s.ok) report.warning('validate', p, s.reason);
       log(`  ${bad.length} image(s) unusable`);
-    } else if (imagePaths.length && !options.dryRun && (!options.phases || options.phases.includes('media'))) {
+    } else if (imagePaths.length && !options.dryRun && (!options.phases || options.phases.includes('media') || options.phases.includes('verify'))) {
       log(`No images directory at ${imagesDir}.`);
       return finish(1);
     } else if (imagePaths.length) {
@@ -381,45 +293,66 @@ async function run(options, io = {}) {
       baseUrl: options.api,
       email: options.email,
       password: options.password,
+      concurrency: options.concurrency,
+      imageConcurrency: options.imageConcurrency,
       minDelayMs: options.minDelayMs,
       maxDelayMs: options.maxDelayMs,
       slowMs: options.slowMs,
       retries: options.retries,
+      timeoutMs: options.timeoutMs,
       log,
       fetch: io.fetch,
     });
     report.set('api', api.stats);
+    progress = new Progress({ log, intervalMs: Math.round(options.progressSec * 1000), api }).start();
     log(`Logging in to ${options.api}`);
     await api.login();
 
+    const ctx = { api, plan, state, options, report, log, shouldStop, progress, datasetDir: options.dataset };
     const phases = options.phases || PHASES;
     let deferred = new Set();
     if (phases.includes('hierarchy') && !stopping) {
       log('Phase hierarchy');
-      await phaseHierarchy({ api, plan, options, report, log });
+      await timed('hierarchy', () => sendHierarchy(ctx));
     }
     if (phases.includes('media') && !stopping) {
-      log(`Phase media (${fmt(plan.images.length)} images)`);
-      deferred = await syncImages({ api, datasetDir: options.dataset, items: plan.images, state, report, log, shouldStop });
+      log(`Phase media (${fmt(plan.images.length)} images, ${options.imageConcurrency} uploads in flight)`);
+      deferred = await timed('media', () => syncImages({ api, datasetDir: options.dataset, items: plan.images, state, report, log, shouldStop, concurrency: options.imageConcurrency, progress }));
     }
     if (phases.includes('questions') && !stopping) {
       log(`Phase questions (${fmt(plan.questions.length)})`);
-      await phaseQuestions({ api, plan, state, options, report, log, deferred, shouldStop });
+      await timed('questions', () => phaseQuestions(ctx, deferred));
     }
     if (phases.includes('exams') && !stopping) {
       log(`Phase exams (${fmt(plan.exams.length)})`);
-      await phaseExams({ api, plan, state, options, report, log, shouldStop });
+      await timed('exams', () => phaseExams(ctx));
     }
     let mismatches = 0;
-    if (phases.includes('reconcile') && !stopping) {
+    let itemsClean = true;
+    let verifiedKeys = null;
+    if (phases.includes('verify') && !stopping) {
+      log('Phase verify');
+      const result = await timed('verify', () => phaseVerify(ctx, plan));
+      ({ mismatches, itemsClean, verifiedKeys } = result);
+      verdict = result.verdict;
+    } else if (phases.includes('reconcile') && !stopping) {
       log('Phase reconcile');
-      mismatches = await phaseReconcile({ api, plan, report, log });
+      mismatches = await timed('reconcile', () => phaseReconcile(ctx));
     }
     state.flush();
-    if (stopping) return finish(130);
+    api.updateConcurrencyStats();
+    if (stopping) {
+      verdict = null;
+      return finish(130);
+    }
     const failures = report.data.failureCount;
-    log(`Done: ${failures} failure(s), ${mismatches} reconciliation mismatch(es), ${api.stats.requests} requests.`);
-    return finish(mismatches ? 3 : failures ? 2 : 0);
+    // After a verification, a failure whose item ended up verified was repaired
+    const unresolved = verifiedKeys
+      ? report.data.failures.filter((f) => !verifiedKeys.has(f.key)).length + (failures - report.data.failures.length)
+      : failures;
+    report.set('unresolvedFailures', unresolved);
+    log(`Done in ${formatDuration(Date.now() - startedAt)}: ${failures} failure(s)${verifiedKeys ? ` (${unresolved} unresolved)` : ''}, ${mismatches} reconciliation mismatch(es), ${fmt(api.stats.requests)} requests, ${fmt(api.stats.retries)} retries.`);
+    return finish(!itemsClean ? 4 : mismatches ? 3 : unresolved ? 2 : 0);
   } catch (error) {
     if (state) {
       try {
@@ -428,6 +361,7 @@ async function run(options, io = {}) {
         log(`Could not write the state file: ${flushError.message}`);
       }
     }
+    verdict = null;
     report.failure('fatal', '-', error.message);
     log(`Fatal: ${error.message}`);
     return finish(1);

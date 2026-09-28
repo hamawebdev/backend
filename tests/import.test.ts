@@ -2,8 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import * as jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import app from '../src/app';
+import { container } from '../src/config/container';
 import { PrismaClient, YearLevel } from '@prisma/client';
+import MediaHandler, { FileType } from '../src/core/utils/media.utils';
 
 const prisma = new PrismaClient();
 const tag = `imp${Date.now()}`;
@@ -496,5 +500,257 @@ describe('Admin endpoints the UI calls', () => {
       .send({ name: 'Module described', description: 'New description' });
     expect(edit.status).toBe(200);
     expect((await prisma.module.findUnique({ where: { id: moduleRes.body.id } }))!.description).toBe('New description');
+  });
+});
+
+describe('Bulk question import (the set-based path of PUT /questions)', () => {
+  const sha = (salt: string, i: number) => crypto.createHash('sha1').update(`${tag}:${salt}:${i}`).digest('hex');
+  // A realistic imported question: 5 answers sent out of position order, English on
+  // even numbers, question images on every third, explanation images on every fifth
+  const bulkQuestion = (name: string, i: number, overrides: Record<string, unknown> = {}) => {
+    const english = i % 2 === 0;
+    return {
+      sourceKey: key(`bulk:${name}`),
+      contentHash: `b1-${name}`,
+      courseKey: key(i % 2 ? 'course:os' : 'course:myo'),
+      universityKey: key('univ:setif'),
+      questionSourceKey: key('src:res-setif'),
+      examYear: 2000 + (i % 20),
+      yearLevel: 'ONE',
+      questionType: i % 4 === 0 ? 'MULTIPLE_CHOICE' : 'SINGLE_CHOICE',
+      isPublished: i % 7 !== 0,
+      questionText: `<p>Bulk ${name}</p>`,
+      ...(english ? { questionTextEn: `<p>Bulk ${name} (en)</p>`, explanationEn: `Explanation ${name}` } : {}),
+      explanation: `Explication ${name}`,
+      metadata: { origin: 'bulk', n: i },
+      tags: ['bulk', `t${i % 3}`],
+      repetitionCount: i % 4,
+      repetitionYears: [2015, 2019],
+      questionImages: i % 3 === 0 ? [`/api/v1/media/images/${sha('q', i)}.png`, `/api/v1/media/images/${sha('q2', i)}.jpg`] : [],
+      ...(i % 5 === 0 ? { explanationImages: [`/api/v1/media/images/${sha('e', i)}.png`] } : {}),
+      answers: [4, 2, 0, 3, 1].map(p => ({
+        position: p,
+        answerText: `${name}-${p}`,
+        ...(english ? { answerTextEn: `${name}-${p} (en)` } : {}),
+        isCorrect: p === i % 5,
+        ...(p === i % 5 ? { explanation: `why ${name}`, ...(english ? { explanationEn: `why ${name} (en)` } : {}) } : {})
+      })),
+      ...overrides
+    };
+  };
+  const stored = (keys: string[]) => prisma.question.findMany({
+    where: { sourceKey: { in: keys } },
+    include: {
+      questionAnswers: { orderBy: [{ position: 'asc' }, { id: 'asc' }] },
+      questionImages: { orderBy: { id: 'asc' } },
+      questionExplanationImages: { orderBy: { id: 'asc' } }
+    }
+  });
+
+  const batch = Array.from({ length: 200 }, (_, i) => bulkQuestion(String(i), i));
+  let batchIds: number[];
+
+  it('creates a batch of 200 new questions with their answers, positions, English and images, ids in request order', async () => {
+    const res = await putQuestions(batch);
+    expect(res.status).toBe(200);
+    expect(res.body.results).toEqual(batch.map(q => ({ sourceKey: q.sourceKey, id: expect.any(Number), action: 'created' })));
+    batchIds = res.body.results.map((r: any) => r.id);
+    expect(batchIds.every((id, i) => i === 0 || id > batchIds[i - 1])).toBe(true);
+
+    const rows = new Map((await stored(batch.map(q => q.sourceKey))).map(row => [row.sourceKey, row]));
+    expect(rows.size).toBe(200);
+    batch.forEach((q, i) => {
+      const row = rows.get(q.sourceKey)!;
+      const english = i % 2 === 0;
+      expect(row.id).toBe(batchIds[i]);
+      expect(row).toMatchObject({
+        contentHash: q.contentHash,
+        questionText: q.questionText,
+        questionTextEn: english ? `<p>Bulk ${i} (en)</p>` : null,
+        explanation: `Explication ${i}`,
+        explanationEn: english ? `Explanation ${i}` : null,
+        questionType: q.questionType,
+        isPublished: q.isPublished,
+        courseId: ids.courses[q.courseKey],
+        universityId: ids.universities[key('univ:setif')],
+        sourceId: ids.sources[key('src:res-setif')],
+        examYear: q.examYear,
+        yearLevel: 'ONE',
+        createdById: admin,
+        repetitionCount: i % 4,
+        tags: JSON.stringify(['bulk', `t${i % 3}`]),
+        repetitionYears: '[2015,2019]'
+      });
+      expect(JSON.parse(row.metadata!)).toEqual({ origin: 'bulk', n: i });
+      expect(row.updatedAt).toBeInstanceOf(Date);
+
+      const answers = row.questionAnswers;
+      expect(answers.map(a => a.position)).toEqual([0, 1, 2, 3, 4]);
+      expect(answers.map(a => a.answerText)).toEqual([0, 1, 2, 3, 4].map(p => `${i}-${p}`));
+      expect(answers.map(a => a.answerTextEn)).toEqual([0, 1, 2, 3, 4].map(p => (english ? `${i}-${p} (en)` : null)));
+      expect(answers.map(a => a.isCorrect)).toEqual([0, 1, 2, 3, 4].map(p => p === i % 5));
+      const correct = answers[i % 5];
+      expect(correct.explanation).toBe(`why ${i}`);
+      expect(correct.explanationEn).toBe(english ? `why ${i} (en)` : null);
+      expect(answers.filter(a => a !== correct).every(a => a.explanation === null && a.explanationEn === null)).toBe(true);
+      // Stored in position order, as one by one: ids ascend with the position
+      expect(answers.every((a, p) => p === 0 || a.id > answers[p - 1].id)).toBe(true);
+
+      expect(row.questionImages.map(image => image.imagePath)).toEqual(q.questionImages);
+      expect(row.questionExplanationImages.map(image => image.imagePath)).toEqual((q as any).explanationImages ?? []);
+    });
+  });
+
+  it('re-sending the same batch is all unchanged and writes nothing', async () => {
+    const answersBefore = await prisma.questionAnswer.count({ where: { questionId: { in: batchIds } } });
+    const updatedBefore = (await prisma.question.findMany({ where: { id: { in: batchIds } }, select: { id: true, updatedAt: true }, orderBy: { id: 'asc' } }));
+    const res = await putQuestions(batch);
+    expect(res.status).toBe(200);
+    expect(res.body.results).toEqual(batch.map((q, i) => ({ sourceKey: q.sourceKey, id: batchIds[i], action: 'unchanged' })));
+    expect(await prisma.questionAnswer.count({ where: { questionId: { in: batchIds } } })).toBe(answersBefore);
+    expect(await prisma.question.findMany({ where: { id: { in: batchIds } }, select: { id: true, updatedAt: true }, orderBy: { id: 'asc' } })).toEqual(updatedBefore);
+    expect(await prisma.question.count({ where: { sourceKey: { in: batch.map(q => q.sourceKey) } } })).toBe(200);
+  });
+
+  it('a mixed batch (new, unchanged, changed, invalid) gets the right action at each index', async () => {
+    const answerIdsBefore = (await stored([batch[1].sourceKey]))[0].questionAnswers.map(a => a.id);
+    const changed = bulkQuestion('1', 1, {
+      contentHash: 'b2-1',
+      questionText: '<p>Bulk 1 changed</p>',
+      questionTextEn: '<p>Bulk 1 changed (en)</p>',
+      answers: [0, 1, 2, 3, 4].map(p => ({ position: p, answerText: `1-${p} v2`, answerTextEn: `1-${p} v2 (en)`, isCorrect: p === 0 }))
+    });
+    const questions = [
+      bulkQuestion('mix-new', 1),
+      batch[0],
+      changed,
+      { sourceKey: key('bulk:mix-invalid'), questionText: 'no hash' },
+      bulkQuestion('mix-orphan', 2, { courseKey: key('course:missing') }),
+      bulkQuestion('mix-new', 1),
+      bulkQuestion('mix-big', 3, { metadata: { pad: 'x'.repeat(50001) } }),
+      bulkQuestion('mix-new2', 4)
+    ];
+    const res = await putQuestions(questions);
+    expect(res.status).toBe(200);
+    const results = res.body.results;
+    expect(results.map((r: any) => r.action)).toEqual(['created', 'unchanged', 'updated', 'failed', 'failed', 'failed', 'failed', 'created']);
+    expect(results.map((r: any) => r.sourceKey)).toEqual(questions.map(q => q.sourceKey));
+    expect(results[1].id).toBe(batchIds[0]);
+    expect(results[2].id).toBe(batchIds[1]);
+    expect(results[3]).toMatchObject({ id: null, error: expect.stringContaining('contentHash') });
+    expect(results[4]).toMatchObject({ id: null, error: expect.stringContaining('courseKey') });
+    expect(results[5]).toMatchObject({ id: null, error: expect.stringContaining('more than once') });
+    expect(results[6]).toMatchObject({ id: null, error: expect.stringContaining('metadata') });
+    expect(results[7].id).toBeGreaterThan(results[0].id);
+
+    const [updated] = await stored([batch[1].sourceKey]);
+    expect(updated).toMatchObject({ contentHash: 'b2-1', questionText: '<p>Bulk 1 changed</p>', questionTextEn: '<p>Bulk 1 changed (en)</p>', explanationEn: null });
+    expect(updated.questionAnswers.map(a => a.id)).toEqual(answerIdsBefore);
+    expect(updated.questionAnswers.map(a => a.answerTextEn)).toEqual([0, 1, 2, 3, 4].map(p => `1-${p} v2 (en)`));
+    const created = await stored([key('bulk:mix-new'), key('bulk:mix-new2')]);
+    expect(created.map(q => q.questionAnswers.length)).toEqual([5, 5]);
+    expect(await prisma.question.count({ where: { sourceKey: { in: [key('bulk:mix-orphan'), key('bulk:mix-big'), key('bulk:mix-invalid')] } } })).toBe(0);
+  });
+
+  it('a new question the database refuses fails alone: the others of the batch are created one by one', async () => {
+    const questions = [0, 1, 2, 3].map(i => bulkQuestion(`nul:${i}`, i));
+    // PostgreSQL text cannot hold NUL: the bulk insert fails, then only this question does
+    questions[2] = bulkQuestion('nul:2', 2, { questionText: 'bad \u0000 text' });
+    const res = await putQuestions(questions);
+    expect(res.status).toBe(200);
+    expect(res.body.results.map((r: any) => r.action)).toEqual(['created', 'created', 'failed', 'created']);
+    expect(res.body.results[2]).toMatchObject({ sourceKey: key('bulk:nul:2'), id: null, error: expect.any(String) });
+    const rows = await stored(questions.map(q => q.sourceKey));
+    expect(rows.map(q => q.sourceKey).sort()).toEqual([0, 1, 3].map(i => key(`bulk:nul:${i}`)).sort());
+    // Nothing of the rolled-back bulk insert is left: exactly the answers and images of one import
+    expect(rows.map(q => q.questionAnswers.length)).toEqual([5, 5, 5]);
+    expect(rows.find(q => q.sourceKey === key('bulk:nul:0'))!.questionImages).toHaveLength(2);
+  });
+
+  it('a question a concurrent import is creating is waited for, then compared and updated like a stored one', async () => {
+    const same = bulkQuestion('race:same', 1);
+    const other = bulkQuestion('race:other', 2);
+    const free = bulkQuestion('race:free', 3);
+    let pending: Promise<any> | undefined;
+    let waited = false;
+    const heldIds = await prisma.$transaction(async tx => {
+      // Created by "another import", not committed yet
+      const a = await tx.question.create({ data: { sourceKey: same.sourceKey, contentHash: same.contentHash, questionText: 'held', createdById: admin } });
+      const b = await tx.question.create({ data: { sourceKey: other.sourceKey, contentHash: 'older', questionText: 'held', createdById: admin } });
+      pending = putQuestions([free, same, other]).then(res => res);
+      // The request's insert must now wait on this transaction's rows
+      for (let i = 0; i < 100 && !waited; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const [row] = await prisma.$queryRaw<Array<{ n: bigint }>>`
+          SELECT count(*) AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+        waited = Number(row.n) > 0;
+      }
+      return [a.id, b.id];
+    }, { maxWait: 10000, timeout: 20000 });
+    expect(waited).toBe(true);
+
+    const res = await pending!;
+    expect(res.status).toBe(200);
+    expect(res.body.results).toEqual([
+      { sourceKey: free.sourceKey, id: expect.any(Number), action: 'created' },
+      { sourceKey: same.sourceKey, id: heldIds[0], action: 'unchanged' },
+      { sourceKey: other.sourceKey, id: heldIds[1], action: 'updated' }
+    ]);
+    const rows = new Map((await stored([free.sourceKey, same.sourceKey, other.sourceKey])).map(q => [q.sourceKey, q]));
+    expect(rows.get(free.sourceKey)!.questionAnswers).toHaveLength(5);
+    expect(rows.get(same.sourceKey)!.questionAnswers).toHaveLength(0);
+    expect(rows.get(other.sourceKey)).toMatchObject({ contentHash: other.contentHash, questionText: other.questionText });
+    expect(rows.get(other.sourceKey)!.questionAnswers.map(a => a.answerText)).toEqual([0, 1, 2, 3, 4].map(p => `race:other-${p}`));
+  });
+
+  it('two requests creating the same questions at once store each question once, and every item gets its result', async () => {
+    const questions = Array.from({ length: 40 }, (_, i) => bulkQuestion(`dup:${i}`, i));
+    const [first, second] = await Promise.all([putQuestions(questions), putQuestions(questions)]);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    questions.forEach((q, i) => {
+      const pair = [first.body.results[i], second.body.results[i]];
+      expect(pair.map(r => r.sourceKey)).toEqual([q.sourceKey, q.sourceKey]);
+      expect(pair.map(r => r.action).sort()).toEqual(['created', 'unchanged']);
+      expect(pair[0].id).toBe(pair[1].id);
+    });
+    const rows = await stored(questions.map(q => q.sourceKey));
+    expect(rows).toHaveLength(40);
+    expect(rows.every(q => q.questionAnswers.length === 5)).toBe(true);
+    expect(rows.reduce((n, q) => n + q.questionImages.length, 0)).toBe(questions.reduce((n, q) => n + q.questionImages.length, 0));
+  });
+
+  it('media: parallel uploads of one new image store it once; a stored file with other bytes of the same size is replaced', async () => {
+    const directory = container.resolve<MediaHandler>('mediaHandler').getDirectory(FileType.IMAGE);
+    const content = crypto.randomBytes(300 * 1024);
+    const sha1 = crypto.createHash('sha1').update(content).digest('hex');
+    const file = path.join(directory, `${sha1}.png`);
+    const upload = () => api().post('/api/v1/admin/import/media').set('Authorization', tokenFor(admin))
+      .field('sha1', sha1).attach('file', content, { filename: `${sha1}.png`, contentType: 'image/png' });
+
+    const parallel = await Promise.all(Array.from({ length: 6 }, () => upload()));
+    for (const res of parallel) {
+      expect([200, 201]).toContain(res.status);
+      expect(res.body).toMatchObject({ sha1, size: content.length, existed: res.status === 200 });
+    }
+    expect(parallel.some(res => res.status === 201)).toBe(true);
+    expect(fs.readFileSync(file).equals(content)).toBe(true);
+    expect(fs.readdirSync(directory).filter(name => name.startsWith(`.${sha1}.png.`))).toEqual([]);
+    expect((await upload()).body.existed).toBe(true);
+
+    // Damaged in place (same size, other bytes): detected and rewritten
+    fs.writeFileSync(file, crypto.randomBytes(content.length));
+    const repaired = await upload();
+    expect(repaired.status).toBe(201);
+    expect(repaired.body.existed).toBe(false);
+    expect(fs.readFileSync(file).equals(content)).toBe(true);
+    // Another size: rewritten without reading it
+    fs.writeFileSync(file, content.subarray(0, 1000));
+    expect((await upload()).status).toBe(201);
+    expect(fs.readFileSync(file).equals(content)).toBe(true);
+    const again = await upload();
+    expect(again.status).toBe(200);
+    expect(again.body.existed).toBe(true);
+    fs.unlinkSync(file);
   });
 });

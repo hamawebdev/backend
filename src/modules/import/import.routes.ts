@@ -24,10 +24,27 @@ import {
  *   POST /media/check      {files: ["<sha1>.<ext>"]} -> {existing: [...]}
  *   PUT  /hierarchy        universities, sources, studyPacks, unites, modules, courses
  *                          -> {universities: {sourceKey: id}, sources, studyPacks, unites, modules, courses}
- *   PUT  /questions        {questions: [<= 200]} -> {results: [{sourceKey, id, action, error?}]}
+ *   PUT  /questions        {questions: [<= 200]} -> {results: [{sourceKey, id, action, error?}]},
+ *                          results[i] for questions[i]
  *   POST /questions/state  {sourceKeys: [<= 5000]} -> {items: [{sourceKey, id, contentHash}]}
  *   PUT  /exams            {exams: [<= 50]} -> {results: [{sourceKey, id, action, missingQuestions, error?}]}
  *   GET  /stats            counts of the imported content
+ *
+ * PUT /questions is set-based: one lookup query per kind of key for the whole
+ * request, no write at all for unchanged questions (same contentHash), one
+ * transaction for all the new ones (about ten statements per request instead
+ * of about five per question), and changed ones updated one by one,
+ * IMPORT_QUESTION_CONCURRENCY (default 2, at most 4) at a time.
+ *
+ * Database connections: Prisma's pool holds num_cpus * 2 + 1 connections unless
+ * DATABASE_URL sets connection_limit, and every API request shares it. An import
+ * request holds one connection while it looks up and inserts, and up to
+ * IMPORT_QUESTION_CONCURRENCY while it imports questions one by one (updates,
+ * and new ones after a failed bulk insert). Keep (parallel import requests)
+ * x (connections per request) at half the pool or less: up to 4 parallel
+ * requests for a first import (mostly inserts), 2 for a run that mostly updates
+ * on a 4-CPU host (9 connections). Media uploads use a connection only for the
+ * authentication lookup every request makes.
  */
 const router = Router();
 const importService = container.resolve(ImportService);

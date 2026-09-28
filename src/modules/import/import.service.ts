@@ -42,18 +42,52 @@ export interface ExamImportResult {
 
 type KeyMap = Record<string, number>;
 
+type QuestionReferences = { courseId: number | null; universityId: number | null; sourceId: number | null };
+type StoredQuestion = { id: number; contentHash: string | null };
+
+/** A valid question of a request that needs a write */
+interface PendingQuestion {
+  index: number;
+  question: ImportQuestion;
+  references: QuestionReferences;
+  existing?: StoredQuestion;
+  /** The questions row, for a new question */
+  row?: Prisma.QuestionCreateManyInput;
+}
+
 /** A failure of one imported item: reported in its result, the others go on */
 class ImportItemError extends Error { }
 
 /**
- * Questions imported in parallel within one request (each in its own
- * transaction); kept low so an import never takes most of the connection pool
+ * Questions of one request imported one by one (changed ones, and new ones
+ * after a failed bulk insert) run in parallel, each in its own transaction, so
+ * one connection each: IMPORT_QUESTION_CONCURRENCY, 1 to 4, default 2. Kept low
+ * so an import never takes most of the connection pool.
  */
-const QUESTION_CONCURRENCY = 2;
-/** Keys per IN (...) lookup */
+export const QUESTION_CONCURRENCY = concurrencySetting(process.env.IMPORT_QUESTION_CONCURRENCY, 2, 4);
+/** Keys per lookup query */
 const LOOKUP_CHUNK = 5000;
 /** Interactive transaction limits for one question or exam */
 const ITEM_TRANSACTION = { maxWait: 10000, timeout: 30000 };
+/** Interactive transaction limits for the bulk insert of a request's new questions */
+const BULK_TRANSACTION = { maxWait: 10000, timeout: 60000 };
+/** Stored images whose content was checked: path -> identity (dev:ino:size:mtime) at the check */
+const verifiedImages = new Map<string, string>();
+const MAX_VERIFIED_IMAGES = 200000;
+
+function concurrencySetting(value: string | undefined, fallback: number, max: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) ? Math.min(max, Math.max(1, parsed)) : fallback;
+}
+
+function fileIdentity(stat: fs.Stats): string {
+  return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+}
+
+function rememberVerified(filePath: string, stat: fs.Stats) {
+  if (verifiedImages.size >= MAX_VERIFIED_IMAGES) verifiedImages.clear();
+  verifiedImages.set(filePath, fileIdentity(stat));
+}
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -92,6 +126,12 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T,
   return results;
 }
 
+/** The last line of an error message (a Prisma error ends with the database's own message), at most 500 characters */
+function briefError(error: unknown): string {
+  const lines = errorMessage(error).split("\n").map(line => line.trim()).filter(Boolean);
+  return (lines[lines.length - 1] ?? "").slice(0, 500);
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof ImportItemError) return error.message;
   if (error instanceof Prisma.PrismaClientKnownRequestError) return `Database error ${error.code}: ${error.message.split("\n").pop()}`;
@@ -125,7 +165,9 @@ export default class ImportService {
    * Store an uploaded image as UPLOADS_DIR/images/<sha1>.<ext>. The content must
    * hash to the given sha1. An existing file with the right content is kept
    * (existed: true); otherwise the file is written to a temporary name and
-   * renamed, so a reader never sees a partial file.
+   * renamed, so a reader never sees a partial file. Parallel uploads, even of
+   * the same file, are safe: each writes its own temporary file and the rename
+   * is atomic.
    */
   async storeImage(file: { buffer: Buffer; originalname: string } | undefined, sha1Field: unknown) {
     if (!file) {
@@ -142,7 +184,8 @@ export default class ImportService {
     if (file.buffer.length === 0) {
       throw new BadRequestError("The file is empty");
     }
-    const actual = crypto.createHash("sha1").update(file.buffer).digest("hex");
+    // Hashed on the libuv thread pool, so parallel uploads do not block the event loop
+    const actual = Buffer.from(await crypto.webcrypto.subtle.digest("SHA-1", file.buffer)).toString("hex");
     if (actual !== sha1) {
       throw new BadRequestError(`sha1 mismatch: the uploaded file hashes to ${actual}, not ${sha1}`);
     }
@@ -150,14 +193,17 @@ export default class ImportService {
     const fileName = `${sha1}.${ext}`;
     const directory = this.imagesDirectory;
     const target = path.join(directory, fileName);
-    const existed = await this.fileHasSha1(target, sha1);
+    const existed = await this.storedFileMatches(target, file.buffer);
     if (!existed) {
       await fs.promises.mkdir(directory, { recursive: true });
       // Dot-prefixed temporary name: the media route never serves it
       const temporary = path.join(directory, `.${fileName}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`);
       try {
         await fs.promises.writeFile(temporary, file.buffer, { flag: "wx", mode: 0o644 });
+        // Identity of the file as written: after the rename it is the target, unless a parallel upload replaced it
+        const written = await fs.promises.stat(temporary);
         await fs.promises.rename(temporary, target);
+        rememberVerified(target, written);
       } catch (error) {
         await fs.promises.unlink(temporary).catch(() => undefined);
         throw error;
@@ -172,15 +218,35 @@ export default class ImportService {
     };
   }
 
-  /** True when the file exists and its content hashes to sha1 */
-  private async fileHasSha1(filePath: string, sha1: string): Promise<boolean> {
+  /**
+   * True when the file exists with exactly the given (sha1-verified) content.
+   * A missing file or a different size is a mismatch without reading anything.
+   * With the same size the stored bytes are compared once; the file's identity
+   * (device, inode, size, mtime) is then remembered, and as long as it is the
+   * same (the file was neither rewritten nor replaced) later uploads of it do
+   * not read it again. A file this process wrote is remembered the same way.
+   */
+  private async storedFileMatches(filePath: string, content: Buffer): Promise<boolean> {
+    let stat: fs.Stats;
     try {
-      const content = await fs.promises.readFile(filePath);
-      return crypto.createHash("sha1").update(content).digest("hex") === sha1;
+      stat = await fs.promises.stat(filePath);
     } catch (error: any) {
       if (error?.code === "ENOENT") return false;
       throw error;
     }
+    if (!stat.isFile() || stat.size !== content.length) return false;
+    if (verifiedImages.get(filePath) === fileIdentity(stat)) return true;
+
+    let stored: Buffer;
+    try {
+      stored = await fs.promises.readFile(filePath);
+    } catch (error: any) {
+      if (error?.code === "ENOENT") return false;
+      throw error;
+    }
+    if (!stored.equals(content)) return false;
+    rememberVerified(filePath, stat);
+    return true;
   }
 
   /** The given <sha1>.<ext> names that are already stored */
@@ -455,14 +521,22 @@ export default class ImportService {
   // ============================================================ questions
 
   /**
-   * Upsert up to 200 questions by sourceKey, each in its own short transaction:
-   * - an equal contentHash leaves the question untouched ('unchanged')
-   * - answers are matched by position: the submitted answers, by position, are
-   *   paired with the stored ones ordered by position then id and updated in
-   *   place (their ids, and so students' recorded answers, stay); extra
-   *   submitted answers are created, extra stored ones deleted. Deleting an
-   *   answer a student chose fails the question ('failed'), with nothing changed.
-   * - question and explanation image lists are replaced when their paths differ
+   * Upsert up to 200 questions by sourceKey. results[i] is the outcome of
+   * questions[i]; one item's failure never affects the others.
+   * - an equal contentHash leaves the question untouched ('unchanged'), with no write
+   * - new questions are inserted together: one transaction, one connection and a
+   *   handful of statements for the whole request (createNewQuestions). Should
+   *   that transaction fail, they are imported one by one instead, so a bad
+   *   question fails alone and a question a concurrent import created meanwhile
+   *   is compared and updated like any stored one.
+   * - stored questions with another contentHash are updated one by one, each in
+   *   its own short transaction, QUESTION_CONCURRENCY at a time:
+   *   - answers are matched by position: the submitted answers, by position, are
+   *     paired with the stored ones ordered by position then id and updated in
+   *     place (their ids, and so students' recorded answers, stay); extra
+   *     submitted answers are created, extra stored ones deleted. Deleting an
+   *     answer a student chose fails the question ('failed'), with nothing changed.
+   *   - question and explanation image lists are replaced when their paths differ
    * - absent optional fields are cleared: the request is the question's full state
    */
   async upsertQuestions(rawQuestions: unknown[], createdById: number): Promise<{ results: QuestionImportResult[] }> {
@@ -485,56 +559,153 @@ export default class ImportService {
       valid.push({ index, question: parsed.data as ImportQuestion });
     });
 
+    // One query per kind of key for the whole request, one after the other, so
+    // the request never uses more than one connection here
     const questions = valid.map(v => v.question);
-    const [courses, universities, sources, existingRows] = await Promise.all([
-      this.findCourseIds(questions.flatMap(q => (q.courseKey ? [q.courseKey] : []))),
-      this.findUniversityIds(questions.flatMap(q => (q.universityKey ? [q.universityKey] : []))),
-      this.findSourceIds(questions.flatMap(q => (q.questionSourceKey ? [q.questionSourceKey] : []))),
-      this.findExistingQuestions(questions.map(q => q.sourceKey))
-    ]);
+    const courses = await this.findCourseIds(questions.flatMap(q => (q.courseKey ? [q.courseKey] : [])));
+    const universities = await this.findUniversityIds(questions.flatMap(q => (q.universityKey ? [q.universityKey] : [])));
+    const sources = await this.findSourceIds(questions.flatMap(q => (q.questionSourceKey ? [q.questionSourceKey] : [])));
+    const existingRows = await this.findExistingQuestions(questions.map(q => q.sourceKey));
 
-    await mapWithConcurrency(valid, QUESTION_CONCURRENCY, async ({ index, question }) => {
+    const fresh: PendingQuestion[] = [];
+    const changed: PendingQuestion[] = [];
+    for (const { index, question } of valid) {
       const existing = existingRows.get(question.sourceKey);
       try {
         const references = this.resolveQuestionReferences(question, courses, universities, sources);
         if (existing && existing.contentHash === question.contentHash) {
           results[index] = { sourceKey: question.sourceKey, id: existing.id, action: "unchanged" };
-          return;
-        }
-        if (existing) {
-          await this.updateQuestion(existing.id, question, references);
-          results[index] = { sourceKey: question.sourceKey, id: existing.id, action: "updated" };
-          return;
-        }
-        try {
-          const id = await this.createQuestion(question, references, createdById);
-          results[index] = { sourceKey: question.sourceKey, id, action: "created" };
-        } catch (error) {
-          // Created meanwhile by a concurrent import: update it instead
-          if (!isUniqueViolation(error)) throw error;
-          const raced = (await this.findExistingQuestions([question.sourceKey])).get(question.sourceKey);
-          if (!raced) throw error;
-          if (raced.contentHash === question.contentHash) {
-            results[index] = { sourceKey: question.sourceKey, id: raced.id, action: "unchanged" };
-          } else {
-            await this.updateQuestion(raced.id, question, references);
-            results[index] = { sourceKey: question.sourceKey, id: raced.id, action: "updated" };
-          }
+        } else if (existing) {
+          changed.push({ index, question, references, existing });
+        } else {
+          const row = { sourceKey: question.sourceKey, ...this.questionData(question, references), createdById };
+          fresh.push({ index, question, references, row });
         }
       } catch (error) {
-        if (!(error instanceof ImportItemError)) {
-          console.error(`Import of question ${question.sourceKey} failed:`, error);
-        }
-        results[index] = { sourceKey: question.sourceKey, id: existing?.id ?? null, action: "failed", error: errorMessage(error) };
+        results[index] = this.failedResult(question, existing, error);
       }
+    }
+
+    const oneByOne = await this.createNewQuestions(fresh, results);
+    await mapWithConcurrency([...changed, ...oneByOne], QUESTION_CONCURRENCY, async item => {
+      results[item.index] = await this.importQuestion(item, createdById);
     });
 
     return { results };
   }
 
-  /** sourceKey -> { id, contentHash } of stored questions */
-  private async findExistingQuestions(keys: string[]): Promise<Map<string, { id: number; contentHash: string | null }>> {
-    const map = new Map<string, { id: number; contentHash: string | null }>();
+  /**
+   * Insert the request's new questions with their answers and images in one
+   * transaction: four INSERT statements (chunked by Prisma only past the bind
+   * parameter limit) on one connection, instead of a transaction per question.
+   * Rows are inserted in request order, so ids ascend in request order and each
+   * question's answers and images ascend in their display order, as one by one.
+   * The results of the created questions are set; the questions returned are
+   * left to import one by one: all of them when the transaction failed (a bad
+   * row, a lost deadlock, a timeout; nothing of it was kept), otherwise those
+   * a concurrent import created first (ON CONFLICT DO NOTHING skipped them),
+   * now with their stored row.
+   */
+  private async createNewQuestions(fresh: PendingQuestion[], results: QuestionImportResult[]): Promise<PendingQuestion[]> {
+    if (fresh.length === 0) return [];
+    let createdIds: Map<string, number>;
+    try {
+      createdIds = await this.prisma.$transaction(async (tx: TransactionClient) => {
+        const rows = await tx.question.createManyAndReturn({
+          data: fresh.map(item => item.row!),
+          skipDuplicates: true,
+          select: { id: true, sourceKey: true }
+        });
+        const ids = new Map<string, number>();
+        rows.forEach(row => row.sourceKey !== null && ids.set(row.sourceKey, row.id));
+        const inserted = fresh.flatMap(item => {
+          const id = ids.get(item.question.sourceKey);
+          return id === undefined ? [] : [{ id, question: item.question }];
+        });
+
+        const answers = inserted.flatMap(({ id, question }) =>
+          [...question.answers].sort((a, b) => a.position - b.position).map(answer => ({ questionId: id, ...this.answerData(answer) })));
+        const images = inserted.flatMap(({ id, question }) => (question.questionImages ?? []).map(imagePath => ({ questionId: id, imagePath })));
+        const explanationImages = inserted.flatMap(({ id, question }) => (question.explanationImages ?? []).map(imagePath => ({ questionId: id, imagePath })));
+        if (answers.length > 0) await tx.questionAnswer.createMany({ data: answers });
+        if (images.length > 0) await tx.questionImage.createMany({ data: images });
+        if (explanationImages.length > 0) await tx.questionExplanationImage.createMany({ data: explanationImages });
+        return ids;
+      }, BULK_TRANSACTION);
+    } catch (error) {
+      console.warn(`Bulk insert of ${fresh.length} new question(s) failed, importing them one by one: ${briefError(error)}`);
+      return fresh;
+    }
+
+    const skipped: PendingQuestion[] = [];
+    for (const item of fresh) {
+      const id = createdIds.get(item.question.sourceKey);
+      if (id === undefined) {
+        skipped.push(item);
+      } else {
+        results[item.index] = { sourceKey: item.question.sourceKey, id, action: "created" };
+      }
+    }
+    if (skipped.length === 0) return [];
+
+    // Created by a concurrent import since the lookup: compare with the stored row
+    const stored = await this.findExistingQuestions(skipped.map(item => item.question.sourceKey));
+    const oneByOne: PendingQuestion[] = [];
+    for (const item of skipped) {
+      const existing = stored.get(item.question.sourceKey);
+      if (existing && existing.contentHash === item.question.contentHash) {
+        results[item.index] = { sourceKey: item.question.sourceKey, id: existing.id, action: "unchanged" };
+      } else {
+        oneByOne.push({ ...item, existing });
+      }
+    }
+    return oneByOne;
+  }
+
+  /**
+   * Import one question in its own transaction: update the stored question, or
+   * create it; one created meanwhile by a concurrent import is compared and
+   * updated instead. Never throws: a failure is the item's result.
+   */
+  private async importQuestion(item: PendingQuestion, createdById: number): Promise<QuestionImportResult> {
+    const { question, references, existing } = item;
+    try {
+      if (existing) {
+        await this.updateQuestion(existing.id, question, references);
+        return { sourceKey: question.sourceKey, id: existing.id, action: "updated" };
+      }
+      try {
+        const id = await this.createQuestion(question, references, createdById);
+        return { sourceKey: question.sourceKey, id, action: "created" };
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+        const raced = (await this.findExistingQuestions([question.sourceKey])).get(question.sourceKey);
+        if (!raced) throw error;
+        if (raced.contentHash === question.contentHash) {
+          return { sourceKey: question.sourceKey, id: raced.id, action: "unchanged" };
+        }
+        try {
+          await this.updateQuestion(raced.id, question, references);
+        } catch (updateError) {
+          return this.failedResult(question, raced, updateError);
+        }
+        return { sourceKey: question.sourceKey, id: raced.id, action: "updated" };
+      }
+    } catch (error) {
+      return this.failedResult(question, existing, error);
+    }
+  }
+
+  private failedResult(question: ImportQuestion, existing: StoredQuestion | undefined, error: unknown): QuestionImportResult {
+    if (!(error instanceof ImportItemError)) {
+      console.error(`Import of question ${question.sourceKey} failed:`, error);
+    }
+    return { sourceKey: question.sourceKey, id: existing?.id ?? null, action: "failed", error: errorMessage(error) };
+  }
+
+  /** sourceKey -> { id, contentHash } of stored questions: one query per 5000 keys, three columns */
+  private async findExistingQuestions(keys: string[]): Promise<Map<string, StoredQuestion>> {
+    const map = new Map<string, StoredQuestion>();
     for (const part of chunk(Array.from(new Set(keys)), LOOKUP_CHUNK)) {
       const rows = await this.prisma.question.findMany({
         where: { sourceKey: { in: part } },
@@ -545,7 +716,7 @@ export default class ImportService {
     return map;
   }
 
-  private resolveQuestionReferences(question: ImportQuestion, courses: KeyMap, universities: KeyMap, sources: KeyMap) {
+  private resolveQuestionReferences(question: ImportQuestion, courses: KeyMap, universities: KeyMap, sources: KeyMap): QuestionReferences {
     const lookup = (key: string | null | undefined, map: KeyMap, field: string): number | null => {
       if (!key) return null;
       const id = map[key];
@@ -562,7 +733,7 @@ export default class ImportService {
   }
 
   /** Question columns set from an imported question (its full state) */
-  private questionData(question: ImportQuestion, references: { courseId: number | null; universityId: number | null; sourceId: number | null }) {
+  private questionData(question: ImportQuestion, references: QuestionReferences) {
     return {
       contentHash: question.contentHash,
       questionText: question.questionText,
@@ -613,7 +784,7 @@ export default class ImportService {
 
   private async createQuestion(
     question: ImportQuestion,
-    references: { courseId: number | null; universityId: number | null; sourceId: number | null },
+    references: QuestionReferences,
     createdById: number
   ): Promise<number> {
     const answers = [...question.answers].sort((a, b) => a.position - b.position);
@@ -634,7 +805,7 @@ export default class ImportService {
   private async updateQuestion(
     questionId: number,
     question: ImportQuestion,
-    references: { courseId: number | null; universityId: number | null; sourceId: number | null }
+    references: QuestionReferences
   ): Promise<void> {
     const submitted = [...question.answers].sort((a, b) => a.position - b.position);
 
