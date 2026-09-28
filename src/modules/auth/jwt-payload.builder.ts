@@ -7,8 +7,8 @@ const ALL_YEAR_LEVELS: YearLevel[] = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SI
  * The only subscriptions that grant access: status ACTIVE and endDate in the future.
  * Use this in Prisma queries that load a user's subscriptions for access decisions.
  */
-export function accessGrantingSubscriptionWhere() {
-  return { status: 'ACTIVE' as const, endDate: { gt: new Date() } };
+export function accessGrantingSubscriptionWhere(now: Date = new Date()) {
+  return { status: 'ACTIVE' as const, endDate: { gt: now } };
 }
 
 export function isAccessGrantingSubscription(sub: { status?: string; endDate: Date | string }, now: Date = new Date()): boolean {

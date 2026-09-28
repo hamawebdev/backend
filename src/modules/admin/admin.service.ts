@@ -19,7 +19,8 @@ import {
   QuizType,
   SubscriptionStatus,
   ReportStatus,
-  ReportType
+  ReportType,
+  Prisma
 } from "@prisma/client";
 import { TransactionClient } from "../../types/prisma.types";
 import PrismaService from "../../config/db";
@@ -30,6 +31,8 @@ import { ANSWER_ORDER } from "../questions/question-visibility";
 import { residencyQuestionWhere } from "../quizzes/quiz.repository";
 import { RESIDENCY_PARTS } from "./validations/admin.validation";
 import { QuestionType } from "../../types/quiz.types";
+import { isAccessGrantingSubscription } from "../auth/jwt-payload.builder";
+import { UserStatusFilter, userStatus, userStatusWhere } from "./user-status";
 
 interface UserFilters {
   page: number;
@@ -39,6 +42,7 @@ interface UserFilters {
   specialtyId?: number;
   currentYear?: YearLevel;
   isActive?: boolean;
+  status?: UserStatusFilter;
   search?: string;
 }
 
@@ -289,8 +293,11 @@ export default class AdminService {
 
   async getAllUsers(filters: UserFilters) {
     try {
-      const { page, limit, role, universityId, specialtyId, currentYear, isActive, search } = filters;
+      const { page, limit, role, universityId, specialtyId, currentYear, isActive, status, search } = filters;
       const skip = (page - 1) * limit;
+
+      // One clock for the status filter, the stats and each user's status, so they agree
+      const now = new Date();
 
       const where: any = {};
 
@@ -299,16 +306,22 @@ export default class AdminService {
       if (specialtyId) where.specialtyId = specialtyId;
       if (currentYear) where.currentYear = currentYear;
       if (isActive !== undefined) where.isActive = isActive;
+      // The status filter and the search both use OR, so they are combined with AND
+      const conditions: Prisma.UserWhereInput[] = [];
+      if (status) conditions.push(userStatusWhere(status, now));
       if (search) {
-        where.OR = [
-          { fullName: { contains: search } },
-          { email: { contains: search } }
-        ];
+        conditions.push({
+          OR: [
+            { fullName: { contains: search } },
+            { email: { contains: search } }
+          ]
+        });
       }
+      if (conditions.length > 0) where.AND = conditions;
 
-      const now = new Date();
-
-      const [users, total] = await Promise.all([
+      // One snapshot for the page and the stats. The stats cover every user, whatever
+      // the filters: activeUsers + nonActiveUsers = totalUsers.
+      const [users, total, totalUsers, activeUsers, nonActiveUsers, deactivatedUsers, students, employees, admins] = await this.prisma.$transaction([
         this.prisma.user.findMany({
           where,
           skip,
@@ -320,6 +333,8 @@ export default class AdminService {
             role: true,
             universityId: true,
             specialtyId: true,
+            university: { select: { id: true, name: true } },
+            specialty: { select: { id: true, name: true } },
             currentYear: true,
             isActive: true,
             createdAt: true,
@@ -341,14 +356,20 @@ export default class AdminService {
           },
           orderBy: { createdAt: 'desc' }
         }),
-        this.prisma.user.count({ where })
-      ]);
+        this.prisma.user.count({ where }),
+        this.prisma.user.count(),
+        this.prisma.user.count({ where: userStatusWhere('active', now) }),
+        this.prisma.user.count({ where: userStatusWhere('non_active', now) }),
+        this.prisma.user.count({ where: userStatusWhere('deactivated', now) }),
+        this.prisma.user.count({ where: { role: UserRole.STUDENT } }),
+        this.prisma.user.count({ where: { role: UserRole.EMPLOYEE } }),
+        this.prisma.user.count({ where: { role: UserRole.ADMIN } })
+      ], { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 
       // Map users to include subscription status
       const usersWithSubscriptionStatus = users.map(user => {
-        const activeSubscription = user.subscriptions.find(
-          sub => sub.status === 'ACTIVE' && new Date(sub.endDate) > now
-        );
+        // Subscriptions are sorted by end date, so this is the one that ends last
+        const activeSubscription = user.subscriptions.find(sub => isAccessGrantingSubscription(sub, now));
 
         return {
           id: user.id,
@@ -357,9 +378,12 @@ export default class AdminService {
           role: user.role,
           universityId: user.universityId,
           specialtyId: user.specialtyId,
+          university: user.university,
+          specialty: user.specialty,
           currentYear: user.currentYear,
           isActive: user.isActive,
           createdAt: user.createdAt,
+          status: userStatus(user, now),
           hasActiveSubscription: !!activeSubscription,
           activeSubscription: activeSubscription
             ? {
@@ -380,7 +404,8 @@ export default class AdminService {
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
+        totalPages: Math.ceil(total / limit),
+        stats: { totalUsers, activeUsers, nonActiveUsers, deactivatedUsers, students, employees, admins }
       };
     } catch (error) {
       throw new InternalServerError("Failed to fetch users");
@@ -2439,6 +2464,7 @@ export default class AdminService {
       ]);
 
       // Canonical format: items array with nested user and studyPack objects
+      const now = new Date();
       const items = subscriptions.map(sub => ({
         id: sub.id,
         userId: sub.userId,
@@ -2455,6 +2481,8 @@ export default class AdminService {
         status: sub.status,
         startDate: sub.startDate,
         endDate: sub.endDate,
+        // ACTIVE and not past its end date: the subscription opens the pack's content
+        grantsAccess: isAccessGrantingSubscription(sub, now),
         createdAt: sub.createdAt
       }));
 
@@ -2697,36 +2725,42 @@ export default class AdminService {
         throw new NotFoundError("Subscription");
       }
 
-      if (existingSubscription.status === 'ACTIVE') {
+      // Pending, expired, cancelled and lapsed (ACTIVE past its end date, nothing
+      // flips those to EXPIRED) subscriptions can be activated; one that still
+      // grants access cannot
+      const now = new Date();
+      if (isAccessGrantingSubscription(existingSubscription, now)) {
         throw new BadRequestError("Subscription is already active");
       }
 
-      // Prepare update data
-      const updateData: any = {
-        status: 'ACTIVE',
-        updatedAt: new Date()
-      };
+      const isPending = existingSubscription.status === 'PENDING';
 
-      // Set start date (default to now if not provided)
-      if (startDate) {
-        updateData.startDate = new Date(startDate);
-      } else if (existingSubscription.status === 'PENDING') {
-        updateData.startDate = new Date();
+      // Start date: the given one, else now for a pending subscription, else unchanged
+      const newStartDate = startDate ? new Date(startDate) : isPending ? now : existingSubscription.startDate;
+
+      // End date: the given one, else 1 month after the start for a pending subscription, else unchanged
+      let newEndDate: Date;
+      if (endDate) {
+        newEndDate = new Date(endDate);
+      } else if (isPending) {
+        newEndDate = new Date(newStartDate);
+        newEndDate.setMonth(newEndDate.getMonth() + 1);
+      } else {
+        newEndDate = existingSubscription.endDate;
       }
 
-      // Set end date (default to 1 month from start date if not provided)
-      if (endDate) {
-        updateData.endDate = new Date(endDate);
-      } else if (existingSubscription.status === 'PENDING') {
-        const newEndDate = new Date(updateData.startDate || existingSubscription.startDate);
-        newEndDate.setMonth(newEndDate.getMonth() + 1);
-        updateData.endDate = newEndDate;
+      // An end date already past would leave the subscription without access
+      if (newEndDate <= now) {
+        throw new BadRequestError("The end date must be in the future");
+      }
+      if (newEndDate <= newStartDate) {
+        throw new BadRequestError("The end date must be after the start date");
       }
 
       // Update subscription
       const subscription = await this.prisma.subscription.update({
         where: { id },
-        data: updateData,
+        data: { status: 'ACTIVE', startDate: newStartDate, endDate: newEndDate },
         include: {
           user: { select: { fullName: true, email: true } },
           studyPack: { select: { name: true } }
@@ -2738,7 +2772,7 @@ export default class AdminService {
         data: {
           employeeId: activatedById,
           activityType: 'QUESTION_EDITED', // We can add a new activity type later
-          description: `Activated subscription for ${subscription.user.fullName} - ${subscription.studyPack.name}${reason ? ` (Reason: ${reason})` : ''}`,
+          description: `${isPending ? 'Activated' : 'Re-activated'} subscription for ${subscription.user.fullName} - ${subscription.studyPack.name}, ${newStartDate.toISOString().slice(0, 10)} to ${newEndDate.toISOString().slice(0, 10)}${reason ? ` (Reason: ${reason})` : ''}`,
           relatedId: subscription.id
         }
       });

@@ -5,6 +5,8 @@ import ResponseUtils from "../../core/utils/response.utils";
 import { RequestWithUser } from "../../types/types";
 import { ActivationCodeService } from "./services/activation-code.service";
 import { normalizeResidencyPart } from "./validations/admin.validation";
+import { BadRequestError } from "../../core/errors/AppError";
+import { USER_STATUS_FILTERS, UserStatusFilter, isUserStatusFilter } from "./user-status";
 
 /** Page number from the query string: a positive integer, 1 otherwise */
 function pageParam(value: unknown): number {
@@ -58,6 +60,16 @@ export default class AdminController {
 
   async getAllUsers(req: RequestWithUser, res: Response, next: NextFunction): Promise<void> {
     try {
+      // status: active | non_active | deactivated (see user-status.ts)
+      const statusParam = req.query.status;
+      let status: UserStatusFilter | undefined;
+      if (statusParam !== undefined) {
+        if (!isUserStatusFilter(statusParam)) {
+          throw new BadRequestError(`status must be one of ${USER_STATUS_FILTERS.join(', ')}`);
+        }
+        status = statusParam;
+      }
+
       // Use validated pagination parameters from middleware
       const filters = {
         page: (req.query as any).page as number, // Already validated and converted by middleware
@@ -67,6 +79,7 @@ export default class AdminController {
         specialtyId: req.query.specialtyId ? parseInt(req.query.specialtyId as string) : undefined,
         currentYear: req.query.currentYear as any,
         isActive: req.query.isActive ? req.query.isActive === 'true' : undefined,
+        status,
         search: req.query.search as string
       };
 
