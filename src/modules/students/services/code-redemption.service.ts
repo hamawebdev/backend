@@ -4,12 +4,71 @@ import { inject, injectable } from "tsyringe";
 import { AppError } from "../../../core/errors/AppError";
 import PrismaService from "../../../config/db";
 
-interface CodeValidationResult {
-  isValid: boolean;
-  code?: any;
-  studyPacks?: any[];
-  message?: string;
+// Why a code cannot be redeemed. Sent as error.code so the web app can show a
+// message for each reason instead of one generic failure.
+export const ACTIVATION_CODE_ERRORS = {
+  NOT_FOUND: "ACTIVATION_CODE_NOT_FOUND",
+  ALREADY_REDEEMED: "ACTIVATION_CODE_ALREADY_REDEEMED",
+  DEACTIVATED: "ACTIVATION_CODE_DEACTIVATED",
+  EXPIRED: "ACTIVATION_CODE_EXPIRED",
+  USED_UP: "ACTIVATION_CODE_USED_UP",
+  NO_ACTIVE_PACKS: "ACTIVATION_CODE_NO_ACTIVE_PACKS",
+} as const;
+
+type RedeemBlocker = keyof typeof ACTIVATION_CODE_ERRORS;
+
+const BLOCKER_MESSAGES: Record<RedeemBlocker, string> = {
+  NOT_FOUND: "Invalid activation code",
+  ALREADY_REDEEMED: "You have already redeemed this activation code",
+  DEACTIVATED: "Activation code has been deactivated",
+  EXPIRED: "Activation code has expired",
+  USED_UP: "Activation code has reached its usage limit",
+  NO_ACTIVE_PACKS: "No active study packs are associated with this code",
+};
+
+function blockerError(blocker: RedeemBlocker): AppError {
+  return new AppError(BLOCKER_MESSAGES[blocker], 400, undefined, ACTIVATION_CODE_ERRORS[blocker]);
 }
+
+/**
+ * The first reason this student cannot redeem the code, or null when they can.
+ * The student's own earlier redemption comes first: it is the most useful thing
+ * to tell them, whatever state the code is in now.
+ */
+export function findRedeemBlocker(
+  code: { isActive: boolean; expiresAt: Date; maxUses: number },
+  state: { alreadyRedeemed: boolean; redemptions: number; activePacks: number },
+  now: Date = new Date()
+): RedeemBlocker | null {
+  if (state.alreadyRedeemed) return "ALREADY_REDEEMED";
+  if (!code.isActive) return "DEACTIVATED";
+  if (code.expiresAt <= now) return "EXPIRED";
+  if (state.redemptions >= code.maxUses) return "USED_UP";
+  if (state.activePacks === 0) return "NO_ACTIVE_PACKS";
+  return null;
+}
+
+// Codes are stored upper-case (see the admin validation)
+const normalizeCode = (code: string) => code.trim().toUpperCase();
+
+const codeWithPacks = {
+  studyPacks: {
+    include: {
+      studyPack: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          type: true,
+          yearNumber: true,
+          pricePerMonth: true,
+          pricePerYear: true,
+          isActive: true
+        }
+      }
+    }
+  }
+} as const;
 
 @injectable()
 export class CodeRedemptionService {
@@ -22,176 +81,96 @@ export class CodeRedemptionService {
   }
 
   /**
-   * Validate an activation code
-   * @param code The activation code to validate
-   * @returns Validation result with code details
+   * Check whether a student can redeem a code, without redeeming it.
+   * Throws an AppError whose code says why not (ACTIVATION_CODE_ERRORS).
    */
-  async validateActivationCode(code: string): Promise<CodeValidationResult> {
-    try {
-      // Find the activation code with all related data
-      const activationCode = await this.prisma.activationCode.findUnique({
-        where: { code: code.toUpperCase().trim() },
-        include: {
-          studyPacks: {
-            include: {
-              studyPack: {
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                  type: true,
-                  yearNumber: true,
-                  pricePerMonth: true,
-                  pricePerYear: true,
-                  isActive: true
-                }
-              }
-            }
-          },
-          redemptions: {
-            select: {
-              id: true,
-              userId: true,
-              redeemedAt: true
-            }
-          }
-        }
-      });
-
-      // Check if code exists
-      if (!activationCode) {
-        return {
-          isValid: false,
-          message: "Invalid activation code"
-        };
-      }
-
-      // Check if code is active
-      if (!activationCode.isActive) {
-        return {
-          isValid: false,
-          message: "Activation code has been deactivated"
-        };
-      }
-
-      // Check if code has expired
-      if (new Date() > activationCode.expiresAt) {
-        return {
-          isValid: false,
-          message: "Activation code has expired"
-        };
-      }
-
-      // Check usage limits
-      if (activationCode.currentUses >= activationCode.maxUses) {
-        return {
-          isValid: false,
-          message: "Activation code has reached its usage limit"
-        };
-      }
-
-      // Check if any study packs are available
-      const activeStudyPacks = activationCode.studyPacks.filter(
-        sp => sp.studyPack.isActive
-      );
-
-      if (activeStudyPacks.length === 0) {
-        return {
-          isValid: false,
-          message: "No active study packs are associated with this code"
-        };
-      }
-
-      return {
-        isValid: true,
-        code: {
-          id: activationCode.id,
-          code: activationCode.code,
-          description: activationCode.description,
-          durationType: activationCode.durationType || 'MONTHS',
-          durationMonths: activationCode.durationMonths,
-          durationDays: activationCode.durationDays,
-          maxUses: activationCode.maxUses,
-          currentUses: activationCode.currentUses,
-          expiresAt: activationCode.expiresAt
-        },
-        studyPacks: activeStudyPacks.map(sp => sp.studyPack),
-        message: "Activation code is valid"
-      };
-
-    } catch (error) {
-      console.error("Error validating activation code:", error);
-      throw new AppError("Failed to validate activation code", 500);
+  async validateActivationCode(code: string, userId: number) {
+    const activationCode = await this.prisma.activationCode.findUnique({
+      where: { code: normalizeCode(code) },
+      include: codeWithPacks
+    });
+    if (!activationCode) {
+      throw blockerError("NOT_FOUND");
     }
+
+    const [ownRedemptions, redemptions] = await Promise.all([
+      this.prisma.codeRedemption.count({ where: { activationCodeId: activationCode.id, userId } }),
+      this.prisma.codeRedemption.count({ where: { activationCodeId: activationCode.id } })
+    ]);
+    const activeStudyPacks = activationCode.studyPacks.map(sp => sp.studyPack).filter(pack => pack.isActive);
+
+    const blocker = findRedeemBlocker(activationCode, {
+      alreadyRedeemed: ownRedemptions > 0,
+      redemptions,
+      activePacks: activeStudyPacks.length
+    });
+    if (blocker) {
+      throw blockerError(blocker);
+    }
+
+    return {
+      code: this.codeSummary(activationCode, redemptions),
+      studyPacks: activeStudyPacks,
+      message: "Activation code is valid"
+    };
   }
 
   /**
-   * Redeem an activation code for a user
-   * @param code The activation code to redeem
-   * @param userId The user ID redeeming the code
-   * @returns Redemption result with created subscriptions
+   * Redeem an activation code for a student: grant (or extend) each active study
+   * pack on the code and record the redemption, all in one transaction. Any
+   * failure leaves nothing changed.
    */
   async redeemActivationCode(code: string, userId: number) {
     try {
-      // First validate the code
-      const validation = await this.validateActivationCode(code);
-
-      if (!validation.isValid) {
-        throw new AppError(validation.message || "Invalid activation code", 400);
-      }
-
-      // Check if user has already redeemed this code
-      const existingRedemption = await this.prisma.codeRedemption.findFirst({
-        where: {
-          activationCodeId: validation.code!.id,
-          userId: userId
-        }
-      });
-
-      if (existingRedemption) {
-        throw new AppError("You have already redeemed this activation code", 400);
-      }
-
-      // Start transaction for redemption
       const result = await this.prisma.$transaction(async (tx: TransactionClient) => {
-        // Claim one use of the code atomically. The row update is serialized by
-        // Postgres, so concurrent redeems cannot push currentUses past maxUses.
-        const claimed = await tx.activationCode.updateMany({
-          where: {
-            id: validation.code!.id,
-            isActive: true,
-            expiresAt: { gt: new Date() },
-            currentUses: { lt: validation.code!.maxUses }
-          },
-          data: {
-            currentUses: {
-              increment: 1
-            }
-          }
-        });
-        if (claimed.count === 0) {
-          throw new AppError("Activation code has reached its usage limit", 400);
+        // Lock the code's row until commit. Redemptions of the same code (and admin
+        // edits of it) then run one after the other, and each one counts the
+        // redemptions committed before it, so the limit can never be passed.
+        const locked = await tx.$queryRaw<{ id: number }[]>`
+          SELECT id FROM activation_codes WHERE code = ${normalizeCode(code)} FOR UPDATE`;
+        if (locked.length === 0) {
+          throw blockerError("NOT_FOUND");
         }
+        const codeId = locked[0].id;
 
-        // Grant each study pack on the code: create a subscription, or extend the
-        // user's current one for that pack so a renewal never wastes the code
-        const subscriptions = [];
+        // One redemption at a time per student, so two codes for the same pack
+        // redeemed at once extend one subscription instead of creating two
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
+
+        const activationCode = await tx.activationCode.findUniqueOrThrow({
+          where: { id: codeId },
+          include: codeWithPacks
+        });
+        const ownRedemptions = await tx.codeRedemption.count({ where: { activationCodeId: codeId, userId } });
+        const redemptions = await tx.codeRedemption.count({ where: { activationCodeId: codeId } });
+        const activeStudyPacks = activationCode.studyPacks.map(sp => sp.studyPack).filter(pack => pack.isActive);
+
         const now = new Date();
+        const blocker = findRedeemBlocker(activationCode, {
+          alreadyRedeemed: ownRedemptions > 0,
+          redemptions,
+          activePacks: activeStudyPacks.length
+        }, now);
+        if (blocker) {
+          throw blockerError(blocker);
+        }
 
         // Add the code's duration to a start date
-        const durationType = validation.code!.durationType || 'MONTHS';
+        const durationType = activationCode.durationType || 'MONTHS';
         const addCodeDuration = (from: Date): Date => {
           const end = new Date(from);
-          if (durationType === 'DAYS' && validation.code!.durationDays) {
-            end.setDate(end.getDate() + validation.code!.durationDays);
+          if (durationType === 'DAYS' && activationCode.durationDays) {
+            end.setDate(end.getDate() + activationCode.durationDays);
           } else {
-            end.setMonth(end.getMonth() + validation.code!.durationMonths);
+            end.setMonth(end.getMonth() + activationCode.durationMonths);
           }
           return end;
         };
 
-        for (const studyPack of validation.studyPacks!) {
-          // Check if user already has an active subscription to this study pack
+        // Grant each study pack on the code: create a subscription, or extend the
+        // user's current one for that pack so a renewal never wastes the code
+        const subscriptions = [];
+        for (const studyPack of activeStudyPacks) {
           const existingSubscription = await tx.subscription.findFirst({
             where: {
               userId: userId,
@@ -226,7 +205,7 @@ export class CodeRedemptionService {
                 endDate: addCodeDuration(now),
                 amountPaid: 0, // Free through activation code
                 paymentMethod: 'ACTIVATION_CODE',
-                paymentReference: validation.code!.code
+                paymentReference: activationCode.code
               },
               include: {
                 studyPack: true
@@ -236,21 +215,29 @@ export class CodeRedemptionService {
           }
         }
 
-        // Create redemption record. (activationCodeId, userId) is unique, so a
-        // concurrent second redeem by the same user fails here and rolls back.
         const redemption = await tx.codeRedemption.create({
           data: {
-            activationCodeId: validation.code!.id,
+            activationCodeId: codeId,
             userId: userId,
             subscriptionId: subscriptions.length > 0 ? subscriptions[0].id : null
           }
         });
 
+        // current_uses mirrors the number of redemption rows
+        await tx.activationCode.update({
+          where: { id: codeId },
+          data: { currentUses: redemptions + 1 }
+        });
+
         return {
           redemption,
           subscriptions,
-          activationCode: validation.code
+          activationCode: this.codeSummary(activationCode, redemptions + 1)
         };
+      }, {
+        // A burst of redemptions of one code queues on its row lock
+        maxWait: 10000,
+        timeout: 20000
       });
 
       return {
@@ -267,11 +254,27 @@ export class CodeRedemptionService {
       if (error instanceof AppError) {
         throw error;
       }
+      // (activationCodeId, userId) is unique; the row lock makes this unreachable,
+      // but a duplicate still means the student already redeemed the code
       if (error?.code === 'P2002') {
-        throw new AppError("You have already redeemed this activation code", 400);
+        throw blockerError("ALREADY_REDEEMED");
       }
       console.error("Error redeeming activation code:", error);
       throw new AppError("Failed to redeem activation code", 500);
     }
+  }
+
+  private codeSummary(activationCode: any, redemptions: number) {
+    return {
+      id: activationCode.id,
+      code: activationCode.code,
+      description: activationCode.description,
+      durationType: activationCode.durationType || 'MONTHS',
+      durationMonths: activationCode.durationMonths,
+      durationDays: activationCode.durationDays,
+      maxUses: activationCode.maxUses,
+      currentUses: redemptions,
+      expiresAt: activationCode.expiresAt
+    };
   }
 }

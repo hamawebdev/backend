@@ -485,6 +485,16 @@ export const createActivationCodeSchema = z.object({
 }, {
   message: 'Either studyPackId or studyPackIds must be provided',
   path: ['studyPackId']
+}).refine((data) => data.durationType !== 'DAYS' || data.durationDays !== undefined, {
+  message: 'durationDays is required when durationType is DAYS',
+  path: ['durationDays']
+}).refine((data) => {
+  // A new code must be redeemable: an expiry in the past would create it already expired
+  const expiry = data.expiresAt ?? data.expiryDate;
+  return expiry === undefined || new Date(expiry).getTime() > Date.now();
+}, {
+  message: 'Expiry date must be in the future',
+  path: ['expiresAt']
 });
 
 // Update Activation Code Validation (Canonical spec - all fields optional)

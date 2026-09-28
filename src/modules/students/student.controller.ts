@@ -1085,18 +1085,15 @@ export default class StudentController {
         return;
       }
 
-      const result = await this.codeRedemptionService.validateActivationCode(code);
+      // A code that cannot be redeemed throws an AppError whose code says why
+      const result = await this.codeRedemptionService.validateActivationCode(code, req.user!.user_data.id);
 
-      if (result.isValid) {
-        this.responseUtils.sendSuccessResponse(res, {
-          message: result.message,
-          isValid: true,
-          code: result.code,
-          studyPacks: result.studyPacks
-        });
-      } else {
-        this.responseUtils.sendBadRequestResponse(res, result.message || "Invalid activation code");
-      }
+      this.responseUtils.sendSuccessResponse(res, {
+        message: result.message,
+        isValid: true,
+        code: result.code,
+        studyPacks: result.studyPacks
+      });
     } catch (error) {
       console.error("Error validating activation code:", error);
       this.responseUtils.sendErrorResponse(res, error);
@@ -1117,22 +1114,25 @@ export default class StudentController {
 
       const result = await this.codeRedemptionService.redeemActivationCode(code, userId);
 
-      // Format for canonical spec: { message, subscription }
+      // Canonical spec: { message, subscription }, plus every subscription the code granted
+      const toSubscription = (subscription: any) => ({
+        id: subscription.id,
+        studyPackId: subscription.studyPackId,
+        status: subscription.status,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate,
+        studyPack: subscription.studyPack ? {
+          id: subscription.studyPack.id,
+          name: subscription.studyPack.name,
+          type: subscription.studyPack.type,
+          yearNumber: subscription.studyPack.yearNumber
+        } : undefined
+      });
+      const subscriptions = (result.data?.subscriptions ?? []).map(toSubscription);
       const canonicalResponse = {
         message: result.message,
-        subscription: result.data?.subscriptions?.[0] ? {
-          id: result.data.subscriptions[0].id,
-          studyPackId: result.data.subscriptions[0].studyPackId,
-          status: result.data.subscriptions[0].status,
-          startDate: result.data.subscriptions[0].startDate,
-          endDate: result.data.subscriptions[0].endDate,
-          studyPack: result.data.subscriptions[0].studyPack ? {
-            id: result.data.subscriptions[0].studyPack.id,
-            name: result.data.subscriptions[0].studyPack.name,
-            type: result.data.subscriptions[0].studyPack.type,
-            yearNumber: result.data.subscriptions[0].studyPack.yearNumber
-          } : undefined
-        } : null
+        subscription: subscriptions[0] ?? null,
+        subscriptions
       };
 
       this.responseUtils.sendSuccessResponse(res, canonicalResponse, 200);

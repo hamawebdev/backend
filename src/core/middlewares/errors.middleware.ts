@@ -22,6 +22,7 @@ export default class GlobalErrorHandler {
         error: {
           type: error.name,
           message: error.message,
+          ...(error.code && { code: error.code }),
           timestamp: new Date().toISOString(),
           requestId: this.generateRequestId(),
           ...(error.details && { details: error.details }),

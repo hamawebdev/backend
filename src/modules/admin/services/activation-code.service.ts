@@ -1,10 +1,27 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { randomInt } from "crypto";
 import { inject, injectable } from "tsyringe";
 import { AppError, NotFoundError, BadRequestError, ConflictError } from "../../../core/errors/AppError";
 import { IActivationCodeService } from "../interfaces/IActivationCodeService";
 import { ActivationCode } from "@prisma/client";
 import PrismaService from "../../../config/db";
+
+// Codes shown to admins carry the number of redemption rows as currentUses
+const withUsage = {
+  studyPacks: {
+    include: {
+      studyPack: true
+    }
+  },
+  _count: {
+    select: { redemptions: true }
+  }
+} as const;
+
+// A code string that is already taken (unique index on activation_codes.code)
+function isDuplicateCodeError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
 
 // Canonical DTO interfaces
 interface CreateActivationCodeData {
@@ -92,7 +109,7 @@ export class ActivationCodeService implements IActivationCodeService {
         where: { code }
       });
       if (existingCode) {
-        throw new BadRequestError("Activation code already exists");
+        throw new ConflictError(`Activation code ${code} already exists`);
       }
     }
 
@@ -116,7 +133,7 @@ export class ActivationCodeService implements IActivationCodeService {
     if (existingStudyPacks.length !== studyPackIds.length) {
       const foundIds = existingStudyPacks.map(sp => sp.id);
       const missingIds = studyPackIds.filter(id => !foundIds.includes(id));
-      throw new NotFoundError(`Study pack(s) not found: ${missingIds.join(', ')}`);
+      throw new NotFoundError("Study pack(s)", missingIds.join(", "));
     }
 
     // Handle duration based on type - store both fields correctly
@@ -138,33 +155,36 @@ export class ActivationCodeService implements IActivationCodeService {
       : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Default 1 year
 
     // Create the activation code with all study pack relations
-    const activationCode = await this.prisma.activationCode.create({
-      data: {
-        code: code,
-        hashedCode: code, // Simplified - in production use proper hashing
-        description: data.description,
-        durationType: durationType,
-        durationMonths: durationMonths,
-        durationDays: durationDays,
-        maxUses: data.maxUses || 100,
-        currentUses: 0,
-        isActive: data.isActive ?? true,
-        expiresAt: expiresAt,
-        createdById,
-        studyPacks: {
-          create: studyPackIds.map(studyPackId => ({
-            studyPackId
-          }))
-        }
-      },
-      include: {
-        studyPacks: {
-          include: {
-            studyPack: true
+    let activationCode;
+    try {
+      activationCode = await this.prisma.activationCode.create({
+        data: {
+          code: code,
+          hashedCode: code, // Simplified - in production use proper hashing
+          description: data.description,
+          durationType: durationType,
+          durationMonths: durationMonths,
+          durationDays: durationDays,
+          // Codes are made one per payment, so a code is single-use unless the admin says otherwise
+          maxUses: data.maxUses ?? 1,
+          currentUses: 0,
+          isActive: data.isActive ?? true,
+          expiresAt: expiresAt,
+          createdById,
+          studyPacks: {
+            create: studyPackIds.map(studyPackId => ({
+              studyPackId
+            }))
           }
-        }
+        },
+        include: withUsage
+      });
+    } catch (error) {
+      if (isDuplicateCodeError(error)) {
+        throw new ConflictError(`Activation code ${code} already exists`);
       }
-    });
+      throw error;
+    }
 
     // Return canonical format
     return this.toCanonicalFormat(activationCode);
@@ -208,7 +228,7 @@ export class ActivationCodeService implements IActivationCodeService {
       };
     }
 
-    const [activationCodes, total] = await Promise.all([
+    const [activationCodes, total, stats] = await Promise.all([
       this.prisma.activationCode.findMany({
         where: whereConditions,
         skip,
@@ -216,18 +236,12 @@ export class ActivationCodeService implements IActivationCodeService {
         orderBy: {
           createdAt: 'desc'
         },
-        include: {
-          studyPacks: {
-            include: {
-              studyPack: true
-            }
-          },
-          redemptions: true
-        }
+        include: withUsage
       }),
       this.prisma.activationCode.count({
         where: whereConditions
-      })
+      }),
+      this.getStats()
     ]);
 
     // Transform to canonical format
@@ -238,8 +252,50 @@ export class ActivationCodeService implements IActivationCodeService {
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
+      stats
     };
+  }
+
+  /**
+   * Figures over all codes (not just the listed page), from the redemption rows:
+   * - redeemableCodes: active, not expired and not used up (a student can redeem them now)
+   * - expiringSoon: redeemable codes that expire within 30 days
+   * - totalRedemptions: every redemption of every code
+   */
+  private async getStats(): Promise<{
+    totalCodes: number;
+    redeemableCodes: number;
+    expiringSoon: number;
+    totalRedemptions: number;
+  }> {
+    // expires_at holds UTC wall-clock time (timestamp without time zone), so it is compared
+    // with now() in UTC: a JS Date parameter would arrive as timestamptz and be shifted by
+    // the database session's time zone
+    const [row] = await this.prisma.$queryRaw<{
+      totalCodes: number;
+      redeemableCodes: number;
+      expiringSoon: number;
+      totalRedemptions: number;
+    }[]>`
+      SELECT
+        count(*)::int AS "totalCodes",
+        count(*) FILTER (WHERE redeemable)::int AS "redeemableCodes",
+        count(*) FILTER (WHERE redeemable AND expires_at <= now_utc + interval '30 days')::int AS "expiringSoon",
+        coalesce(sum(uses), 0)::int AS "totalRedemptions"
+      FROM (
+        SELECT
+          ac.expires_at,
+          clock.now_utc,
+          coalesce(r.uses, 0) AS uses,
+          ac.is_active AND ac.expires_at > clock.now_utc AND coalesce(r.uses, 0) < ac.max_uses AS redeemable
+        FROM activation_codes ac
+        CROSS JOIN (SELECT now() AT TIME ZONE 'UTC' AS now_utc) clock
+        LEFT JOIN (
+          SELECT activation_code_id, count(*) AS uses FROM code_redemptions GROUP BY activation_code_id
+        ) r ON r.activation_code_id = ac.id
+      ) codes`;
+    return row;
   }
 
   /**
@@ -308,7 +364,7 @@ export class ActivationCodeService implements IActivationCodeService {
         where: { code: data.code }
       });
       if (codeConflict) {
-        throw new BadRequestError("Activation code already exists");
+        throw new ConflictError(`Activation code ${data.code} already exists`);
       }
     }
 
@@ -324,7 +380,7 @@ export class ActivationCodeService implements IActivationCodeService {
       if (found.length !== studyPackIds.length) {
         const foundIds = found.map(pack => pack.id);
         const missingIds = studyPackIds.filter(packId => !foundIds.includes(packId));
-        throw new NotFoundError(`Study pack(s) not found: ${missingIds.join(', ')}`);
+        throw new NotFoundError("Study pack(s)", missingIds.join(", "));
       }
     }
 
@@ -369,33 +425,47 @@ export class ActivationCodeService implements IActivationCodeService {
     }
 
     // Update the code and, when given, its study packs together
-    const updatedCode = await this.prisma.$transaction(async (tx) => {
-      await tx.activationCode.update({
-        where: { id },
-        data: updateData
-      });
+    let updatedCode;
+    try {
+      updatedCode = await this.prisma.$transaction(async (tx) => {
+        // Same row lock as a redemption: an edit and a redemption of this code run one
+        // after the other, so the next redemption sees exactly what was saved here
+        await tx.$queryRaw`SELECT id FROM activation_codes WHERE id = ${id} FOR UPDATE`;
 
-      if (studyPackIds) {
-        await tx.activationCodeStudyPack.deleteMany({
-          where: { activationCodeId: id }
-        });
-        await tx.activationCodeStudyPack.createMany({
-          data: studyPackIds.map(studyPackId => ({ activationCodeId: id, studyPackId }))
-        });
-      }
-
-      return tx.activationCode.findUnique({
-        where: { id },
-        include: {
-          studyPacks: {
-            include: {
-              studyPack: true
-            }
-          },
-          redemptions: true
+        if (data.maxUses !== undefined) {
+          const redemptions = await tx.codeRedemption.count({ where: { activationCodeId: id } });
+          if (data.maxUses < redemptions) {
+            throw new BadRequestError(
+              `Max uses cannot be lower than ${redemptions}: this code has already been redeemed ${redemptions} time(s).`
+            );
+          }
         }
+
+        await tx.activationCode.update({
+          where: { id },
+          data: updateData
+        });
+
+        if (studyPackIds) {
+          await tx.activationCodeStudyPack.deleteMany({
+            where: { activationCodeId: id }
+          });
+          await tx.activationCodeStudyPack.createMany({
+            data: studyPackIds.map(studyPackId => ({ activationCodeId: id, studyPackId }))
+          });
+        }
+
+        return tx.activationCode.findUnique({
+          where: { id },
+          include: withUsage
+        });
       });
-    });
+    } catch (error) {
+      if (isDuplicateCodeError(error)) {
+        throw new ConflictError(`Activation code ${data.code} already exists`);
+      }
+      throw error;
+    }
 
     return this.toCanonicalFormatWithUpdatedAt(updatedCode!);
   }
@@ -479,6 +549,10 @@ export class ActivationCodeService implements IActivationCodeService {
       ? { durationType, durationDays: activationCode.durationDays }
       : { durationType, durationMonths: activationCode.durationMonths };
 
+    // Usage is the number of redemption rows, the same count redemption enforces
+    const currentUses = activationCode._count?.redemptions
+      ?? (Array.isArray(activationCode.redemptions) ? activationCode.redemptions.length : activationCode.currentUses);
+
     return {
       id: activationCode.id,
       code: activationCode.code,
@@ -491,7 +565,7 @@ export class ActivationCodeService implements IActivationCodeService {
       expiryDate: activationCode.expiresAt?.toISOString() || null,
       expiresAt: activationCode.expiresAt?.toISOString() || null,
       maxUses: activationCode.maxUses,
-      currentUses: activationCode.currentUses,
+      currentUses,
       ...durationFields,
       isActive: activationCode.isActive,
       createdAt: activationCode.createdAt.toISOString()

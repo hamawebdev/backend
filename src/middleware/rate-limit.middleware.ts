@@ -2,62 +2,52 @@ import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 
 /**
- * Rate limiting middleware for activation code validation
- * Prevents abuse by limiting the number of validation attempts per IP
+ * Limit on activation code attempts. Each signed-in student has their own count:
+ * students behind one IP (mobile carrier NAT, campus Wi-Fi) must not use up each
+ * other's attempts. The 429 body has the usual error shape, with code
+ * RATE_LIMITED and details.retryAfterSeconds.
  */
-export const codeValidationRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
-  message: {
-    error: 'Too many activation code validation attempts',
-    message: 'Please try again later. Maximum 10 attempts per 15 minutes.',
-    retryAfter: '15 minutes'
-  },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  handler: (req: Request, res: Response) => {
-    res.status(429).json({
-      success: false,
-      error: 'Too many activation code validation attempts',
-      message: 'Please try again later. Maximum 10 attempts per 15 minutes.',
-      retryAfter: '15 minutes'
-    });
-  },
-  skip: (req: Request) => {
-    // Skip rate limiting for admin users (optional)
-    const user = (req as any).user;
-    return user && (user.role === 'ADMIN' || user.role === 'EMPLOYEE');
-  }
-});
+function activationCodeAttemptLimit(action: string, windowMinutes: number, max: number) {
+  return rateLimit({
+    windowMs: windowMinutes * 60 * 1000,
+    max,
+    keyGenerator: (req: Request) => {
+      const userId = (req as any).user?.user_data?.id;
+      return userId ? `student:${userId}` : `ip:${req.ip}`;
+    },
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    handler: (req: Request, res: Response) => {
+      const resetTime: Date | undefined = (req as any).rateLimit?.resetTime;
+      const retryAfterSeconds = resetTime
+        ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+        : windowMinutes * 60;
+      res.set('Retry-After', String(retryAfterSeconds));
+      res.status(429).json({
+        success: false,
+        error: {
+          type: 'RateLimitError',
+          code: 'RATE_LIMITED',
+          message: `Too many activation code ${action} attempts (maximum ${max} per ${windowMinutes} minutes). ` +
+            `Try again in ${Math.ceil(retryAfterSeconds / 60)} minute(s).`,
+          details: { retryAfterSeconds },
+          timestamp: new Date().toISOString()
+        }
+      });
+    },
+    skip: (req: Request) => {
+      // Skip rate limiting for admin users (optional)
+      const user = (req as any).user;
+      return user && (user.role === 'ADMIN' || user.role === 'EMPLOYEE');
+    }
+  });
+}
 
-/**
- * Rate limiting middleware for activation code redemption
- * More restrictive to prevent abuse of the redemption system
- */
-export const codeRedemptionRateLimit = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // Limit each IP to 5 redemption attempts per hour
-  message: {
-    error: 'Too many activation code redemption attempts',
-    message: 'Please try again later. Maximum 5 redemption attempts per hour.',
-    retryAfter: '1 hour'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req: Request, res: Response) => {
-    res.status(429).json({
-      success: false,
-      error: 'Too many activation code redemption attempts',
-      message: 'Please try again later. Maximum 5 redemption attempts per hour.',
-      retryAfter: '1 hour'
-    });
-  },
-  skip: (req: Request) => {
-    // Skip rate limiting for admin users (optional)
-    const user = (req as any).user;
-    return user && (user.role === 'ADMIN' || user.role === 'EMPLOYEE');
-  }
-});
+// Activation code validation: 10 attempts per 15 minutes per student
+export const codeValidationRateLimit = activationCodeAttemptLimit('validation', 15, 10);
+
+// Activation code redemption: 10 attempts per hour per student
+export const codeRedemptionRateLimit = activationCodeAttemptLimit('redemption', 60, 10);
 
 /**
  * General rate limiting middleware for student endpoints

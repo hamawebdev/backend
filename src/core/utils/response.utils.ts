@@ -97,6 +97,7 @@ class ResponseUtils {
           type: error.name,
           message: error.message,
           code: error.code,
+          ...(error.details !== undefined && { details: error.details }),
           timestamp,
           requestId: reqId
         }
