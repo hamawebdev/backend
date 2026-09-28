@@ -8,6 +8,7 @@ import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
 import { NotFoundError } from "../../core/errors/AppError";
 import { ANSWER_ORDER, PUBLISHED_QUESTION } from "../questions/question-visibility";
+import { getQuestionCatalog, packMatchesYearLevel, YEAR_LEVELS } from "../quizzes/question-catalog";
 import {
   CourseProgress,
   QuizScore,
@@ -670,91 +671,56 @@ export default class StudentRepository {
     unites: any[];
     independentModules: any[];
   }> {
-    // Build where clause: always filter by accessible study packs,
-    // and optionally narrow down by yearLevel (maps to studyPack.yearNumber)
-    const uniteWhere: any = {
-      studyPackId: { in: studyPackIds }
-    };
-    if (yearLevel) {
-      uniteWhere.studyPack = { yearNumber: yearLevel };
-    }
+    const catalog = await getQuestionCatalog(this.prisma);
+    const packs = new Set(studyPackIds);
 
-    // Get unites filtered by accessible study packs (and optionally yearLevel)
-    const unites = await this.prisma.unite.findMany({
-      where: uniteWhere,
-      include: {
-        modules: {
-          include: {
-            courses: {
-              select: {
-                id: true,
-                name: true,
-                description: true
-              }
-            }
-          }
-        }
-      }
+    // Unites of the accessible study packs, optionally narrowed to one year level
+    // (a pack's yearNumber; SEVEN also matches RESIDENCY packs)
+    const unites = catalog.unites.filter(unite => {
+      if (!packs.has(unite.studyPackId)) return false;
+      if (!yearLevel) return true;
+      const pack = catalog.packById.get(unite.studyPackId);
+      return !!pack && packMatchesYearLevel(pack, yearLevel);
     });
 
     // Independent modules (uniteId: null) don't belong to any StudyPack directly.
     // Filter them by year level: StudyPack.yearNumber → Module.courses.questions.yearLevel
-    const independentModulesWhere: any = { uniteId: null };
-
-    // Determine which yearNumbers to filter by
     let effectiveYearNumbers: string[] = [];
     if (yearLevel) {
       effectiveYearNumbers = [yearLevel];
     } else if (studyPackIds.length > 0) {
-      const packs = await this.prisma.studyPack.findMany({
-        where: { id: { in: studyPackIds } },
-        select: { yearNumber: true }
-      });
-      effectiveYearNumbers = packs.map((p: any) => p.yearNumber).filter(Boolean);
+      effectiveYearNumbers = catalog.packs
+        .filter(p => packs.has(p.id) && p.yearNumber)
+        .map(p => p.yearNumber as string);
     }
+    const yearMask = effectiveYearNumbers.reduce((mask, level) => {
+      const index = YEAR_LEVELS.indexOf(level as any);
+      return index === -1 ? mask : mask | (1 << index);
+    }, 0);
+    const independentModules = catalog.independentModules.filter(module =>
+      effectiveYearNumbers.length === 0 ||
+      (catalog.coursesByModule.get(module.id) || []).some(course => ((catalog.yearLevelMaskByCourse.get(course.id) || 0) & yearMask) !== 0)
+    );
 
-    if (effectiveYearNumbers.length > 0) {
-      independentModulesWhere.courses = {
-        some: {
-          questions: {
-            some: {
-              ...PUBLISHED_QUESTION,
-              yearLevel: { in: effectiveYearNumbers }
-            }
-          }
-        }
-      };
-    }
-
-    const independentModulesRaw = await this.prisma.module.findMany({
-      where: independentModulesWhere as any,
-      include: {
-        courses: {
-          select: {
-            id: true,
-            name: true,
-            description: true
-          }
-        }
-      }
-    });
+    const coursesOf = (moduleId: number) => (catalog.coursesByModule.get(moduleId) || [])
+      .map(course => ({ id: course.id, name: course.name, description: course.description }));
 
     return {
       unites: unites.map(unite => ({
         id: unite.id,
         name: unite.name,
         logoUrl: unite.logoUrl,
-        modules: unite.modules.map(module => ({
+        modules: (catalog.modulesByUnite.get(unite.id) || []).map(module => ({
           id: module.id,
           name: module.name,
-          courses: module.courses
+          courses: coursesOf(module.id)
         }))
       })),
-      independentModules: independentModulesRaw.map((module: any) => ({
+      independentModules: independentModules.map(module => ({
         id: module.id,
         name: module.name,
         imagePath: module.imagePath,
-        courses: module.courses
+        courses: coursesOf(module.id)
       }))
     };
   }
@@ -1099,19 +1065,7 @@ export default class StudentRepository {
     return await this.prisma.subscription.findMany({
       where: { userId },
       include: {
-        studyPack: {
-          include: {
-            unites: {
-              include: {
-                modules: {
-                  include: {
-                    courses: true
-                  }
-                }
-              }
-            }
-          }
-        }
+        studyPack: { select: { id: true, name: true, type: true, yearNumber: true } }
       },
       orderBy: {
         createdAt: 'desc'

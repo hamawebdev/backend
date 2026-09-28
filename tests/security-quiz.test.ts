@@ -185,10 +185,19 @@ describe('Quiz access, scoring and integrity regressions', () => {
     expect(bad.status).toBe(400);
   });
 
-  it('POST /quizzes/sessions without questionCount is capped; rotations use year levels', async () => {
+  it('POST /quizzes/sessions: an exam holds every matching question in order, practice is capped; rotations use year levels', async () => {
     const res = await api().post('/api/v1/quizzes/sessions').set('Authorization', tokenFor(A)).send({ title: 'Big exam', courseIds: [courseA2], sessionType: 'EXAM' });
     expect(res.status).toBe(201);
-    expect(await prisma.quizSessionQuestion.count({ where: { sessionId: res.body.data.sessionId } })).toBe(1000);
+    expect(res.body.data.questionCount).toBe(1005);
+    const examLinks = await prisma.quizSessionQuestion.findMany({ where: { sessionId: res.body.data.sessionId }, orderBy: { id: 'asc' }, select: { questionId: true } });
+    expect(examLinks).toHaveLength(1005);
+    const examIds = examLinks.map(l => l.questionId);
+    expect(examIds).toEqual([...examIds].sort((a, b) => a - b));
+
+    const practice = await api().post('/api/v1/quizzes/sessions').set('Authorization', tokenFor(A)).send({ title: 'Big practice', courseIds: [courseA2], sessionType: 'PRACTISE' });
+    expect(practice.status).toBe(201);
+    expect(practice.body.data.questionCount).toBe(1000);
+    expect(await prisma.quizSessionQuestion.count({ where: { sessionId: practice.body.data.sessionId } })).toBe(1000);
 
     const r1 = await api().post('/api/v1/quizzes/question-count').set('Authorization', tokenFor(A)).send({ courseIds: [courseA2], rotations: ['R1'] });
     expect(r1.status).toBe(400);

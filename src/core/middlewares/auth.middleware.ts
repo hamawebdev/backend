@@ -5,7 +5,8 @@ import ResponseUtils from "../utils/response.utils";
 import { AppError } from "../errors/AppError";
 import PrismaService from "../../config/db";
 import { RequestWithUser, TJwtPayload } from "../../types/types";
-import { accessGrantingSubscriptionWhere, buildJwtPayload } from "../../modules/auth/jwt-payload.builder";
+import { buildJwtPayload } from "../../modules/auth/jwt-payload.builder";
+import { loadAuthUser } from "./auth-user-cache";
 
 const jwtUtils = container.resolve(JwtUtils);
 const responseUtils = container.resolve(ResponseUtils);
@@ -17,9 +18,10 @@ const LOADED_TOKEN = Symbol("authLoadedToken");
 /**
  * Verify the access token, then load the user from the database and build
  * req.user from it. The token only identifies the user: role, isActive,
- * currentYear and subscriptions come from the database on every request, so
+ * currentYear and subscriptions come from the database (read at most every
+ * AUTH_CACHE_TTL_MS, and again after any write through the API), so
  * deactivation, role changes and expired or cancelled subscriptions apply
- * immediately. A token issued before the user's last logout or password
+ * right away. A token issued before the user's last logout or password
  * change (older token_version) is rejected.
  */
 const authMiddleware = async (req: RequestWithUser, res: Response, next: NextFunction): Promise<void> => {
@@ -67,31 +69,7 @@ const authMiddleware = async (req: RequestWithUser, res: Response, next: NextFun
     const prisma = container.resolve(PrismaService).getClient();
     let user;
     try {
-      user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          fullName: true,
-          role: true,
-          universityId: true,
-          specialtyId: true,
-          currentYear: true,
-          emailVerified: true,
-          isActive: true,
-          tokenVersion: true,
-          subscriptions: {
-            where: accessGrantingSubscriptionWhere(),
-            select: {
-              id: true,
-              studyPackId: true,
-              status: true,
-              endDate: true,
-              studyPack: { select: { name: true, type: true, yearNumber: true } }
-            }
-          }
-        }
-      });
+      user = await loadAuthUser(userId);
     } catch (dbError) {
       console.error('Auth middleware: failed to load user:', dbError);
       responseUtils.sendErrorResponse(res, new AppError('Unable to verify your session right now. Please try again shortly.', 503));

@@ -1,6 +1,6 @@
 import { inject, injectable, container } from "tsyringe";
 import { SessionType, PackType, SessionStatus, RetakeType, YearLevel, QuestionType } from "@prisma/client";
-import QuizRepository, { MAX_SESSION_QUESTIONS, PreparedAnswer, SessionStats } from "./quiz.repository";
+import QuizRepository, { MAX_SESSION_QUESTIONS, MAX_EXAM_SESSION_QUESTIONS, PreparedAnswer, SessionStats } from "./quiz.repository";
 import QuestionService from "../questions/question.service";
 import { AccessControlService } from "../../services/access-control.service";
 import {
@@ -78,10 +78,15 @@ export default class QuizService {
       quizYears: (filters as any).quizYears // preserve optional quizYears if provided
     };
 
-    // Get questions based on filters using unified question service
+    // Get questions based on filters using unified question service (a residency
+    // subscription opens every study pack)
+    const accessControlService = new AccessControlService();
+    const studyPackIds = accessControlService.hasResidencyAccess(user)
+      ? await this.quizRepository.getAllStudyPackIds()
+      : user.accessible_study_packs;
     const questions = await this.questionService.getQuestionsWithFilters(
       unifiedFilters,
-      user.accessible_study_packs,
+      studyPackIds,
       settings.questionCount
     );
 
@@ -488,15 +493,16 @@ export default class QuizService {
     totalQuestions: number;
     completedAt?: Date;
   }> {
-    // Verify session belongs to user
-    const session = await this.quizRepository.findOwnedSession(sessionId, user.user_data.id);
+    // Verify session belongs to user; each question counts once and rows without an
+    // answer are ignored (the stats are read alongside and only used for the owner)
+    const [session, stats] = await Promise.all([
+      this.quizRepository.findOwnedSession(sessionId, user.user_data.id),
+      this.quizRepository.getSessionStats(sessionId)
+    ]);
 
     if (!session) {
       throw new SessionNotFoundError(sessionId);
     }
-
-    // Each question counts once; rows without an answer are ignored
-    const stats = await this.quizRepository.getSessionStats(sessionId);
 
     return {
       sessionId: session.id,
@@ -719,7 +725,7 @@ export default class QuizService {
       // Canonical spec format
       return {
         sessionId: retakeSession.id,
-        questionCount: questionIds.length,
+        questionCount: retakeSession.questionCount,
         title: retakeTitle
       };
 
@@ -764,10 +770,7 @@ export default class QuizService {
     user: TJwtPayload
   ): Promise<{ success: true; message: string }> {
     // Verify session belongs to user
-    const session = await this.quizRepository.getQuizSessionById(
-      sessionId,
-      user.user_data.id
-    );
+    const session = await this.quizRepository.getSessionHeader(sessionId, user.user_data.id);
 
     if (!session) {
       throw new SessionNotFoundError(sessionId);
@@ -800,12 +803,12 @@ export default class QuizService {
     const { status } = updateStatusDto;
 
     // Get session and verify ownership or admin/employee access
-    const session = await this.quizRepository.getQuizSessionById(sessionId, user.user_data.id);
+    const session = await this.quizRepository.getSessionHeader(sessionId, user.user_data.id);
 
     if (!session) {
       // If user is admin/employee, try to get session without user restriction
       if (user.user_data.role === 'ADMIN' || user.user_data.role === 'EMPLOYEE') {
-        const adminSession = await this.quizRepository.getQuizSessionById(sessionId);
+        const adminSession = await this.quizRepository.getSessionHeader(sessionId);
         if (!adminSession) {
           throw new SessionNotFoundError(sessionId);
         }
@@ -962,7 +965,7 @@ export default class QuizService {
       success: true,
       data: {
         sessionId: session.id,
-        questionCount: questionIds.length,
+        questionCount: session.questionCount,
         title: sessionTitle
       }
     };
@@ -1020,7 +1023,7 @@ export default class QuizService {
       data: {
         sessionId: session.id,
         type: type,
-        questionCount: questionIds.length,
+        questionCount: session.questionCount,
         status: session.status,
         createdAt: session.createdAt.toISOString()
       }
@@ -1183,7 +1186,7 @@ export default class QuizService {
       repetitionYears?: number[];
     },
     user: TJwtPayload
-  ): Promise<{ sessionId: number }> {
+  ): Promise<{ sessionId: number; questionCount: number }> {
     if (!user.has_active_subscription) {
       throw new SubscriptionRequiredError("quiz sessions");
     }
@@ -1201,9 +1204,12 @@ export default class QuizService {
     // Map sessionType to Prisma enum
     const sessionType = dto.sessionType === 'PRACTISE' ? SessionType.PRACTICE : SessionType.EXAM;
 
-    // Get a random selection of matching questions. Without questionCount (the
-    // web omits it for EXAM sessions) the session is still capped.
-    const questionCount = Math.min(dto.questionCount ?? MAX_SESSION_QUESTIONS, MAX_SESSION_QUESTIONS);
+    // Practice: a random selection of matching questions (at most MAX_SESSION_QUESTIONS).
+    // Exam: every matching question of the module, source and year(s), in question
+    // order, so the exam is complete (the web sends no questionCount for exams).
+    const isExam = sessionType === SessionType.EXAM;
+    const maxQuestions = isExam ? MAX_EXAM_SESSION_QUESTIONS : MAX_SESSION_QUESTIONS;
+    const questionCount = Math.min(dto.questionCount ?? maxQuestions, maxQuestions);
     const questions = await this.quizRepository.getQuestionsForCanonicalSession(studyPackIds, {
       courseIds: dto.courseIds,
       questionTypes: dto.questionTypes,
@@ -1213,7 +1219,7 @@ export default class QuizService {
       questionSourceIds: dto.questionSourceIds,
       repetitionCountMin: dto.repetitionCountMin,
       repetitionYears: dto.repetitionYears
-    }, questionCount);
+    }, questionCount, { shuffle: !isExam, maxQuestions });
 
     if (questions.length === 0) {
       throw new NoQuestionsFoundError({ courseIds: dto.courseIds });
@@ -1227,7 +1233,7 @@ export default class QuizService {
       questions.map(q => q.id)
     );
 
-    return { sessionId: session.id };
+    return { sessionId: session.id, questionCount: session.questionCount };
   }
 
   // ==========================================
@@ -1298,7 +1304,7 @@ export default class QuizService {
 
     return {
       sessionId: session.id,
-      questionCount: questions.length,
+      questionCount: session.questionCount,
       title: dto.title
     };
   }

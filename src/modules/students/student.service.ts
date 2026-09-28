@@ -8,6 +8,7 @@ import { NotFoundError, ForbiddenError, BadRequestError } from "../../core/error
 import PrismaService from "../../config/db";
 import { AccessControlService } from "../../services/access-control.service";
 import { isAccessGrantingSubscription } from "../auth/jwt-payload.builder";
+import { getQuestionCatalog, packMatchesYearLevel } from "../quizzes/question-catalog";
 
 @injectable()
 export default class StudentService {
@@ -442,19 +443,14 @@ export default class StudentService {
     let studyPackIds: number[];
 
     if (isAdminOrEmployee || hasResidencyAccess) {
+      const catalog = await getQuestionCatalog(this.prisma);
       if (yearLevel) {
-        // Residency/admin + yearLevel: get study packs matching that year
-        const matchingPacks = await this.prisma.studyPack.findMany({
-          where: { yearNumber: yearLevel },
-          select: { id: true }
-        });
-        studyPackIds = matchingPacks.map((p: any) => p.id);
+        // Residency/admin + yearLevel: the study packs of that year (SEVEN is the
+        // résidanat year: RESIDENCY packs, which have no yearNumber)
+        studyPackIds = catalog.packs.filter(p => packMatchesYearLevel(p, yearLevel)).map(p => p.id);
       } else {
         // Residency/admin without yearLevel: get ALL study packs
-        const allPacks = await this.prisma.studyPack.findMany({
-          select: { id: true }
-        });
-        studyPackIds = allPacks.map((p: any) => p.id);
+        studyPackIds = catalog.packs.map(p => p.id);
       }
     } else {
       // Regular user: use their accessible study packs from JWT

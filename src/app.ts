@@ -4,6 +4,7 @@ import cors from "cors";
 import morgan from "morgan";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import compression from "compression";
 import { container } from "./config/container";
 import PrismaService from "./config/db";
 import routes from "./routes";
@@ -11,6 +12,8 @@ import ResponseUtils from "./core/utils/response.utils";
 import GlobalErrorHandler from "./core/middlewares/errors.middleware";
 import { TFindInput } from "./types/types";
 import parseQueryParams from "./core/middlewares/parseQueryParams.middleware";
+import { invalidateQuestionCatalog, warmQuestionCatalog } from "./modules/quizzes/question-catalog";
+import { clearAuthUserCache } from "./core/middlewares/auth-user-cache";
 // Extend Express Request type to include queryParams
 declare module "express-serve-static-core" {
   interface Request {
@@ -80,6 +83,23 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: "unsafe-none" },
 }));
 
+// Compress JSON responses (setup data, sessions): they are sent across a slow link
+app.use(compression({ threshold: 1024 }));
+
+// After a successful write, reload what the API keeps in memory: the question
+// catalog (admin edits to content and questions) and the signed-in users (logout,
+// password, subscription and account changes)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") {
+    res.on("finish", () => {
+      if (res.statusCode >= 400) return;
+      clearAuthUserCache();
+      if (req.originalUrl.startsWith("/api/v1/admin")) invalidateQuestionCatalog();
+    });
+  }
+  next();
+});
+
 // Middleware to parse JSON. Admin routes take bulk imports (hundreds of questions
 // with explanations), so they get a larger limit than the rest of the API.
 const keepRawBody = (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; };
@@ -118,6 +138,8 @@ if (require.main === module) {
   const HOST = '0.0.0.0'; // Listen on all interfaces (required for Docker)
   const server = app.listen(Number(PORT), HOST, () => {
     console.log(`Server is running on http://${HOST}:${PORT}`);
+    // Load the question catalog before the first student asks for it
+    warmQuestionCatalog(container.resolve(PrismaService).getClient());
   });
 
   // Graceful shutdown: finish in-flight requests, then close the DB pool
