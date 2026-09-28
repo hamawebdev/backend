@@ -1,9 +1,18 @@
+// Development seed (npx prisma db seed). Not part of the build or the Docker image.
 import { PrismaClient, YearLevel, PackType, QuestionType } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 // Seeding clears and rewrites tables: never run it against production by accident
 if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
   console.error('Refusing to seed: NODE_ENV is production (set ALLOW_PRODUCTION_SEED=true to override)');
+  process.exit(1);
+}
+
+// The seeded admin's password comes from the environment, never from the source
+const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+if (!adminPassword || adminPassword.length < 12) {
+  console.error('Refusing to seed: set SEED_ADMIN_PASSWORD (at least 12 characters) for the seeded admin account');
   process.exit(1);
 }
 
@@ -196,7 +205,7 @@ async function main() {
 
 
     console.log('👥 Creating users...');
-    const hashedPassword = await bcrypt.hash('ayoubwassim/M8', 10);
+    const hashedPassword = await bcrypt.hash(adminPassword as string, 10);
 
     // Admin User
     const admin = await prisma.user.create({
@@ -219,7 +228,7 @@ async function main() {
     await prisma.refreshToken.create({
       data: {
         userId: admin.id,
-        token: 'admin-refresh-token-1234567890',
+        token: crypto.randomBytes(32).toString('hex'),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
       },
     });

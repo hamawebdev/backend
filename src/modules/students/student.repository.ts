@@ -6,6 +6,7 @@ import {
 import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
 import { NotFoundError } from "../../core/errors/AppError";
+import { ANSWER_ORDER, PUBLISHED_QUESTION } from "../questions/question-visibility";
 import {
   CourseProgress,
   QuizScore,
@@ -399,7 +400,7 @@ export default class StudentRepository {
         },
         question: {
           include: {
-            questionAnswers: true
+            questionAnswers: { orderBy: ANSWER_ORDER }
           }
         },
         selectedAnswer: true
@@ -699,6 +700,7 @@ export default class StudentRepository {
         some: {
           questions: {
             some: {
+              ...PUBLISHED_QUESTION,
               yearLevel: { in: effectiveYearNumbers }
             }
           }
@@ -889,7 +891,7 @@ export default class StudentRepository {
                   include: {
                     _count: {
                       select: {
-                        questions: true,
+                        questions: { where: PUBLISHED_QUESTION },
                         quizzes: true
                       }
                     }
@@ -932,7 +934,7 @@ export default class StudentRepository {
                     },
                     _count: {
                       select: {
-                        questions: true,
+                        questions: { where: PUBLISHED_QUESTION },
                         quizzes: true
                       }
                     }
@@ -1095,12 +1097,13 @@ export default class StudentRepository {
         },
         question: {
           include: {
-            questionImages: true,
-            questionExplanationImages: true,
+            questionImages: { orderBy: { id: 'asc' } },
+            questionExplanationImages: { orderBy: { id: 'asc' } },
             questionAnswers: {
               include: {
                 explanationImages: true
-              }
+              },
+              orderBy: ANSWER_ORDER
             },
             university: {
               select: {
@@ -3040,6 +3043,7 @@ export default class StudentRepository {
         some: {
           questions: {
             some: {
+              ...PUBLISHED_QUESTION,
               yearLevel: { in: effectiveYearNumbers }
             }
           }
@@ -3280,6 +3284,7 @@ export default class StudentRepository {
         name: true,
         questions: {
           where: {
+            ...PUBLISHED_QUESTION,
             examYear: { not: null }
           },
           select: {
@@ -3324,6 +3329,7 @@ export default class StudentRepository {
     // Get total question count
     const totalQuestions = await this.prisma.question.count({
       where: {
+        ...PUBLISHED_QUESTION,
         universityId: { not: null },
         examYear: { not: null }
       }

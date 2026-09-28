@@ -1,11 +1,22 @@
+// Development load-test seed (npm run prisma:performance-seed). Not part of the build or the Docker image.
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 // Seeding clears and rewrites tables: never run it against production by accident
 if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
   console.error('Refusing to seed: NODE_ENV is production (set ALLOW_PRODUCTION_SEED=true to override)');
   process.exit(1);
 }
+
+// Passwords come from the environment, never from the source: SEED_ADMIN_PASSWORD for
+// the admin it may create, SEED_USER_PASSWORD (random when unset) for the generated users
+const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+if (!adminPassword || adminPassword.length < 12) {
+  console.error('Refusing to seed: set SEED_ADMIN_PASSWORD (at least 12 characters)');
+  process.exit(1);
+}
+const userPassword = process.env.SEED_USER_PASSWORD || crypto.randomBytes(24).toString('base64url');
 
 const prisma = new PrismaClient();
 
@@ -96,14 +107,14 @@ async function createPerformanceData() {
     }
 
     // Create admin user for question creation if not exists
-    const hashedPassword = await bcrypt.hash('password123', 10);
+    const hashedPassword = await bcrypt.hash(userPassword, 10);
     let adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
     
     if (!adminUser) {
       adminUser = await prisma.user.create({
         data: {
           email: 'performance.admin@medcin.dz',
-          passwordHash: hashedPassword,
+          passwordHash: await bcrypt.hash(adminPassword as string, 10),
           fullName: 'Performance Admin',
           role: 'ADMIN',
           universityId: existingUniversities[0].id,

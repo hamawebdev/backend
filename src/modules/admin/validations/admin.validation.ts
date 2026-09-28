@@ -311,12 +311,18 @@ export const specialtiesQuerySchema = z.object({
 });
 
 // Question Source Management Validations
+// Names like "Résidanat Sétif" or "Externat d'Alger": letters of any script (accents
+// included), digits, spaces, hyphens, underscores, apostrophes and dots
+const QUESTION_SOURCE_NAME = /^[\p{L}\p{M}\p{N}\s\-_'’.]+$/u;
+const QUESTION_SOURCE_NAME_MESSAGE =
+  "Question source name can only contain letters, numbers, spaces, hyphens, underscores, apostrophes and dots";
+
 export const createQuestionSourceSchema = z.object({
   name: z.string()
     .trim()
     .min(2, "Question source name must be at least 2 characters")
     .max(100, "Question source name must not exceed 100 characters")
-    .regex(/^[a-zA-Z0-9\s\-_]+$/, "Question source name can only contain letters, numbers, spaces, hyphens, and underscores")
+    .regex(QUESTION_SOURCE_NAME, QUESTION_SOURCE_NAME_MESSAGE)
 });
 
 export const updateQuestionSourceSchema = z.object({
@@ -324,7 +330,7 @@ export const updateQuestionSourceSchema = z.object({
     .trim()
     .min(2, "Question source name must be at least 2 characters")
     .max(100, "Question source name must not exceed 100 characters")
-    .regex(/^[a-zA-Z0-9\s\-_]+$/, "Question source name can only contain letters, numbers, spaces, hyphens, and underscores")
+    .regex(QUESTION_SOURCE_NAME, QUESTION_SOURCE_NAME_MESSAGE)
     .optional()
 });
 
@@ -566,9 +572,16 @@ export const validateActivationCodeSchema = z.object({
 // RESIDENCY QUESTION MANAGEMENT (Canonical spec)
 // ==========================================
 
-// The three residency exam parts. Questions are only listed, editable and used in
-// student sessions when their part is one of these.
-export const RESIDENCY_PARTS = ['Sciences_fondamentales', 'Pathologie_medico_chirurgical', 'Dossier_clinique'] as const;
+// Residency exam parts: the three national parts, and the Sétif papers' Biologie /
+// Médicale / Chirurgie. A residency question may also have no part (Oran papers).
+export const RESIDENCY_PARTS = [
+  'Sciences_fondamentales',
+  'Pathologie_medico_chirurgical',
+  'Dossier_clinique',
+  'Biologie',
+  'Medicale',
+  'Chirurgie'
+] as const;
 
 // Labels older admin screens send, keyed by a normalized form (lower case, no accents,
 // runs of other characters as '_')
@@ -582,6 +595,9 @@ const RESIDENCY_PART_ALIASES: Record<string, typeof RESIDENCY_PARTS[number]> = {
   dossier_clinique: 'Dossier_clinique',
   dossiers_cliniques: 'Dossier_clinique',
   e_dossiers_cliniques: 'Dossier_clinique',
+  biologie: 'Biologie',
+  medicale: 'Medicale',
+  chirurgie: 'Chirurgie',
 };
 
 export function normalizeResidencyPart(value: unknown): unknown {

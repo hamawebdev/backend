@@ -1,0 +1,29 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "derived": true,
+ "note": "rebuilt from the question tags (part, sitting and question number); the export had no paper files",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "residanat",
+ "name": "Résidanat Sétif 2017 - medicale",
+ "examYear": 2017,
+ "part": "medicale",
+ "origin": {
+  "platform": "mbset",
+  "source": "Résidanat Sétif"
+ },
+ "counts": {
+  "entries": 100,
+  "referenced": 100
+ },
+ "questions": [
+  {
+   "n": 193,
+   "ref": "q_a95a5009f08a093a",
+   "in": "setif/residanat/by-course/year-4/cardiologie/hypertension-arterielle-hta/2017.json",
+   "module": "cardiologie",
+   "course": "hypertension-arterielle-hta"
+  }
+ ]
+}

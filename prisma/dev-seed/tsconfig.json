@@ -1,0 +1,11 @@
+{
+  // Type-checks the development seeds when ts-node runs them (npx prisma db seed).
+  // They live outside src/, so `npm run build` never compiles them into build/.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["*.ts"],
+  "exclude": []
+}

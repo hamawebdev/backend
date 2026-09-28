@@ -185,13 +185,18 @@ export default class ExamService {
     questions: Array<{
       id: number;
       questionText: string;
+      questionTextEn: string | null;
       questionType: string;
       answers: Array<{
         id: number;
         answerText: string;
+        answerTextEn: string | null;
         isCorrect: boolean;
+        explanation: string | null;
+        explanationEn: string | null;
       }>;
       explanation: string | null;
+      explanationEn: string | null;
       images: Array<{
         imagePath: string;
         altText: string | null;
@@ -223,13 +228,19 @@ export default class ExamService {
     const formattedQuestions = questions.map(question => ({
       id: question.id,
       questionText: question.questionText,
+      // English translations, null until translated (clients fall back to French)
+      questionTextEn: question.questionTextEn ?? null,
       questionType: question.questionType,
       answers: question.questionAnswers.map((answer: any) => ({
         id: answer.id,
         answerText: answer.answerText,
-        isCorrect: answer.isCorrect
+        answerTextEn: answer.answerTextEn ?? null,
+        isCorrect: answer.isCorrect,
+        explanation: answer.explanation ?? null,
+        explanationEn: answer.explanationEn ?? null
       })),
       explanation: question.explanation,
+      explanationEn: question.explanationEn ?? null,
       images: question.questionImages?.map((img: any) => ({
         imagePath: img.imagePath,
         altText: img.altText

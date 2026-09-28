@@ -1,0 +1,57 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "tizi-ouzou",
+ "universityName": "Tizi Ouzou",
+ "kind": "externat",
+ "studyYear": 4,
+ "module": {
+  "name": "Neurologie",
+  "slug": "neurologie"
+ },
+ "course": {
+  "name": "Questions de synthese",
+  "slug": "questions-de-synthese"
+ },
+ "examYear": 2012,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Tizi Ouzou",
+  "files": [
+   "mystedia/courses/year-4/neurologie-41/questions-de-synthese-1138/questions-de-synthese-2012-3.json"
+  ],
+  "moduleIds": [
+   "41"
+  ],
+  "courseIds": [
+   "1138"
+  ]
+ },
+ "counts": {
+  "questions": 16,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_ddf7c2fa1831b98d",
+   "questionText": "Citez deux syndromes paranéoplasiques.",
+   "questionType": "QROC",
+   "expectedAnswer": "Poly myosite\nDermatomyosite",
+   "questionTags": [
+    "Mindgame",
+    "E. Tizi Ouzou",
+    "2012 P5"
+   ],
+   "repetitionCount": 0,
+   "session": "P5",
+   "originType": "qroc",
+   "answers": [],
+   "origin": {
+    "file": "mystedia/courses/year-4/neurologie-41/questions-de-synthese-1138/questions-de-synthese-2012-3.json",
+    "index": 1
+   }
+  }
+ ]
+}

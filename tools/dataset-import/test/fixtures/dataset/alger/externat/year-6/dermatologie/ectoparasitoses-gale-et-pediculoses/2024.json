@@ -1,0 +1,64 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "externat",
+ "studyYear": 6,
+ "module": {
+  "name": "Dermatologie",
+  "slug": "dermatologie"
+ },
+ "course": {
+  "name": "Ectoparasitoses gale et pediculoses",
+  "slug": "ectoparasitoses-gale-et-pediculoses"
+ },
+ "examYear": 2024,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Alger",
+  "files": [
+   "mystedia/courses/year-6/dermatologie-50/ectoparasitoses-gale-et-pediculoses-1278/ectoparasitoses-gale-et-pediculoses-2024-1.json"
+  ],
+  "moduleIds": [
+   "50"
+  ],
+  "courseIds": [
+   "1278"
+  ]
+ },
+ "counts": {
+  "questions": 3,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_f8e9078196f7f194",
+   "questionText": "QROCs sur 6 points\nA. Citez les signes dermatologiques spécifiques de la gale\nB. Citez les formes cliniques des pédiculoses\nC. Citez 5 formes cliniques de la leishmaniose cutanée",
+   "questionType": "QROC",
+   "expectedAnswer": "Consulter vos supports officiels",
+   "questionTags": [
+    "P4 2024"
+   ],
+   "repetitionCount": 3,
+   "repetitionYears": [
+    2021,
+    2023,
+    2025
+   ],
+   "session": "P4",
+   "originType": "qroc",
+   "answers": [],
+   "origin": {
+    "file": "mystedia/courses/year-6/dermatologie-50/ectoparasitoses-gale-et-pediculoses-1278/ectoparasitoses-gale-et-pediculoses-2024-1.json",
+    "index": 2
+   },
+   "number": 2,
+   "papers": [
+    "alger/exams/year-6/dermatologie/2024-p4.json"
+   ]
+  }
+ ]
+}

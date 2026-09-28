@@ -1,0 +1,740 @@
+[
+ {
+  "path": "alger/exams/year-2/unite-cardio-respiratoire/2025-examen-u01-militaire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 2,
+  "module": {
+   "name": "Unité cardio-respiratoire",
+   "slug": "unite-cardio-respiratoire"
+  },
+  "name": "Examen U01 2025 Militaire",
+  "session": "Examen U01 Militaire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-2/module-unite-cardio-respiratoire/exams/examen-u01-2025-militaire.json",
+   "id": "478"
+  },
+  "counts": {
+   "entries": 80,
+   "duplicatesRemoved": 0,
+   "referenced": 80,
+   "referencedOtherYear": 0,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 80
+ },
+ {
+  "path": "alger/exams/year-2/unite-digestive/2025-examen-u02-militaire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 2,
+  "module": {
+   "name": "Unité digestive",
+   "slug": "unite-digestive"
+  },
+  "name": "Examen U02 2025 Militaire",
+  "session": "Examen U02 Militaire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-2/module-unite-digestive/exams/examen-u02-2025-militaire.json",
+   "id": "472"
+  },
+  "counts": {
+   "entries": 80,
+   "duplicatesRemoved": 0,
+   "referenced": 1,
+   "referencedOtherYear": 79,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 80
+ },
+ {
+  "path": "alger/exams/year-2/unite-endocrinienne/2025-examen-u04-militaire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 2,
+  "module": {
+   "name": "Unité endocrinienne",
+   "slug": "unite-endocrinienne"
+  },
+  "name": "Examen U04 2025 Militaire",
+  "session": "Examen U04 Militaire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-2/module-unite-endocrinienne/exams/examen-u04-2025-militaire.json",
+   "id": "476"
+  },
+  "counts": {
+   "entries": 90,
+   "duplicatesRemoved": 0,
+   "referenced": 0,
+   "referencedOtherYear": 90,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 90
+ },
+ {
+  "path": "alger/exams/year-2/unite-renale/2025-examen-u03-militaire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 2,
+  "module": {
+   "name": "Unité rénale",
+   "slug": "unite-renale"
+  },
+  "name": "Examen U03 2025 Militaire",
+  "session": "Examen U03 Militaire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-2/module-unite-renale/exams/examen-u03-2025-militaire.json",
+   "id": "474"
+  },
+  "counts": {
+   "entries": 49,
+   "duplicatesRemoved": 0,
+   "referenced": 16,
+   "referencedOtherYear": 33,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 49
+ },
+ {
+  "path": "alger/exams/year-2/unite-renale/2025-militaire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 2,
+  "module": {
+   "name": "Unité rénale",
+   "slug": "unite-renale"
+  },
+  "name": "Militaire 2025",
+  "session": "Militaire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-2/module-unite-renale/exams/militaire-2025.json",
+   "id": "621"
+  },
+  "counts": {
+   "entries": 48,
+   "duplicatesRemoved": 0,
+   "referenced": 48,
+   "referencedOtherYear": 0,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 48
+ },
+ {
+  "path": "alger/exams/year-3/parasitologie-mycologie/2022-t1-pharmacie.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Parasitologie Mycologie",
+   "slug": "parasitologie-mycologie"
+  },
+  "name": "T1 Pharmacie 2022",
+  "session": "T1 Pharmacie",
+  "examYear": 2022,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-parasitologie-mycologie/exams/t1-pharmacie-2022.json",
+   "id": "118"
+  },
+  "counts": {
+   "entries": 27,
+   "duplicatesRemoved": 0,
+   "referenced": 27,
+   "referencedOtherYear": 0,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 27
+ },
+ {
+  "path": "alger/exams/year-3/parasitologie-mycologie/2022-t2-pharmacie.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Parasitologie Mycologie",
+   "slug": "parasitologie-mycologie"
+  },
+  "name": "T2 Pharmacie 2022",
+  "session": "T2 Pharmacie",
+  "examYear": 2022,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-parasitologie-mycologie/exams/t2-pharmacie-2022.json",
+   "id": "119"
+  },
+  "counts": {
+   "entries": 24,
+   "duplicatesRemoved": 0,
+   "referenced": 24,
+   "referencedOtherYear": 0,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 24
+ },
+ {
+  "path": "alger/exams/year-3/unite-appareil-endocrines-reproduction-et-urinaire/2020-2021-examen-constantine-u03.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Unité Appareil endocrines, reproduction et urinaire",
+   "slug": "unite-appareil-endocrines-reproduction-et-urinaire"
+  },
+  "name": "Examen Constantine U03 2020-2021",
+  "session": "Examen Constantine U03",
+  "examYear": 2021,
+  "academicYear": "2020-2021",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-unite-appareil-endocrines-reproduction-et-urinaire/exams/examen-constantine-u03-2020-2021.json",
+   "id": "90"
+  },
+  "counts": {
+   "entries": 60,
+   "duplicatesRemoved": 0,
+   "referenced": 7,
+   "referencedOtherYear": 0,
+   "embedded": 53,
+   "missingFromExport": 0
+  },
+  "entries": 60
+ },
+ {
+  "path": "alger/exams/year-3/unite-appareil-neurologique-locomoteur-et-cutane/no-year-examen-unite-02-20-21-constantine.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Unité Appareil Neurologique, Locomoteur et Cutané",
+   "slug": "unite-appareil-neurologique-locomoteur-et-cutane"
+  },
+  "name": "Examen unité 02 20/21 Constantine",
+  "session": "Examen unité 02 20/21 Constantine",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-unite-appareil-neurologique-locomoteur-et-cutane/exams/examen-unite-02-2021-constantine.json",
+   "id": "85"
+  },
+  "counts": {
+   "entries": 56,
+   "duplicatesRemoved": 0,
+   "referenced": 0,
+   "referencedOtherYear": 14,
+   "embedded": 42,
+   "missingFromExport": 0
+  },
+  "entries": 56
+ },
+ {
+  "path": "alger/exams/year-3/unite-cardio-respiratoire-et-psychologie-medicale/2020-2021-examen-unite-01-batna.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Unité Cardio-Respiratoire et Psychologie médicale",
+   "slug": "unite-cardio-respiratoire-et-psychologie-medicale"
+  },
+  "name": "Examen Unité 01 2020-2021 - Batna -",
+  "session": "Examen Unité 01 - Batna -",
+  "examYear": 2021,
+  "academicYear": "2020-2021",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-unite-cardio-respiratoire-et-psychologie-medicale/exams/examen-unite-01-2020-2021-batna.json",
+   "id": "18"
+  },
+  "counts": {
+   "entries": 59,
+   "duplicatesRemoved": 0,
+   "referenced": 0,
+   "referencedOtherYear": 0,
+   "embedded": 59,
+   "missingFromExport": 0
+  },
+  "entries": 59
+ },
+ {
+  "path": "alger/exams/year-3/unite-cardio-respiratoire-et-psychologie-medicale/2020-2021-examen-unite-01-constantine.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Unité Cardio-Respiratoire et Psychologie médicale",
+   "slug": "unite-cardio-respiratoire-et-psychologie-medicale"
+  },
+  "name": "Examen Unité 01 2020-2021 - Constantine -",
+  "session": "Examen Unité 01 - Constantine -",
+  "examYear": 2021,
+  "academicYear": "2020-2021",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-unite-cardio-respiratoire-et-psychologie-medicale/exams/examen-unite-01-2020-2021-constantine.json",
+   "id": "17"
+  },
+  "counts": {
+   "entries": 79,
+   "duplicatesRemoved": 0,
+   "referenced": 0,
+   "referencedOtherYear": 0,
+   "embedded": 79,
+   "missingFromExport": 0
+  },
+  "entries": 79
+ },
+ {
+  "path": "alger/exams/year-3/unite-cardio-respiratoire-et-psychologie-medicale/2025-examen-u01-militaire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Unité Cardio-Respiratoire et Psychologie médicale",
+   "slug": "unite-cardio-respiratoire-et-psychologie-medicale"
+  },
+  "name": "Examen U01 2025 Militaire",
+  "session": "Examen U01 Militaire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-unite-cardio-respiratoire-et-psychologie-medicale/exams/examen-u01-2025-militaire.json",
+   "id": "491"
+  },
+  "counts": {
+   "entries": 80,
+   "duplicatesRemoved": 0,
+   "referenced": 5,
+   "referencedOtherYear": 75,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 80
+ },
+ {
+  "path": "alger/exams/year-5/psychiatrie/2025-p1-militaire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 5,
+  "module": {
+   "name": "Psychiatrie",
+   "slug": "psychiatrie"
+  },
+  "name": "P1 2025 Militaire",
+  "session": "P1 Militaire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-5/module-psychiatrie/exams/p1-2025-militaire.json",
+   "id": "466"
+  },
+  "counts": {
+   "entries": 20,
+   "duplicatesRemoved": 0,
+   "referenced": 0,
+   "referencedOtherYear": 20,
+   "embedded": 0,
+   "missingFromExport": 1
+  },
+  "entries": 20
+ },
+ {
+  "path": "alger/exams/year-6/geriatrie/2025-p1-militaire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 6,
+  "module": {
+   "name": "Gériatrie",
+   "slug": "geriatrie"
+  },
+  "name": "P1 2025 Militaire",
+  "session": "P1 Militaire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-6/module-geriatrie/exams/p1-2025-militaire.json",
+   "id": "456"
+  },
+  "counts": {
+   "entries": 20,
+   "duplicatesRemoved": 0,
+   "referenced": 1,
+   "referencedOtherYear": 19,
+   "embedded": 0,
+   "missingFromExport": 1
+  },
+  "entries": 20
+ },
+ {
+  "path": "alger/exams/year-6/ophtalmologie/2025-p1-miliatire.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 6,
+  "module": {
+   "name": "Ophtalmologie",
+   "slug": "ophtalmologie"
+  },
+  "name": "P1 2025 Miliatire",
+  "session": "P1 Miliatire",
+  "examYear": 2025,
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-6/module-ophtalmologie/exams/p1-2025-miliatire.json",
+   "id": "463"
+  },
+  "counts": {
+   "entries": 36,
+   "duplicatesRemoved": 0,
+   "referenced": 0,
+   "referencedOtherYear": 36,
+   "embedded": 0,
+   "missingFromExport": 1
+  },
+  "entries": 36
+ },
+ {
+  "path": "alger/exams/year-2/unite-digestive/no-year-uei2-appareil-digestif.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 2,
+  "module": {
+   "name": "Unité digestive",
+   "slug": "unite-digestive"
+  },
+  "name": "UEI2 appareil digestif",
+  "session": "UEI2 appareil digestif",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-2/module-unite-digestive/exams/uei2-appareil-digestif.json",
+   "id": "9"
+  },
+  "counts": {
+   "entries": 59,
+   "duplicatesRemoved": 0,
+   "referenced": 1,
+   "referencedOtherYear": 0,
+   "embedded": 58,
+   "missingFromExport": 0
+  },
+  "entries": 59
+ },
+ {
+  "path": "alger/exams/year-2/unite-renale/no-year-u03-rattrapage.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 2,
+  "module": {
+   "name": "Unité rénale",
+   "slug": "unite-renale"
+  },
+  "name": "U03 Rattrapage",
+  "session": "U03 Rattrapage",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-2/module-unite-renale/exams/u03-rattrapage.json",
+   "id": "560"
+  },
+  "counts": {
+   "entries": 46,
+   "duplicatesRemoved": 0,
+   "referenced": 7,
+   "referencedOtherYear": 39,
+   "embedded": 0,
+   "missingFromExport": 1
+  },
+  "entries": 46
+ },
+ {
+  "path": "alger/exams/year-3/unite-appareil-neurologique-locomoteur-et-cutane/no-year-examen-unite-02-20-21.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Unité Appareil Neurologique, Locomoteur et Cutané",
+   "slug": "unite-appareil-neurologique-locomoteur-et-cutane"
+  },
+  "name": "Examen unité 02 20/21",
+  "session": "Examen unité 02 20/21",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-unite-appareil-neurologique-locomoteur-et-cutane/exams/examen-unite-02-2021.json",
+   "id": "82"
+  },
+  "counts": {
+   "entries": 70,
+   "duplicatesRemoved": 0,
+   "referenced": 0,
+   "referencedOtherYear": 50,
+   "embedded": 20,
+   "missingFromExport": 2
+  },
+  "entries": 70
+ },
+ {
+  "path": "alger/exams/year-3/unite-appareil-neurologique-locomoteur-et-cutane/no-year-rattrapage-alger-unite-02-20-21.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 3,
+  "module": {
+   "name": "Unité Appareil Neurologique, Locomoteur et Cutané",
+   "slug": "unite-appareil-neurologique-locomoteur-et-cutane"
+  },
+  "name": "Rattrapage Alger Unité 02 20/21",
+  "session": "Rattrapage Alger Unité 02 20/21",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-3/module-unite-appareil-neurologique-locomoteur-et-cutane/exams/rattrapage-alger-unite-02-2021.json",
+   "id": "84"
+  },
+  "counts": {
+   "entries": 71,
+   "duplicatesRemoved": 0,
+   "referenced": 0,
+   "referencedOtherYear": 1,
+   "embedded": 70,
+   "missingFromExport": 2
+  },
+  "entries": 71
+ },
+ {
+  "path": "alger/exams/year-1/anatomie/2018-2019-emd-1.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 1,
+  "module": {
+   "name": "Anatomie",
+   "slug": "anatomie"
+  },
+  "name": "EMD 1 2018-2019",
+  "session": "EMD 1",
+  "examYear": 2019,
+  "academicYear": "2018-2019",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-1/module-anatomie/exams/emd-1-2018-2019.json",
+   "id": "69"
+  },
+  "counts": {
+   "entries": 30,
+   "duplicatesRemoved": 0,
+   "referenced": 4,
+   "referencedOtherYear": 21,
+   "embedded": 5,
+   "missingFromExport": 0
+  },
+  "entries": 30
+ },
+ {
+  "path": "alger/exams/year-1/anatomie/2019-2020-emd-1.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 1,
+  "module": {
+   "name": "Anatomie",
+   "slug": "anatomie"
+  },
+  "name": "EMD 1 2019-2020",
+  "session": "EMD 1",
+  "examYear": 2020,
+  "academicYear": "2019-2020",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-1/module-anatomie/exams/emd-1-2019-2020.json",
+   "id": "41"
+  },
+  "counts": {
+   "entries": 35,
+   "duplicatesRemoved": 0,
+   "referenced": 2,
+   "referencedOtherYear": 14,
+   "embedded": 19,
+   "missingFromExport": 0
+  },
+  "entries": 35
+ },
+ {
+  "path": "alger/exams/year-1/anatomie/2019-2020-emd-2.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 1,
+  "module": {
+   "name": "Anatomie",
+   "slug": "anatomie"
+  },
+  "name": "EMD 2 2019-2020",
+  "session": "EMD 2",
+  "examYear": 2020,
+  "academicYear": "2019-2020",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-1/module-anatomie/exams/emd-2-2019-2020.json",
+   "id": "161"
+  },
+  "counts": {
+   "entries": 19,
+   "duplicatesRemoved": 0,
+   "referenced": 19,
+   "referencedOtherYear": 0,
+   "embedded": 0,
+   "missingFromExport": 0
+  },
+  "entries": 19
+ },
+ {
+  "path": "alger/exams/year-1/anatomie/2020-2021-emd-1.json",
+  "schema": "medadn-dataset/1",
+  "view": "paper",
+  "university": "alger",
+  "universityName": "Alger",
+  "kind": "externat",
+  "studyYear": 1,
+  "module": {
+   "name": "Anatomie",
+   "slug": "anatomie"
+  },
+  "name": "EMD 1 2020-2021",
+  "session": "EMD 1",
+  "examYear": 2021,
+  "academicYear": "2020-2021",
+  "textFormat": "html",
+  "origin": {
+   "platform": "mystedia",
+   "source": "Examens Alger",
+   "file": "mystedia/exams/year-1/module-anatomie/exams/emd-1-2020-2021.json",
+   "id": "38"
+  },
+  "counts": {
+   "entries": 30,
+   "duplicatesRemoved": 0,
+   "referenced": 2,
+   "referencedOtherYear": 2,
+   "embedded": 26,
+   "missingFromExport": 0
+  },
+  "entries": 30
+ }
+]

@@ -1,0 +1,55 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "externat",
+ "studyYear": 5,
+ "module": {
+  "name": "Urologie & Néphrologie",
+  "slug": "urologie-nephrologie"
+ },
+ "course": {
+  "name": "Cat devant une anurie",
+  "slug": "cat-devant-une-anurie"
+ },
+ "examYear": 2018,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Alger",
+  "files": [
+   "mystedia/courses/year-5/urologie-nephrologie-33/cat-devant-une-anurie-532/cat-devant-une-anurie-2018-1.json"
+  ],
+  "moduleIds": [
+   "33"
+  ],
+  "courseIds": [
+   "532"
+  ]
+ },
+ "counts": {
+  "questions": 1,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_c6ebacb000b593d1",
+   "questionText": "Donnez la définition d'une anurie",
+   "questionType": "QROC",
+   "expectedAnswer": "Anurie : diurèse < 100 ml/24 heures",
+   "questionTags": [
+    "P3 2018"
+   ],
+   "repetitionCount": 0,
+   "session": "P3",
+   "originType": "qroc",
+   "answers": [],
+   "origin": {
+    "file": "mystedia/courses/year-5/urologie-nephrologie-33/cat-devant-une-anurie-532/cat-devant-une-anurie-2018-1.json",
+    "index": 0
+   }
+  }
+ ]
+}

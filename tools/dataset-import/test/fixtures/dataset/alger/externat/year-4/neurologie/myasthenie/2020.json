@@ -1,0 +1,79 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "externat",
+ "studyYear": 4,
+ "module": {
+  "name": "Neurologie",
+  "slug": "neurologie"
+ },
+ "course": {
+  "name": "Myasthénie",
+  "slug": "myasthenie"
+ },
+ "examYear": 2020,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Alger",
+  "files": [
+   "mystedia/courses/year-4/neurologie-41/myasthenie-1042/myasthenie-2020-1.json"
+  ],
+  "moduleIds": [
+   "41"
+  ],
+  "courseIds": [
+   "1042"
+  ]
+ },
+ "counts": {
+  "questions": 8,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_fec1d291f75e28fe",
+   "questionText": "L'électromyogramme permet le diagnostic de myasthénie en révélant l'existence de : (RJ)",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Tracé myogène",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Tracé neurogène périphérique",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Bloc neuromusculaire",
+     "isCorrect": true
+    },
+    {
+     "answerText": "De salves myotoniques",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Fasciculations",
+     "isCorrect": false
+    }
+   ],
+   "explanation": "<p><img src=\"https://www.ligamg.be/uploads/1/9/5/2/19522591/5539658.png?557\" alt=\"EMG-test - LIGA MYASTHENIA GRAVIS VZW\"></p>",
+   "questionTags": [
+    "P2 2020"
+   ],
+   "remoteImages": [
+    "https://www.ligamg.be/uploads/1/9/5/2/19522591/5539658.png?557"
+   ],
+   "repetitionCount": 0,
+   "session": "P2",
+   "originType": "qcs",
+   "origin": {
+    "file": "mystedia/courses/year-4/neurologie-41/myasthenie-1042/myasthenie-2020-1.json",
+    "index": 4
+   }
+  }
+ ]
+}

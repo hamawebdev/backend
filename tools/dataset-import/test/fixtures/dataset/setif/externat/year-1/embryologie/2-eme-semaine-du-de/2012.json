@@ -1,0 +1,69 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "externat",
+ "studyYear": 1,
+ "module": {
+  "name": "Embryologie",
+  "slug": "embryologie"
+ },
+ "course": {
+  "name": "2 ème semaine du DE",
+  "slug": "2-eme-semaine-du-de"
+ },
+ "examYear": 2012,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Externat Sétif",
+  "files": [
+   "mbset/courses/year-1/embryologie-Setif10/2-eme-semaine-du-de/2-eme-semaine-du-de-2012-1.json"
+  ],
+  "moduleIds": [
+   "Setif10"
+  ],
+  "courseIds": [
+   "Setif_Embryologie2"
+  ]
+ },
+ "counts": {
+  "questions": 2,
+  "duplicatesRemoved": 0,
+  "needsReview": 2
+ },
+ "questions": [
+  {
+   "uid": "q_38b265a0989f198c",
+   "questionText": "L’amnios provient de l’ectoblaste",
+   "questionType": "UNKNOWN",
+   "answers": [
+    {
+     "answerText": "Vrai",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Faux",
+     "isCorrect": false
+    }
+   ],
+   "questionTags": [
+    "Externat Setif",
+    "2012",
+    "Corrigé Proposé"
+   ],
+   "repetitionCount": 0,
+   "answerKey": "proposed",
+   "originType": "qcm",
+   "review": [
+    "no-correct-answer"
+   ],
+   "origin": {
+    "file": "mbset/courses/year-1/embryologie-Setif10/2-eme-semaine-du-de/2-eme-semaine-du-de-2012-1.json",
+    "index": 0,
+    "id": "102311"
+   }
+  }
+ ]
+}

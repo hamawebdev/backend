@@ -1,0 +1,101 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "residanat",
+ "studyYear": 2,
+ "module": {
+  "name": "Unité cardio-respiratoire",
+  "slug": "unite-cardio-respiratoire"
+ },
+ "course": {
+  "name": "Histologie poumon",
+  "slug": "histologie-poumon"
+ },
+ "examYear": 2013,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Résidanat Alger",
+  "files": [
+   "mystedia/courses/year-2/unite-cardio-respiratoire-5/histologie-poumon-656/histologie-poumon-2013-2.json"
+  ],
+  "moduleIds": [
+   "5"
+  ],
+  "courseIds": [
+   "656"
+  ]
+ },
+ "counts": {
+  "questions": 1,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_d49a0152850f63a6",
+   "questionText": "Sur une coupe de myocarde examinée en microscopie optique au fort grossissement, a quoi correspondent les traits scalariformes?",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "A des zones myofibriilaires périphériques des cellules nodales.",
+     "isCorrect": false
+    },
+    {
+     "answerText": "A des zones de contact des cellules nodales âmes techniques de coloration spéclale",
+     "isCorrect": false
+    },
+    {
+     "answerText": "A des zones de contact des cellules myocardiques en coupe longitudinale.",
+     "isCorrect": true
+    },
+    {
+     "answerText": "A des zones de contact des cellules myocardiques en coupe transversale.",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Aucune de ces propositions n'est juste.",
+     "isCorrect": false
+    }
+   ],
+   "explanation": "<p></p><p>Les stries scalariformes sont<strong> des jonctions particulières situées au point de juxtaposition de deux extrémités de cellules musculaires cardiaques.</strong><span class=\"ql-cursor\">﻿﻿﻿</span></p>",
+   "questionTags": [
+    "Résidanat Alger 2013"
+   ],
+   "explanationImages": [
+    "images/09/097f47d4e3b9ab17e30fae6830f8d2a9519ea27e.jpg"
+   ],
+   "repetitionCount": 0,
+   "originType": "qcs",
+   "origin": {
+    "file": "mystedia/courses/year-2/unite-cardio-respiratoire-5/histologie-poumon-656/histologie-poumon-2013-2.json",
+    "index": 0
+   },
+   "en": {
+    "questionText": "On a section of myocardium examined by light microscopy at high magnification, what do the scalariform lines correspond to?",
+    "answers": [
+     {
+      "answerText": "Peripheral myofibrillar areas of nodal cells."
+     },
+     {
+      "answerText": "Areas of contact of nodal cells, with special staining techniques."
+     },
+     {
+      "answerText": "Areas of contact of myocardial cells in longitudinal section."
+     },
+     {
+      "answerText": "Areas of contact of myocardial cells in transverse section."
+     },
+     {
+      "answerText": "None of these statements is correct."
+     }
+    ],
+    "explanation": "<p></p><p>Scalariform striae are<strong> specialized junctions located at the point of juxtaposition of two ends of cardiac muscle cells.</strong><span class=\"ql-cursor\">﻿﻿﻿</span></p>",
+    "model": "claude-sonnet-5",
+    "translatedAt": "2026-09-27T14:32:09Z"
+   }
+  }
+ ]
+}

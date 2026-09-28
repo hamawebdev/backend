@@ -1,0 +1,87 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "externat",
+ "studyYear": 6,
+ "module": {
+  "name": "Dermatologie",
+  "slug": "dermatologie"
+ },
+ "name": "P4 2024",
+ "session": "P4",
+ "examYear": 2024,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Examens Alger",
+  "file": "mystedia/exams/year-6/module-dermatologie/exams/p4-2024.json",
+  "id": "330"
+ },
+ "counts": {
+  "entries": 3,
+  "duplicatesRemoved": 0,
+  "referenced": 1,
+  "referencedOtherYear": 0,
+  "embedded": 2,
+  "missingFromExport": 1
+ },
+ "questions": [
+  {
+   "n": 1,
+   "uid": "q_77564fd19521481b",
+   "questionText": "Question ouverte sur 8 points : Définition, facteurs, de risque et présentation clinique de la dermphypodermite bactérienne aigue non nécrosante (Érysipèle)",
+   "questionType": "QROC",
+   "expectedAnswer": "Consulter vos supports officiels",
+   "questionTags": [
+    "P4 2024"
+   ],
+   "repetitionCount": 0,
+   "session": "P4",
+   "originType": "qroc",
+   "answers": [],
+   "origin": {
+    "file": "mystedia/exams/year-6/module-dermatologie/exams/p4-2024.json",
+    "index": 0
+   },
+   "en": {
+    "questionText": "Open-ended question worth 8 points: Definition, risk factors, and clinical presentation of acute non-necrotizing bacterial dermohypodermitis (erysipelas)",
+    "answers": [],
+    "expectedAnswer": "Refer to your official course materials",
+    "model": "claude-sonnet-5",
+    "translatedAt": "2026-09-27T18:15:34Z"
+   }
+  },
+  {
+   "n": 2,
+   "ref": "q_f8e9078196f7f194",
+   "in": "alger/externat/year-6/dermatologie/ectoparasitoses-gale-et-pediculoses/2024.json"
+  },
+  {
+   "n": 3,
+   "uid": "q_1d57e1535b2a278f",
+   "questionText": "QROCs sur 6 points\nA. Définition d'une alopécie\nB. Quelles sont les phases du cycle pilaire ?\nC. Quels sont les mécanismes physiopathologiques de l'alopécie ?",
+   "questionType": "QROC",
+   "expectedAnswer": "Consulter vos supports officiels",
+   "questionTags": [
+    "P4 2024"
+   ],
+   "repetitionCount": 0,
+   "session": "P4",
+   "originType": "qroc",
+   "answers": [],
+   "origin": {
+    "file": "mystedia/exams/year-6/module-dermatologie/exams/p4-2024.json",
+    "index": 2
+   },
+   "en": {
+    "questionText": "Short-answer questions worth 6 points\nA. Definition of alopecia\nB. What are the phases of the hair cycle?\nC. What are the pathophysiological mechanisms of alopecia?",
+    "answers": [],
+    "expectedAnswer": "Refer to your official course materials",
+    "model": "claude-sonnet-5",
+    "translatedAt": "2026-09-27T00:00:00Z"
+   }
+  }
+ ]
+}

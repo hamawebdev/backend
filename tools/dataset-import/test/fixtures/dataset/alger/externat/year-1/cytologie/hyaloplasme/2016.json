@@ -1,0 +1,62 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "externat",
+ "studyYear": 1,
+ "module": {
+  "name": "Cytologie",
+  "slug": "cytologie"
+ },
+ "course": {
+  "name": "Hyaloplasme",
+  "slug": "hyaloplasme"
+ },
+ "examYear": 2016,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Alger",
+  "files": [
+   "mystedia/courses/year-1/cytologie-2/hyaloplasme-322/hyaloplasme-2016-1.json"
+  ],
+  "moduleIds": [
+   "2"
+  ],
+  "courseIds": [
+   "322"
+  ]
+ },
+ "counts": {
+  "questions": 11,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_80edeabdf70fe765",
+   "questionText": "L'insuline est une enzyme catabolique hyaloplasmique",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Vrai",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Faux",
+     "isCorrect": true
+    }
+   ],
+   "questionTags": [
+    "T2 2015-2016"
+   ],
+   "repetitionCount": 0,
+   "originType": "qcs",
+   "origin": {
+    "file": "mystedia/courses/year-1/cytologie-2/hyaloplasme-322/hyaloplasme-2016-1.json",
+    "index": 10
+   }
+  }
+ ]
+}

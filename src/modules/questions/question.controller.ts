@@ -190,12 +190,19 @@ export default class QuestionController {
           id: question.course.id,
           name: question.course.name
         } : null,
+        questionTextEn: question.questionTextEn,
         answers: question.questionAnswers.map((a: any) => ({
           id: a.id,
           answerText: a.answerText,
-          isCorrect: a.isCorrect
+          answerTextEn: a.answerTextEn,
+          isCorrect: a.isCorrect,
+          explanation: a.explanation,
+          explanationEn: a.explanationEn,
+          position: a.position
         })),
         explanation: question.explanation,
+        explanationEn: question.explanationEn,
+        isPublished: question.isPublished,
         images: question.questionImages.map((img: any) => ({
           id: img.id,
           imagePath: img.imagePath,

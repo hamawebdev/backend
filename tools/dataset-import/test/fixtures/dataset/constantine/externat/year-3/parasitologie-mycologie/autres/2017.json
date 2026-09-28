@@ -1,0 +1,74 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "constantine",
+ "universityName": "Constantine",
+ "kind": "externat",
+ "studyYear": 3,
+ "module": {
+  "name": "Parasitologie Mycologie",
+  "slug": "parasitologie-mycologie"
+ },
+ "course": {
+  "name": "Autres",
+  "slug": "autres"
+ },
+ "examYear": 2017,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Constantine",
+  "files": [
+   "mystedia/courses/year-3/parasitologie-mycologie-22/autres-615/autres-2017-4.json"
+  ],
+  "moduleIds": [
+   "22"
+  ],
+  "courseIds": [
+   "615"
+  ]
+ },
+ "counts": {
+  "questions": 205,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_e1c4c356151b898c",
+   "questionText": "La schizogonie de 48 heures s'observe chez Plasmodium:",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "falciparum",
+     "isCorrect": true
+    },
+    {
+     "answerText": "vivax",
+     "isCorrect": true
+    },
+    {
+     "answerText": "knowlesi",
+     "isCorrect": false
+    },
+    {
+     "answerText": "ovale",
+     "isCorrect": true
+    },
+    {
+     "answerText": "malariae",
+     "isCorrect": false
+    }
+   ],
+   "questionTags": [
+    "Externat Constantine"
+   ],
+   "repetitionCount": 0,
+   "originType": "qcm",
+   "origin": {
+    "file": "mystedia/courses/year-3/parasitologie-mycologie-22/autres-615/autres-2017-4.json",
+    "index": 77
+   }
+  }
+ ]
+}

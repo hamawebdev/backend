@@ -26,6 +26,9 @@ import PrismaService from "../../config/db";
 import bcrypt from "bcrypt";
 import { InternalServerError, NotFoundError, BadRequestError, ConflictError } from "../../core/errors/AppError";
 import { syncQuestionAnswers } from "../questions/question-answers.sync";
+import { ANSWER_ORDER } from "../questions/question-visibility";
+import { residencyQuestionWhere } from "../quizzes/quiz.repository";
+import { RESIDENCY_PARTS } from "./validations/admin.validation";
 import { QuestionType } from "../../types/quiz.types";
 
 interface UserFilters {
@@ -1377,6 +1380,7 @@ export default class AdminService {
       const unite = await this.prisma.unite.create({
         data: {
           name: data.name,
+          description: data.description ?? null,
           logoUrl: data.logoUrl || null,
           studyPackId: data.studyPackId
         }
@@ -1397,6 +1401,7 @@ export default class AdminService {
       return {
         id: unite.id,
         name: unite.name,
+        description: unite.description,
         logoUrl: unite.logoUrl,
         createdAt: unite.createdAt
       };
@@ -1425,6 +1430,7 @@ export default class AdminService {
         where: { id },
         data: {
           name: data.name,
+          ...(data.description !== undefined ? { description: data.description } : {}),
           logoUrl: data.logoUrl,
           updatedAt: new Date()
         }
@@ -1433,6 +1439,7 @@ export default class AdminService {
       return {
         id: unite.id,
         name: unite.name,
+        description: unite.description,
         logoUrl: unite.logoUrl,
         createdAt: unite.createdAt,
         updatedAt: unite.updatedAt
@@ -1461,6 +1468,7 @@ export default class AdminService {
       const module = await this.prisma.module.create({
         data: {
           name: data.name,
+          description: data.description ?? null,
           ...(data.uniteId && { uniteId: data.uniteId }),
           ...(imagePath ? { imagePath } : {})
         }
@@ -1481,6 +1489,7 @@ export default class AdminService {
       return {
         id: module.id,
         name: module.name,
+        description: module.description,
         uniteId: module.uniteId,
         imagePath: module.imagePath,
         logoUrl: module.imagePath,
@@ -1564,6 +1573,7 @@ export default class AdminService {
         where: { id },
         data: {
           name: data.name,
+          ...(data.description !== undefined ? { description: data.description } : {}),
           ...(imagePath !== undefined ? { imagePath } : {}),
           updatedAt: new Date()
         }
@@ -1572,6 +1582,7 @@ export default class AdminService {
       return {
         id: module.id,
         name: module.name,
+        description: module.description,
         uniteId: module.uniteId,
         imagePath: module.imagePath,
         logoUrl: module.imagePath,
@@ -1746,7 +1757,7 @@ export default class AdminService {
               include: {
                 question: {
                   include: {
-                    questionAnswers: true
+                    questionAnswers: { orderBy: ANSWER_ORDER }
                   }
                 }
               }
@@ -2005,7 +2016,7 @@ export default class AdminService {
               include: {
                 question: {
                   include: {
-                    questionAnswers: true
+                    questionAnswers: { orderBy: ANSWER_ORDER }
                   }
                 }
               }
@@ -2175,6 +2186,7 @@ export default class AdminService {
       examYear?: number;
       sourceId?: number;
       search?: string;
+      isPublished?: boolean;
     } = {}
   ) {
     try {
@@ -2209,6 +2221,10 @@ export default class AdminService {
         whereConditions.sourceId = filters.sourceId;
       }
 
+      if (filters.isPublished !== undefined) {
+        whereConditions.isPublished = filters.isPublished;
+      }
+
       if (filters.search) {
         whereConditions.questionText = {
           contains: filters.search,
@@ -2230,6 +2246,7 @@ export default class AdminService {
             yearLevel: true,
             examYear: true,
             sourceId: true,
+            isPublished: true,
             createdAt: true
           },
           orderBy: { createdAt: 'desc' }
@@ -2803,18 +2820,23 @@ export default class AdminService {
         data: {
           name: data.name,
           country: data.country
-          // Note: city is not stored as it's not in the schema
+          // Note: city is accepted but not stored (no column for it)
         }
       });
 
-      await this.prisma.employeeActivity.create({
-        data: {
-          employeeId: createdById,
-          activityType: 'COURSE_UPLOADED',
-          description: `Created university: ${university.name}`,
-          relatedId: university.id
-        }
-      });
+      // Log activity; a logging failure must not fail the create
+      try {
+        await this.prisma.employeeActivity.create({
+          data: {
+            employeeId: createdById,
+            activityType: 'COURSE_UPLOADED',
+            description: `Created university: ${university.name}`,
+            relatedId: university.id
+          }
+        });
+      } catch (e) {
+        console.error('Failed to log university creation:', e);
+      }
 
       // Return canonical flat object - city null as not stored
       return {
@@ -2828,6 +2850,7 @@ export default class AdminService {
       if ((error as any).code === 'P2002') {
         throw new BadRequestError("University name already exists");
       }
+      console.error('Error creating university:', error);
       throw new InternalServerError("Failed to create university");
     }
   }
@@ -2855,14 +2878,19 @@ export default class AdminService {
         data: updateData
       });
 
-      await this.prisma.employeeActivity.create({
-        data: {
-          employeeId: updatedById,
-          activityType: 'QUESTION_EDITED',
-          description: `Updated university: ${university.name}`,
-          relatedId: university.id
-        }
-      });
+      // Log activity; a logging failure must not fail the update
+      try {
+        await this.prisma.employeeActivity.create({
+          data: {
+            employeeId: updatedById,
+            activityType: 'QUESTION_EDITED',
+            description: `Updated university: ${university.name}`,
+            relatedId: university.id
+          }
+        });
+      } catch (e) {
+        console.error('Failed to log university update:', e);
+      }
 
       // Return canonical flat object
       return {
@@ -2881,6 +2909,7 @@ export default class AdminService {
       if ((error as any).code === 'P2002') {
         throw new BadRequestError("University name already exists");
       }
+      console.error('Error updating university:', error);
       throw new InternalServerError("Failed to update university");
     }
   }
@@ -3451,11 +3480,10 @@ export default class AdminService {
     const { page, limit, part, examYear, universityId, search } = filters;
     const skip = (page - 1) * limit;
 
-    // Build where clause - residency questions must have residency-specific metadata (`part`)
+    // Residency content (same definition as the student residency sessions); the part
+    // only filters when a known one is given, so part-less papers (Oran) are listed too
     const whereClause: any = {
-      universityId: { not: null },
-      examYear: { not: null },
-      ...this.buildResidencyMetadataFilter(part)
+      AND: [residencyQuestionWhere(), this.buildResidencyMetadataFilter(part)]
     };
 
     // Apply filters
@@ -3499,6 +3527,7 @@ export default class AdminService {
         questionText: q.questionText,
         explanation: q.explanation,
         questionType: q.questionType,
+        isPublished: q.isPublished,
         questionImages: [],
         questionExplanationImages: [],
         questionAnswers: []
@@ -3522,8 +3551,8 @@ export default class AdminService {
    * Get single residency question with answers and images
    */
   async getResidencyQuestionById(questionId: number) {
-    const question = await this.prisma.question.findUnique({
-      where: { id: questionId },
+    const question = await this.prisma.question.findFirst({
+      where: { AND: [{ id: questionId }, residencyQuestionWhere()] },
       include: {
         university: {
           select: { id: true, name: true }
@@ -3533,7 +3562,8 @@ export default class AdminService {
             id: true,
             answerText: true,
             isCorrect: true
-          }
+          },
+          orderBy: ANSWER_ORDER
         },
         questionImages: {
           select: {
@@ -3556,17 +3586,13 @@ export default class AdminService {
       throw new NotFoundError("Residency question");
     }
 
-    // Verify it's a residency question
-    if (!this.isResidencyQuestion(question)) {
-      throw new NotFoundError("Residency question");
-    }
-
     return {
       id: question.id,
       questionText: question.questionText,
       part: this.extractPartFromMetadata(question.metadata),
       explanation: question.explanation,
       questionType: question.questionType,
+      isPublished: question.isPublished,
       examYear: question.examYear,
       universityId: question.universityId,
       university: question.university,
@@ -3625,7 +3651,8 @@ export default class AdminService {
             id: true,
             answerText: true,
             isCorrect: true
-          }
+          },
+          orderBy: ANSWER_ORDER
         },
         questionImages: {
           select: {
@@ -3668,15 +3695,9 @@ export default class AdminService {
    */
   async updateResidencyQuestion(questionId: number, data: UpdateResidencyQuestionData) {
     // Check question exists and is a residency question
-    const existingQuestion = await this.prisma.question.findUnique({
-      where: { id: questionId }
-    });
+    const existingQuestion = await this.findResidencyQuestion(questionId);
 
     if (!existingQuestion) {
-      throw new NotFoundError("Residency question");
-    }
-
-    if (!this.isResidencyQuestion(existingQuestion)) {
       throw new NotFoundError("Residency question");
     }
 
@@ -3734,7 +3755,8 @@ export default class AdminService {
               id: true,
               answerText: true,
               isCorrect: true
-            }
+            },
+            orderBy: ANSWER_ORDER
           },
           questionImages: {
             select: {
@@ -3779,15 +3801,9 @@ export default class AdminService {
    */
   async deleteResidencyQuestion(questionId: number) {
     // Check question exists and is a residency question
-    const question = await this.prisma.question.findUnique({
-      where: { id: questionId }
-    });
+    const question = await this.findResidencyQuestion(questionId);
 
     if (!question) {
-      throw new NotFoundError("Residency question");
-    }
-
-    if (!this.isResidencyQuestion(question)) {
       throw new NotFoundError("Residency question");
     }
 
@@ -3798,32 +3814,24 @@ export default class AdminService {
   }
 
   /**
-   * Residency questions are identified by dedicated residency metadata (`part`)
-   * in addition to university and exam year context.
+   * A residency question (residency content: university and exam year, no course
+   * or a course of a RESIDENCY pack; see residencyQuestionWhere), with or without a part
    */
-  private isResidencyQuestion(question: { universityId: number | null; examYear: number | null; metadata: string | null }): boolean {
-    if (question.universityId == null || question.examYear == null) {
-      return false;
-    }
-
-    const part = this.extractPartFromMetadata(question.metadata);
-    const validParts = ['Sciences_fondamentales', 'Pathologie_medico_chirurgical', 'Dossier_clinique'];
-    return part !== null && validParts.includes(part);
+  private async findResidencyQuestion(questionId: number) {
+    return this.prisma.question.findFirst({
+      where: { AND: [{ id: questionId }, residencyQuestionWhere()] }
+    });
   }
 
   /**
-   * Build metadata filter to include only residency questions created through
-   * residency flows (which set metadata.part).
+   * Filter on the part stored in the metadata JSON (compact, so it reads
+   * "part":"<part>"). An unknown or missing part does not filter.
    */
   private buildResidencyMetadataFilter(part?: string): any {
-    const validParts = ['Sciences_fondamentales', 'Pathologie_medico_chirurgical', 'Dossier_clinique'];
-    if (part && validParts.includes(part)) {
+    if (part && (RESIDENCY_PARTS as readonly string[]).includes(part)) {
       return { metadata: { contains: `"part":"${part}"` } };
     }
-
-    return {
-      OR: validParts.map(p => ({ metadata: { contains: `"part":"${p}"` } }))
-    };
+    return {};
   }
 
   /**
@@ -3911,7 +3919,8 @@ export default class AdminService {
                 answerText: true,
                 isCorrect: true,
                 explanation: true
-              }
+              },
+              orderBy: ANSWER_ORDER
             },
             questionImages: {
               select: {

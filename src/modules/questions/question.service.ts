@@ -16,6 +16,7 @@ import {
 } from "../../types/quiz.types";
 import { BadRequestError, NotFoundError } from "../../core/errors/AppError";
 import { syncQuestionAnswers } from "./question-answers.sync";
+import { ANSWER_ORDER, PUBLISHED_QUESTION } from "./question-visibility";
 
 @injectable()
 export default class QuestionService {
@@ -134,6 +135,25 @@ export default class QuestionService {
     // Validate shared metadata references
     await this.validateReferences(metadata);
 
+    // Shared metadata text (an object is stored as JSON) and year level (a rotation
+    // R1-R4 stands for years ONE-FOUR when no yearLevel is sent)
+    let metadataText: string | undefined;
+    if (typeof metadata.metadata === 'string') {
+      metadataText = metadata.metadata;
+    } else if (metadata.metadata !== undefined && metadata.metadata !== null) {
+      metadataText = JSON.stringify(metadata.metadata);
+    }
+    if (metadataText !== undefined && metadataText.length > 5000) {
+      throw new BadRequestError("Metadata cannot exceed 5000 characters");
+    }
+    const rotationYearLevels: Record<string, YearLevel> = {
+      R1: YearLevel.ONE,
+      R2: YearLevel.TWO,
+      R3: YearLevel.THREE,
+      R4: YearLevel.FOUR
+    };
+    const yearLevel = metadata.yearLevel ?? (metadata.rotation ? rotationYearLevels[metadata.rotation] : undefined);
+
     let created = 0;
     let failed = 0;
     const errors: Array<{ index: number; error: string }> = [];
@@ -168,9 +188,9 @@ export default class QuestionService {
             examId: metadata.examId,
             sourceId: metadata.sourceId,
             universityId: metadata.universityId,
-            yearLevel: metadata.yearLevel,
+            yearLevel,
             examYear: metadata.examYear,
-            metadata: metadata.metadata,
+            metadata: metadataText,
             createdById,
             questionImages: questionData.questionImages ? {
               create: questionData.questionImages.map(img => ({
@@ -219,6 +239,8 @@ export default class QuestionService {
       success: true,
       data: {
         created,
+        // Same count under the name the admin import screens read
+        totalCreated: created,
         failed,
         questionIds,
         errors
@@ -376,6 +398,7 @@ export default class QuestionService {
       if (update.universityId !== undefined) updateData.universityId = update.universityId;
       if (update.yearLevel !== undefined) updateData.yearLevel = update.yearLevel;
       if (update.metadata !== undefined) updateData.metadata = update.metadata;
+      if (update.isPublished !== undefined) updateData.isPublished = update.isPublished;
 
       const updatedQuestion = await tx.question.update({
         where: { id: questionId },
@@ -399,7 +422,8 @@ export default class QuestionService {
           courseId: result.courseId ?? undefined,
           universityId: result.universityId ?? undefined,
           yearLevel: result.yearLevel ?? undefined,
-          examYear: result.examYear ?? undefined
+          examYear: result.examYear ?? undefined,
+          isPublished: result.isPublished
         }
       },
       message: 'Question updated successfully'
@@ -437,10 +461,11 @@ export default class QuestionService {
     const question = await this.prisma.question.findUnique({
       where: { id },
       include: {
-        questionImages: true,
-        questionExplanationImages: true,
+        questionImages: { orderBy: { id: 'asc' } },
+        questionExplanationImages: { orderBy: { id: 'asc' } },
         questionAnswers: {
-          include: { explanationImages: true }
+          include: { explanationImages: true },
+          orderBy: ANSWER_ORDER
         },
         university: {
           select: {
@@ -773,7 +798,9 @@ export default class QuestionService {
     accessibleStudyPackIds: number[],
     questionCount: number
   ): Promise<Question[]> {
+    // Serves students: published questions only
     const whereConditions: any = {
+      ...PUBLISHED_QUESTION,
       course: {
         module: {
           unite: {
@@ -837,10 +864,11 @@ export default class QuestionService {
         questionAnswers: {
           include: {
             explanationImages: true
-          }
+          },
+          orderBy: ANSWER_ORDER
         },
-        questionImages: true,
-        questionExplanationImages: true,
+        questionImages: { orderBy: { id: 'asc' } },
+        questionExplanationImages: { orderBy: { id: 'asc' } },
         course: {
           include: {
             module: {

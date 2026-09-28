@@ -1,0 +1,76 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "externat",
+ "studyYear": 1,
+ "module": {
+  "name": "Biostatistique",
+  "slug": "biostatistique"
+ },
+ "course": {
+  "name": "Exercices",
+  "slug": "exercices"
+ },
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Externat Sétif",
+  "files": [
+   "mbset/courses/year-1/biostatistique-Setif5/exercices/exercices-unknown-1.json"
+  ],
+  "moduleIds": [
+   "Setif5"
+  ],
+  "courseIds": [
+   "Setif_Biostatistique2"
+  ]
+ },
+ "counts": {
+  "questions": 37,
+  "duplicatesRemoved": 0,
+  "needsReview": 9
+ },
+ "questions": [
+  {
+   "uid": "q_9dfce8bfaff25a00",
+   "questionText": "Pour la variable AGE, calculez la moyenne, les quartiles, le mode et le coefficient de variation.",
+   "questionType": "QROC",
+   "questionTags": [
+    "Externat Setif",
+    "Corrig�� Proposé"
+   ],
+   "repetitionCount": 0,
+   "answerKey": "proposed",
+   "originType": "qroc",
+   "answers": [],
+   "review": [
+    "broken-characters"
+   ],
+   "origin": {
+    "file": "mbset/courses/year-1/biostatistique-Setif5/exercices/exercices-unknown-1.json",
+    "index": 26,
+    "id": "101019"
+   }
+  },
+  {
+   "uid": "q_0729ee7b7a262163",
+   "questionText": "Donner un titre au tableau",
+   "questionType": "QROC",
+   "questionTags": [
+    "Externat Setif",
+    "Corrigé Proposé"
+   ],
+   "repetitionCount": 0,
+   "answerKey": "proposed",
+   "originType": "qroc",
+   "answers": [],
+   "origin": {
+    "file": "mbset/courses/year-1/biostatistique-Setif5/exercices/exercices-unknown-1.json",
+    "index": 30,
+    "id": "101025"
+   }
+  }
+ ]
+}

@@ -1,0 +1,84 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "residanat",
+ "studyYear": 5,
+ "module": {
+  "name": "Gynécologie et obstétrique",
+  "slug": "gynecologie-et-obstetrique"
+ },
+ "course": {
+  "name": "Contraception",
+  "slug": "contraception"
+ },
+ "examYear": 2016,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Résidanat Sétif",
+  "files": [
+   "mbset/courses/year-5/gynecologie-et-obstetrique-Setif13/contraception/contraception-2016-2.json"
+  ],
+  "moduleIds": [
+   "Setif13"
+  ],
+  "courseIds": [
+   "Setif_Gynécologie_et_8"
+  ]
+ },
+ "counts": {
+  "questions": 4,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_a4e176669ca34897",
+   "questionText": "Le stérilet est à éviter:",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "En cas du cancer du col in situ",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Chez la nullipare",
+     "isCorrect": true
+    },
+    {
+     "answerText": "En cas de stérilité primaire",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Juste après l’accouchement",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Après 55 ans",
+     "isCorrect": false
+    }
+   ],
+   "questionTags": [
+    "Résidanat Setif",
+    "Chirurgie 2016",
+    "No. 290",
+    "Corrigé Proposé"
+   ],
+   "repetitionCount": 0,
+   "part": "chirurgie",
+   "number": 290,
+   "answerKey": "proposed",
+   "originType": "qcm",
+   "origin": {
+    "file": "mbset/courses/year-5/gynecologie-et-obstetrique-Setif13/contraception/contraception-2016-2.json",
+    "index": 2,
+    "id": "217765"
+   },
+   "papers": [
+    "setif/residanat/papers/2016/chirurgie.json"
+   ]
+  }
+ ]
+}

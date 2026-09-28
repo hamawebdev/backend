@@ -15,6 +15,8 @@ model University {
   id        Int      @id @default(autoincrement())
   name      String
   country   String   @default("Algeria")
+  // Stable key of the dataset import (null for records created in the admin UI)
+  sourceKey String?  @unique @map("source_key")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   users     User[]
@@ -120,6 +122,7 @@ model StudyPack {
   pricePerMonth   Decimal                  @map("price_per_month")
   pricePerYear    Decimal?                  @map("price_per_year")
   isActive        Boolean                   @default(true) @map("is_active")
+  sourceKey       String?                   @unique @map("source_key")
   createdAt       DateTime                  @default(now()) @map("created_at")
   updatedAt       DateTime                  @updatedAt @map("updated_at")
   activationCodes ActivationCodeStudyPack[]
@@ -138,6 +141,7 @@ model Unite {
   name        String
   description String?
   logoUrl     String?  @map("logo_url")
+  sourceKey   String?  @unique @map("source_key")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -145,6 +149,7 @@ model Unite {
   modules     Module[]
 
   @@map("unites")
+  @@index([studyPackId])
 }
 
 model Module {
@@ -153,6 +158,7 @@ model Module {
   name      String
   description String?
   imagePath String?  @map("image_path")
+  sourceKey String?  @unique @map("source_key")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -163,6 +169,7 @@ model Module {
   subModules SubModule[]
 
   @@map("modules")
+  @@index([uniteId])
 }
 
 model ModuleBook {
@@ -218,6 +225,7 @@ model Course {
   subModuleId Int?     @map("sub_module_id")
   name        String
   description String?
+  sourceKey   String?  @unique @map("source_key")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -232,6 +240,7 @@ model Course {
   studentCardCourses StudentCardCourse[]
 
   @@map("courses")
+  @@index([moduleId])
 }
 
 model CourseLayer {
@@ -356,6 +365,7 @@ model PaymentEvent {
 model QuestionSource {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  sourceKey String?  @unique @map("source_key")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -408,6 +418,9 @@ model Question {
   sourceId    Int?     @map("source_id")  // New field to link questions to question sources
   questionText String  @map("question_text")
   explanation String?
+  // English translations (null until translated)
+  questionTextEn String? @map("question_text_en")
+  explanationEn String? @map("explanation_en")
   questionType QuestionType @default(SINGLE_CHOICE) @map("question_type")
   universityId Int?    @map("university_id")
   yearLevel   YearLevel? @map("year_level")
@@ -416,6 +429,11 @@ model Question {
   tags        String   @default("[]")        // NEW: Array of tag strings for categorization (JSON string)
   repetitionCount Int  @default(0) @map("repetition_count")  // Number of times this question has appeared in exams
   repetitionYears String @default("[]") @map("repetition_years") // Years in which this question has appeared (JSON string)
+  // Unpublished questions stay visible to admins but are left out of every student pool and count
+  isPublished Boolean  @default(true) @map("is_published")
+  // Dataset import: stable question key and a hash of the imported content
+  sourceKey   String?  @unique @map("source_key")
+  contentHash String?  @map("content_hash")
   createdById Int      @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -467,8 +485,12 @@ model QuestionAnswer {
   id          Int      @id @default(autoincrement())
   questionId  Int      @map("question_id")
   answerText  String   @map("answer_text")
+  answerTextEn String? @map("answer_text_en")
   isCorrect   Boolean  @default(false) @map("is_correct")
   explanation String?
+  explanationEn String? @map("explanation_en")
+  // Display order: answers are listed by position, then id
+  position    Int?
   createdAt   DateTime @default(now()) @map("created_at")
 
   question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -477,6 +499,7 @@ model QuestionAnswer {
 
   @@map("question_answers")
   @@index([questionId])
+  @@index([questionId, position])
 }
 
 model ExplanationImage {
@@ -530,6 +553,7 @@ model Exam {
   yearLevel   YearLevel @map("year_level")
   examYear    DateTime @map("exam_year")
   year        Int      // 4-digit year like 2024
+  sourceKey   String?  @unique @map("source_key")
   createdById Int      @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -636,6 +660,7 @@ model QuizSessionQuestion {
   @@map("quiz_session_questions")
   @@unique([sessionId, questionId])
   @@index([sessionId])
+  @@index([questionId])
 }
 
 model QuizAttempt {
@@ -658,6 +683,7 @@ model QuizAttempt {
   @@index([sessionId])
   @@index([questionId])
   @@index([isCorrect])
+  @@index([selectedAnswerId])
 }
 
 model MultipleChoiceAttempt {

@@ -1,0 +1,113 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "externat",
+ "studyYear": 1,
+ "module": {
+  "name": "Anatomie (1 ère)",
+  "slug": "anatomie-1-ere"
+ },
+ "course": {
+  "name": "Plexus Brachial",
+  "slug": "plexus-brachial"
+ },
+ "examYear": 2016,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Externat Sétif",
+  "files": [
+   "mbset/courses/year-1/anatomie-1-ere-Setif2/plexus-brachial/plexus-brachial-2016-1.json"
+  ],
+  "moduleIds": [
+   "Setif2"
+  ],
+  "courseIds": [
+   "Setif_Anatomie_(1_ère47"
+  ]
+ },
+ "counts": {
+  "questions": 2,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_9116e7af9a2ddcb6",
+   "questionText": "le tronc primaire supérieur du plexus brachial est constituée par les racines cervicales:",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "C4-C5.",
+     "isCorrect": false,
+     "explanation": "C4 peut participer dans un plexus **préfixé**, mais le tronc supérieur est classiquement **C5–C6**."
+    },
+    {
+     "answerText": "C5-C6.",
+     "isCorrect": true,
+     "explanation": "Le tronc primaire supérieur est formé par **C5 + C6**."
+    },
+    {
+     "answerText": "C6-C7.",
+     "isCorrect": false,
+     "explanation": "**C6–C7** ne correspond à aucun tronc : **C7** forme le tronc **moyen** seul."
+    },
+    {
+     "answerText": "C7-C8.",
+     "isCorrect": false,
+     "explanation": "**C7** n’entre pas dans le tronc supérieur ; il forme le tronc **moyen**."
+    },
+    {
+     "answerText": "C8-T1.",
+     "isCorrect": false,
+     "explanation": "**C8–T1** forment le tronc primaire **inférieur**."
+    }
+   ],
+   "explanation": "### Rappel : organisation du plexus brachial\nLe **plexus brachial** est formé classiquement par les **racines ventrales C5 à T1** (avec des variantes possibles : **préfixé** par C4 et/ou **post-fixé** par T2).\n\n### Tronc primaire supérieur (upper trunk)\nLe **tronc primaire supérieur** résulte de la **réunion des racines C5 et C6**.\n- **Tronc moyen** : C7\n- **Tronc inférieur** : C8–T1\n\n### À retenir (synoptique)\n**Racines (C5–T1) → Troncs : <span style=\"color:#1e88e5\"><b>Supérieur = C5–C6</b></span> | <span style=\"color:#43a047\"><b>Moyen = C7</b></span> | <span style=\"color:#f4511e\"><b>Inférieur = C8–T1</b></span>**",
+   "questionTags": [
+    "Externat Setif",
+    "EMD 2 2016",
+    "Corrigé Proposé"
+   ],
+   "repetitionCount": 0,
+   "session": "EMD 2",
+   "answerKey": "proposed",
+   "originType": "qcs",
+   "origin": {
+    "file": "mbset/courses/year-1/anatomie-1-ere-Setif2/plexus-brachial/plexus-brachial-2016-1.json",
+    "index": 0,
+    "id": "105820"
+   },
+   "en": {
+    "questionText": "The superior primary trunk of the brachial plexus is formed by the cervical roots:",
+    "answers": [
+     {
+      "answerText": "C4-C5.",
+      "explanation": "C4 may contribute in a **prefixed** plexus, but the superior trunk is classically **C5–C6**."
+     },
+     {
+      "answerText": "C5-C6.",
+      "explanation": "The superior primary trunk is formed by **C5 + C6**."
+     },
+     {
+      "answerText": "C6-C7.",
+      "explanation": "**C6–C7** does not correspond to any trunk: **C7** forms the **middle** trunk alone."
+     },
+     {
+      "answerText": "C7-C8.",
+      "explanation": "**C7** does not contribute to the superior trunk; it forms the **middle** trunk."
+     },
+     {
+      "answerText": "C8-T1.",
+      "explanation": "**C8–T1** form the **inferior** primary trunk."
+     }
+    ],
+    "explanation": "### Review: organization of the brachial plexus\nThe **brachial plexus** is classically formed by the **ventral roots C5 to T1** (with possible variants: **prefixed** by C4 and/or **postfixed** by T2).\n\n### Superior primary trunk (upper trunk)\nThe **superior primary trunk** results from the **union of roots C5 and C6**.\n- **Middle trunk**: C7\n- **Inferior trunk**: C8–T1\n\n### To remember (summary)\n**Roots (C5–T1) → Trunks: <span style=\"color:#1e88e5\"><b>Superior = C5–C6</b></span> | <span style=\"color:#43a047\"><b>Middle = C7</b></span> | <span style=\"color:#f4511e\"><b>Inferior = C8–T1</b></span>**",
+    "model": "claude-sonnet-5",
+    "translatedAt": "2026-09-27T00:00:00Z"
+   }
+  }
+ ]
+}

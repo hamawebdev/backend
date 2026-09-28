@@ -4,6 +4,7 @@ import { z } from "zod";
 import AdminController from "./admin.controller";
 import uploadRoutes from "./upload.routes";
 import questionRoutes from "../questions/question.routes";
+import importRoutes from "../import/import.routes";
 import authMiddleware from "../../core/middlewares/auth.middleware";
 import { adminOnly, adminOrEmployee } from "../../core/middlewares/roleCheck.middleware";
 import MediaHandler, { FileType } from "../../core/utils/media.utils";
@@ -631,6 +632,13 @@ router.post("/sub-modules/:id/books",
 
 // Mount question management routes
 router.use("/questions", questionRoutes);
+
+// ==========================================
+// DATASET IMPORT (Admin Only)
+// ==========================================
+
+// Idempotent import of the question dataset (see import.routes.ts)
+router.use("/import", importRoutes);
 
 // ==========================================
 // QUESTION IMAGE MANAGEMENT (Admin + Employee)

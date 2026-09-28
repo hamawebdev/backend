@@ -1,0 +1,79 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "externat",
+ "studyYear": 2,
+ "module": {
+  "name": "Unité 4 (2 ème)",
+  "slug": "unite-4-2-eme"
+ },
+ "course": {
+  "name": "La prolactine",
+  "slug": "la-prolactine"
+ },
+ "examYear": 2022,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Externat Sétif",
+  "files": [
+   "mbset/courses/year-2/unite-4-2-eme-Setif44/la-prolactine/la-prolactine-2022-1.json"
+  ],
+  "moduleIds": [
+   "Setif44"
+  ],
+  "courseIds": [
+   "Setif_Unité_4_(2_ème)20"
+  ]
+ },
+ "counts": {
+  "questions": 3,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_adbec879bcdb654d",
+   "questionText": "la prolactine est secrètée par RF",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "l’hypophyse",
+     "isCorrect": false
+    },
+    {
+     "answerText": "les seins",
+     "isCorrect": false
+    },
+    {
+     "answerText": "l’utérus",
+     "isCorrect": false
+    },
+    {
+     "answerText": "les ovaires",
+     "isCorrect": false
+    },
+    {
+     "answerText": "le foie",
+     "isCorrect": true
+    }
+   ],
+   "questionTags": [
+    "Externat Setif",
+    "2022",
+    "Corrigé Type"
+   ],
+   "repetitionCount": 0,
+   "answerKey": "official",
+   "isInverse": true,
+   "originType": "qcs",
+   "origin": {
+    "file": "mbset/courses/year-2/unite-4-2-eme-Setif44/la-prolactine/la-prolactine-2022-1.json",
+    "index": 0,
+    "id": "119345"
+   }
+  }
+ ]
+}

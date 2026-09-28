@@ -1,0 +1,84 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "residanat",
+ "studyYear": 3,
+ "module": {
+  "name": "Parasitologie",
+  "slug": "parasitologie"
+ },
+ "course": {
+  "name": "Paludisme",
+  "slug": "paludisme"
+ },
+ "examYear": 2024,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Résidanat Sétif",
+  "files": [
+   "mbset/courses/year-3/parasitologie-Setif30/paludisme/paludisme-2024-2.json"
+  ],
+  "moduleIds": [
+   "Setif30"
+  ],
+  "courseIds": [
+   "Setif_Parasitologie18"
+  ]
+ },
+ "counts": {
+  "questions": 2,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_ee39ca0535f60fc0",
+   "questionText": "L'accès pernicieux",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Est dû à Plasmodium malariae",
+     "isCorrect": false
+    },
+    {
+     "answerText": "La goutte épaisse permet un diagnostic d'urgence",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Peut évoluer favorablement après traitement",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Est une forme grave du paludisme",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Est du à Toxoplasma gondii",
+     "isCorrect": false
+    }
+   ],
+   "questionTags": [
+    "Résidanat Setif",
+    "Biologie 2024",
+    "No. 8",
+    "Corrigé Proposé"
+   ],
+   "repetitionCount": 0,
+   "part": "biologie",
+   "number": 8,
+   "answerKey": "proposed",
+   "originType": "qcm",
+   "origin": {
+    "file": "mbset/courses/year-3/parasitologie-Setif30/paludisme/paludisme-2024-2.json",
+    "index": 1,
+    "id": "209181"
+   },
+   "papers": [
+    "setif/residanat/papers/2024/biologie.json"
+   ]
+  }
+ ]
+}

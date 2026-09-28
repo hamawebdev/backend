@@ -1090,11 +1090,18 @@ export default class StudentService {
       if (canAccess) {
         return question;
       }
-      const { explanation, questionExplanationImages, ...rest } = question;
+      // No answer key, in either language
+      const { explanation, explanationEn, questionExplanationImages, ...rest } = question;
       return {
         ...rest,
         questionAnswers: (question.questionAnswers || []).map((answer: any) => {
-          const { isCorrect, explanation: answerExplanation, explanationImages, ...answerRest } = answer;
+          const {
+            isCorrect,
+            explanation: answerExplanation,
+            explanationEn: answerExplanationEn,
+            explanationImages,
+            ...answerRest
+          } = answer;
           return answerRest;
         })
       };
@@ -2336,6 +2343,8 @@ export default class StudentService {
       const baseQuestion: any = {
         id: question.id,
         questionText: question.questionText,
+        // English translation, null until translated (clients fall back to French)
+        questionTextEn: question.questionTextEn ?? null,
         questionType: question.questionType,
         universityId: question.universityId,
         yearLevel: question.yearLevel,
@@ -2372,8 +2381,12 @@ export default class StudentService {
         baseQuestion.questionAnswers = question.questionAnswers.map((answer: any) => ({
           id: answer.id,
           answerText: answer.answerText,
+          answerTextEn: answer.answerTextEn ?? null,
           isCorrect: answer.isCorrect,
-          ...(filters.includeExplanations && { explanation: answer.explanation }),
+          ...(filters.includeExplanations && {
+            explanation: answer.explanation,
+            explanationEn: answer.explanationEn ?? null
+          }),
           explanationImages: (filters.includeImages && answer.explanationImages) ? answer.explanationImages : []
         }));
       }
@@ -2381,6 +2394,7 @@ export default class StudentService {
       // Add explanation if requested
       if (filters.includeExplanations) {
         baseQuestion.explanation = question.explanation;
+        baseQuestion.explanationEn = question.explanationEn ?? null;
       }
 
       return baseQuestion;
@@ -2389,6 +2403,7 @@ export default class StudentService {
     // Get total count for metadata
     const totalQuestionsCount = await this.prisma.question.count({
       where: {
+        isPublished: true,
         course: {
           module: {
             unite: {

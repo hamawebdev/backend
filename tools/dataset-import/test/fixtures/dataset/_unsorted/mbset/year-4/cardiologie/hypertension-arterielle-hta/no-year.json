@@ -1,0 +1,76 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "unsorted": {
+  "platform": "mbset",
+  "reason": "no source in the export and none in the tags"
+ },
+ "studyYear": 4,
+ "module": {
+  "name": "Cardiologie",
+  "slug": "cardiologie"
+ },
+ "course": {
+  "name": "Hypertension artérielle (HTA)",
+  "slug": "hypertension-arterielle-hta"
+ },
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": null,
+  "files": [
+   "mbset/courses/year-4/cardiologie-Setif6/hypertension-arterielle-hta/hypertension-arterielle-hta-unknown-unknown-source.json"
+  ],
+  "moduleIds": [
+   "Setif6"
+  ],
+  "courseIds": [
+   "Setif_Cardiologie13"
+  ]
+ },
+ "counts": {
+  "questions": 2,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_3a009ed5909ce5d7",
+   "questionText": "L'HTA secondaire est évoquée devant:",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Un âge jeune",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Une HTA sévère",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Une résistance au traitement",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Une protéinurie",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Une hypokaliémie",
+     "isCorrect": true
+    }
+   ],
+   "questionTags": [
+    "No. 13"
+   ],
+   "repetitionCount": 0,
+   "number": 13,
+   "originType": "qcm",
+   "origin": {
+    "file": "mbset/courses/year-4/cardiologie-Setif6/hypertension-arterielle-hta/hypertension-arterielle-hta-unknown-unknown-source.json",
+    "index": 0,
+    "id": "432233"
+   }
+  }
+ ]
+}

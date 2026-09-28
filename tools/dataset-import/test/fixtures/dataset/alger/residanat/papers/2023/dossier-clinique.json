@@ -1,0 +1,67 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "residanat",
+ "name": "Résidanat 2023",
+ "examYear": 2023,
+ "part": "dossier-clinique",
+ "partName": "Dossier clinique",
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Résidanat Alger",
+  "file": "mystedia/residanat/dossier-clinique/exams/2023-residanat-2023.json",
+  "id": "14"
+ },
+ "counts": {
+  "entries": 50,
+  "duplicatesRemoved": 0,
+  "referenced": 0,
+  "referencedOtherYear": 0,
+  "embedded": 50,
+  "missingFromExport": 0,
+  "declaredTotal": 5
+ },
+ "questions": [
+  {
+   "n": 8,
+   "uid": "q_272e1e37ab18ed7c",
+   "questionText": "Monsieur M. Said, âgé de 51 ans, est adressé par son médecin généraliste dans le cadre de l'urgence pour une protrusion ce son œil gauche évoluant depuis quelques jours.\n\nQuelle est l’origine majeure de cette étiologie : (RJ)",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Infectieuse",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Traumatique",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Toxique",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Endocrinienne",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Médicamenteuse",
+     "isCorrect": false
+    }
+   ],
+   "explanation": "<p>     </p>",
+   "questionTags": [
+    "Résidanat Alger 2023"
+   ],
+   "repetitionCount": 0,
+   "originType": "qcs",
+   "origin": {
+    "file": "mystedia/residanat/dossier-clinique/exams/2023-residanat-2023.json",
+    "index": 7
+   }
+  }
+ ]
+}

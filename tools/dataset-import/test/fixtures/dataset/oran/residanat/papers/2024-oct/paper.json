@@ -1,0 +1,96 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "university": "oran",
+ "universityName": "Oran",
+ "kind": "residanat",
+ "name": "Résidanat Oran OCT 2024",
+ "examYear": 2024,
+ "month": "oct",
+ "textFormat": "text",
+ "origin": {
+  "platform": "cramqcm",
+  "source": "Résidanat Oran",
+  "file": "cramqcm/residanat/exams/2024-residanat-oran-oct-2024.json",
+  "id": "4"
+ },
+ "counts": {
+  "entries": 137,
+  "duplicatesRemoved": 1,
+  "referenced": 0,
+  "referencedOtherYear": 0,
+  "embedded": 136,
+  "missingFromExport": 0
+ },
+ "questions": [
+  {
+   "n": 24,
+   "uid": "q_1ee0aff72e9495a5",
+   "questionText": "Une urétrite à gonocoque peut se compliquer de :",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "arthrite aiguë",
+     "isCorrect": true
+    },
+    {
+     "answerText": "épididymite",
+     "isCorrect": true
+    },
+    {
+     "answerText": "stérilité",
+     "isCorrect": true
+    },
+    {
+     "answerText": "conjonctivite",
+     "isCorrect": false
+    },
+    {
+     "answerText": "salpingite",
+     "isCorrect": true
+    }
+   ],
+   "repetitionCount": 0,
+   "originType": "qcm",
+   "origin": {
+    "file": "cramqcm/residanat/exams/2024-residanat-oran-oct-2024.json",
+    "index": 23
+   }
+  },
+  {
+   "n": 65,
+   "uid": "q_ac2c49196de72c48",
+   "questionText": "Quel est le cofacteur du facteur 9 ?",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "2",
+     "isCorrect": false
+    },
+    {
+     "answerText": "5",
+     "isCorrect": false
+    },
+    {
+     "answerText": "8",
+     "isCorrect": true
+    },
+    {
+     "answerText": "10",
+     "isCorrect": false
+    },
+    {
+     "answerText": "11",
+     "isCorrect": false
+    }
+   ],
+   "explanation": "= cofacteur de 9.\n\nReply •\nTranslate",
+   "repetitionCount": 0,
+   "originType": "qcs",
+   "origin": {
+    "file": "cramqcm/residanat/exams/2024-residanat-oran-oct-2024.json",
+    "index": 64
+   }
+  }
+ ]
+}

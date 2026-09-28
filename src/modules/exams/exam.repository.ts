@@ -7,6 +7,7 @@ import {
 } from "@prisma/client";
 import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
+import { ANSWER_ORDER, PUBLISHED_QUESTION } from "../questions/question-visibility";
 
 @injectable()
 export default class ExamRepository {
@@ -269,11 +270,13 @@ export default class ExamRepository {
 
   /**
    * An exam's questions are linked either through the exam_questions join
-   * table (admin-built exams) or through Question.examId (question create and
-   * bulk import). Both count.
+   * table (admin-built exams, dataset import) or through Question.examId
+   * (question create and bulk import). Both count. Students only get
+   * published questions.
    */
   private examQuestionsWhere(examId: number) {
     return {
+      ...PUBLISHED_QUESTION,
       OR: [
         { examId },
         { examQuestions: { some: { examId } } }
@@ -296,9 +299,10 @@ export default class ExamRepository {
         questionAnswers: {
           include: {
             explanationImages: true
-          }
+          },
+          orderBy: ANSWER_ORDER
         },
-        questionImages: true, // Include question images for canonical spec
+        questionImages: { orderBy: { id: 'asc' } }, // Include question images for canonical spec
         examQuestions: {
           where: { examId },
           select: { orderInExam: true, createdAt: true }
@@ -337,6 +341,7 @@ export default class ExamRepository {
     hasResidencyAccess?: boolean
   ): Promise<number[]> {
     const where: any = {
+      ...PUBLISHED_QUESTION,
       courseId,
       examYear: year,
       examId: null
@@ -358,9 +363,19 @@ export default class ExamRepository {
     userYearLevels?: YearLevel[],
     hasResidencyAccess?: boolean
   ): Promise<any[]> {
+    const yearLevelFilter = !hasResidencyAccess && userYearLevels ? { in: userYearLevels } : undefined;
+
+    // Exams of the module and year whose questions are linked through the
+    // exam_questions join table (dataset import, admin-built exams)
+    const linkedExamWhere: any = { moduleId, year };
+    if (yearLevelFilter) {
+      linkedExamWhere.yearLevel = yearLevelFilter;
+    }
+
     // Build where conditions for questions: in a course of the module, or
-    // linked to an exam of the module
-    const questionWhereConditions: any = {
+    // linked to an exam of the module (Question.examId or the join table).
+    // Students only get published questions.
+    const courseOrExamQuestion: any = {
       examYear: year,
       OR: [
         { course: { moduleId: moduleId } },
@@ -369,14 +384,47 @@ export default class ExamRepository {
     };
 
     // Filter by the year levels the user's subscriptions grant, if not residency subscriber
-    if (!hasResidencyAccess && userYearLevels) {
-      questionWhereConditions.yearLevel = { in: userYearLevels };
+    if (yearLevelFilter) {
+      courseOrExamQuestion.yearLevel = yearLevelFilter;
     }
+
+    const questionWhereConditions: any = {
+      ...PUBLISHED_QUESTION,
+      OR: [
+        courseOrExamQuestion,
+        { examQuestions: { some: { exam: linkedExamWhere } } }
+      ]
+    };
+
+    const examInclude = {
+      module: {
+        include: {
+          unite: {
+            include: {
+              studyPack: {
+                select: {
+                  name: true
+                }
+              }
+            }
+          }
+        }
+      },
+      university: {
+        select: {
+          name: true
+        }
+      }
+    };
 
     // First, get all questions that match the criteria
     const questions = await this.prisma.question.findMany({
       where: questionWhereConditions,
       include: {
+        examQuestions: {
+          where: { exam: linkedExamWhere },
+          include: { exam: { include: examInclude } }
+        },
         exam: {
           include: {
             module: {
@@ -421,10 +469,37 @@ export default class ExamRepository {
 
     // Group questions by exam and create exam objects
     const examMap = new Map();
+    const realExamData = (exam: any) => ({
+      id: exam.id,
+      title: exam.title,
+      description: exam.description,
+      yearLevel: exam.yearLevel,
+      examYear: exam.examYear,
+      year: exam.year,
+      module: exam.module,
+      university: exam.university,
+      questionCount: 0,
+      isFromQuestions: false // This is a real exam
+    });
 
     for (const question of questions) {
       let examKey: string;
       let examData: any;
+
+      // Questions linked through the join table count in each of their exams
+      if (question.examQuestions.length > 0) {
+        for (const link of question.examQuestions) {
+          const key = `exam_${link.exam.id}`;
+          if (!examMap.has(key)) {
+            examMap.set(key, realExamData(link.exam));
+          }
+          examMap.get(key).questionCount++;
+        }
+        continue;
+      }
+
+      // Otherwise the question matched on its own exam year and module
+      if (question.examYear !== year) continue;
 
       if (question.exam) {
         // Question is linked to a specific exam

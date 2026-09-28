@@ -1,0 +1,66 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "residanat",
+ "name": "Résidanat 2019",
+ "examYear": 2019,
+ "part": "sciences-fondamentales",
+ "partName": "Sciences fondamentales",
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Résidanat Alger",
+  "file": "mystedia/residanat/sciences-fondamentales/exams/2019-residanat-2019.json",
+  "id": "40"
+ },
+ "counts": {
+  "entries": 200,
+  "duplicatesRemoved": 100,
+  "referenced": 99,
+  "referencedOtherYear": 0,
+  "embedded": 1,
+  "missingFromExport": 0,
+  "declaredTotal": 100
+ },
+ "questions": [
+  {
+   "n": 3,
+   "uid": "q_9c62b9c4edfbd13c",
+   "questionText": "Les caractères morphologiques de la cellule cancéreuse sont : Cocher la réponse fausse",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "L’anisocytose et l’anisocaryose",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Les mitoses anormales",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Les nucléoles multiples",
+     "isCorrect": false
+    },
+    {
+     "answerText": "La diminution du rapport nucléo-cytoplasmique",
+     "isCorrect": true
+    },
+    {
+     "answerText": "La condensation chromatinienne",
+     "isCorrect": false
+    }
+   ],
+   "questionTags": [
+    "Résidanat Alger 2019"
+   ],
+   "repetitionCount": 0,
+   "originType": "qcs",
+   "origin": {
+    "file": "mystedia/residanat/sciences-fondamentales/exams/2019-residanat-2019.json",
+    "index": 2
+   }
+  }
+ ]
+}

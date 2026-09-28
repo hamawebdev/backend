@@ -1,0 +1,79 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "militaire",
+ "studyYear": 2,
+ "module": {
+  "name": "Unité digestive",
+  "slug": "unite-digestive"
+ },
+ "course": {
+  "name": "Biochimie les oligo elements",
+  "slug": "biochimie-les-oligo-elements"
+ },
+ "examYear": 2024,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Militaire Alger",
+  "files": [
+   "mystedia/courses/year-2/unite-digestive-13/biochimie-les-oligo-elements-132/biochimie-les-oligo-elements-2024-9.json"
+  ],
+  "moduleIds": [
+   "13"
+  ],
+  "courseIds": [
+   "132"
+  ]
+ },
+ "counts": {
+  "questions": 7,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_1a1c981e0b954608",
+   "questionText": "Lequel des éléments suivants n'est pas un cofacteur enzymatique?",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Zinc",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Fer",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Chrome",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Sélénium",
+     "isCorrect": false
+    },
+    {
+     "answerText": "lode",
+     "isCorrect": true
+    }
+   ],
+   "questionTags": [
+    "Examen U02 2025 Militaire"
+   ],
+   "repetitionCount": 0,
+   "session": "Examen U02 Militaire",
+   "originType": "qcs",
+   "origin": {
+    "file": "mystedia/courses/year-2/unite-digestive-13/biochimie-les-oligo-elements-132/biochimie-les-oligo-elements-2024-9.json",
+    "index": 1
+   },
+   "number": 76,
+   "papers": [
+    "alger/exams/year-2/unite-digestive/2025-examen-u02-militaire.json"
+   ]
+  }
+ ]
+}

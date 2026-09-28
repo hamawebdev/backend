@@ -1,0 +1,289 @@
+{
+ "generatedAt": "2026-09-27T11:10:17.319Z",
+ "note": "test fixture: excerpt of /srv/medadn/dataset (whole records, files trimmed to the selected questions)",
+ "questions": {
+  "storedOnce": 34
+ },
+ "files": [
+  {
+   "path": "_unsorted/cramqcm/year-5/urologie/adenome-du-prostate/no-year.json",
+   "view": "course",
+   "university": "_unsorted",
+   "kind": "cramqcm",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "_unsorted/mbset/year-4/cardiologie/hypertension-arterielle-hta/no-year.json",
+   "view": "course",
+   "university": "_unsorted",
+   "kind": "mbset",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/exams/year-6/dermatologie/2024-p4.json",
+   "view": "paper",
+   "university": "alger",
+   "kind": "exams",
+   "questions": 3,
+   "embedded": 2
+  },
+  {
+   "path": "alger/externat/year-1/cytologie/hyaloplasme/2016.json",
+   "view": "course",
+   "university": "alger",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/externat/year-4/neurologie/myasthenie/2020.json",
+   "view": "course",
+   "university": "alger",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/externat/year-5/urologie-nephrologie/cat-devant-une-anurie/2018.json",
+   "view": "course",
+   "university": "alger",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/externat/year-6/dermatologie/ectoparasitoses-gale-et-pediculoses/2024.json",
+   "view": "course",
+   "university": "alger",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/externat/year-6/medecine-legale-droit-medical/autres/2025.json",
+   "view": "course",
+   "university": "alger",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/militaire/year-2/unite-digestive/biochimie-les-oligo-elements/2024.json",
+   "view": "course",
+   "university": "alger",
+   "kind": "militaire",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/residanat/by-course/year-2/unite-cardio-respiratoire/histologie-poumon/2013.json",
+   "view": "course",
+   "university": "alger",
+   "kind": "residanat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/residanat/by-course/year-6/dermatologie/psoriasis/2023.json",
+   "view": "course",
+   "university": "alger",
+   "kind": "residanat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "alger/residanat/papers/2019/sciences-fondamentales.json",
+   "view": "paper",
+   "university": "alger",
+   "kind": "residanat/papers",
+   "questions": 1,
+   "embedded": 1
+  },
+  {
+   "path": "alger/residanat/papers/2021/pathologie-medico-chirurgicale.json",
+   "view": "paper",
+   "university": "alger",
+   "kind": "residanat/papers",
+   "questions": 1,
+   "embedded": 20
+  },
+  {
+   "path": "alger/residanat/papers/2023/dossier-clinique.json",
+   "view": "paper",
+   "university": "alger",
+   "kind": "residanat/papers",
+   "questions": 1,
+   "embedded": 50
+  },
+  {
+   "path": "batna/externat/year-3/parasitologie-mycologie/autres/2017.json",
+   "view": "course",
+   "university": "batna",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "blida/residanat/by-course/year-3/immunologie-3-eme/_no-course/2019.json",
+   "view": "course",
+   "university": "blida",
+   "kind": "residanat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "blida/residanat/papers/2019/sciences-fondamentales.json",
+   "view": "paper",
+   "university": "blida",
+   "kind": "residanat/papers",
+   "questions": 1,
+   "embedded": 0
+  },
+  {
+   "path": "constantine/externat/year-3/parasitologie-mycologie/autres/2017.json",
+   "view": "course",
+   "university": "constantine",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "msila/externat/year-1/biostatistique/la-loi-binomiale/2026.json",
+   "view": "course",
+   "university": "msila",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 1
+  },
+  {
+   "path": "oran/externat/year-3/unite-appareil-neurologique-locomoteur-et-cutane/physiopathologie-de-la-douleur/2020.json",
+   "view": "course",
+   "university": "oran",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "oran/residanat/papers/2022-fev/paper.json",
+   "view": "paper",
+   "university": "oran",
+   "kind": "residanat/papers",
+   "questions": 1,
+   "embedded": 120
+  },
+  {
+   "path": "oran/residanat/papers/2024-oct/paper.json",
+   "view": "paper",
+   "university": "oran",
+   "kind": "residanat/papers",
+   "questions": 2,
+   "embedded": 136
+  },
+  {
+   "path": "setif/externat/year-1/anatomie-1-ere/plexus-brachial/2016.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "setif/externat/year-1/biostatistique/exercices/no-year.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "externat",
+   "questions": 2,
+   "needsReview": 9
+  },
+  {
+   "path": "setif/externat/year-1/embryologie/2-eme-semaine-du-de/2012.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 2
+  },
+  {
+   "path": "setif/externat/year-2/unite-4-2-eme/la-prolactine/2022.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "setif/externat/year-5/endocrinologie/cat-devant-un-nodule-thyroidien/2018.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "setif/externat/year-6/orl/otites-moyennes-chroniques/2023.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "setif/residanat/by-course/year-3/parasitologie/paludisme/2024.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "residanat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "setif/residanat/by-course/year-4/cardiologie/hypertension-arterielle-hta/2017.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "residanat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "setif/residanat/by-course/year-5/gynecologie-et-obstetrique/contraception/2016.json",
+   "view": "course",
+   "university": "setif",
+   "kind": "residanat",
+   "questions": 1,
+   "needsReview": 0
+  },
+  {
+   "path": "setif/residanat/papers/2016/chirurgie.json",
+   "view": "paper",
+   "university": "setif",
+   "kind": "residanat/papers",
+   "questions": 1,
+   "embedded": 0
+  },
+  {
+   "path": "setif/residanat/papers/2017/medicale.json",
+   "view": "paper",
+   "university": "setif",
+   "kind": "residanat/papers",
+   "questions": 1,
+   "embedded": 0
+  },
+  {
+   "path": "setif/residanat/papers/2024/biologie.json",
+   "view": "paper",
+   "university": "setif",
+   "kind": "residanat/papers",
+   "questions": 1,
+   "embedded": 0
+  },
+  {
+   "path": "tizi-ouzou/externat/year-4/neurologie/questions-de-synthese/2012.json",
+   "view": "course",
+   "university": "tizi-ouzou",
+   "kind": "externat",
+   "questions": 1,
+   "needsReview": 0
+  }
+ ]
+}

@@ -1,0 +1,68 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "unsorted": {
+  "platform": "cramqcm",
+  "reason": "the exporter mixed all cramqcm sources in one file and did not record the source of each question"
+ },
+ "studyYear": 5,
+ "module": {
+  "name": "Urologie",
+  "slug": "urologie"
+ },
+ "course": {
+  "name": "Adénome du prostate",
+  "slug": "adenome-du-prostate"
+ },
+ "textFormat": "text",
+ "origin": {
+  "platform": "cramqcm",
+  "source": null,
+  "files": [
+   "cramqcm/courses/year-5/urologie-46/adenome-du-prostate-404/adenome-du-prostate-5-1.json"
+  ],
+  "moduleIds": [
+   "46"
+  ],
+  "courseIds": [
+   "404"
+  ]
+ },
+ "counts": {
+  "questions": 10,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_8ef39a25435aacdc",
+   "questionText": "Quels sont les symptômes du TURP syndrome ?",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Troubles visuels",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Céphalées",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Hypertension",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Hypernatrémie",
+     "isCorrect": false
+    }
+   ],
+   "explanation": "Pas d'explications voir les commentaires",
+   "repetitionCount": 0,
+   "originType": "qcm",
+   "origin": {
+    "file": "cramqcm/courses/year-5/urologie-46/adenome-du-prostate-404/adenome-du-prostate-5-1.json",
+    "index": 4
+   }
+  }
+ ]
+}

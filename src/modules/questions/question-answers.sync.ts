@@ -16,6 +16,8 @@ export type SubmittedAnswer = {
  * - an existing answer missing from the list is deleted, unless students have
  *   chosen it in a session; then the whole update is refused with 409 so their
  *   recorded answers keep pointing at it.
+ * - every listed answer takes its index in the list as its position, so the
+ *   answers are displayed in the submitted order
  *
  * Answer ids therefore stay stable across edits, which keeps past attempts,
  * multiple-choice selections and per-answer explanation images intact.
@@ -55,14 +57,15 @@ export async function syncQuestionAnswers(
     await tx.questionAnswer.deleteMany({ where: { id: { in: removedIds }, questionId } });
   }
 
-  for (const answer of submitted) {
+  for (const [position, answer] of submitted.entries()) {
     if (answer.id !== undefined && answer.id !== null) {
       await tx.questionAnswer.update({
         where: { id: answer.id },
         data: {
           ...(answer.answerText !== undefined ? { answerText: answer.answerText } : {}),
           ...(answer.isCorrect !== undefined ? { isCorrect: answer.isCorrect } : {}),
-          ...(answer.explanation !== undefined ? { explanation: answer.explanation } : {})
+          ...(answer.explanation !== undefined ? { explanation: answer.explanation } : {}),
+          position
         }
       });
     } else {
@@ -71,7 +74,8 @@ export async function syncQuestionAnswers(
           questionId,
           answerText: answer.answerText || '',
           isCorrect: answer.isCorrect || false,
-          explanation: answer.explanation || null
+          explanation: answer.explanation || null,
+          position
         }
       });
     }
@@ -79,7 +83,7 @@ export async function syncQuestionAnswers(
 }
 
 /** Ids among answerIds that a student selected (single choice or multiple choice) */
-async function findAnswersUsedInAttempts(
+export async function findAnswersUsedInAttempts(
   tx: TransactionClient,
   questionId: number,
   answerIds: number[]

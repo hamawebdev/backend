@@ -1,0 +1,17 @@
+{
+  "name": "medadn-dataset-import",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Imports /srv/medadn/dataset into MedADN through the admin import API",
+  "type": "commonjs",
+  "main": "import.js",
+  "bin": {
+    "medadn-dataset-import": "import.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

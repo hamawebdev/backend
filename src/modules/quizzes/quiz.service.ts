@@ -228,8 +228,11 @@ export default class QuizService {
     const questions: QuizSessionQuestion[] = sessionWithIncludes.sessionQuestions.map((sq: any) => ({
       id: sq.question.id,
       questionText: sq.question.questionText,
+      // English translation, null until translated (clients fall back to French)
+      questionTextEn: sq.question.questionTextEn ?? null,
       questionType: sq.question.questionType || 'SINGLE_CHOICE',
       explanation: sq.question.explanation || undefined,
+      explanationEn: sq.question.explanationEn ?? null,
       tags: typeof sq.question.tags === 'string' ? JSON.parse(sq.question.tags || '[]') : (sq.question.tags || []),
       yearLevel: sq.question.yearLevel,
       examYear: sq.question.examYear,
@@ -257,8 +260,10 @@ export default class QuizService {
       questionAnswers: sq.question.questionAnswers.map((qa: any) => ({
         id: qa.id,
         answerText: qa.answerText,
+        answerTextEn: qa.answerTextEn ?? null,
         isCorrect: qa.isCorrect,
         explanation: qa.explanation || undefined,
+        explanationEn: qa.explanationEn ?? null,
         explanationImages: qa.explanationImages.map((img: any) => ({
           id: img.id,
           imagePath: img.imagePath,
@@ -686,8 +691,11 @@ export default class QuizService {
       throw new SessionStatusError(originalSession.status, ["COMPLETED"]);
     }
 
-    // Get questions based on retake type, from the verified session only
-    const questionIds = await this.getRetakeQuestionIds(originalSession.id, retakeType);
+    // Get questions based on retake type, from the verified session only; questions
+    // unpublished since then are left out
+    const questionIds = await this.quizRepository.filterPublishedQuestionIds(
+      await this.getRetakeQuestionIds(originalSession.id, retakeType)
+    );
 
     if (questionIds.length === 0) {
       throw new NoQuestionsFoundError({ retakeType });
@@ -904,8 +912,10 @@ export default class QuizService {
       throw new BadRequestError(`Label with ID ${labelId} not found`);
     }
 
-    // Get all question IDs associated with this label
-    const questionIds = await this.quizRepository.getQuestionIdsByLabelId(labelId, user.user_data.id);
+    // Get all question IDs associated with this label (unpublished questions are left out)
+    const questionIds = await this.quizRepository.filterPublishedQuestionIds(
+      await this.quizRepository.getQuestionIdsByLabelId(labelId, user.user_data.id)
+    );
 
     if (questionIds.length === 0) {
       throw new BadRequestError(`No questions found for label "${label.name}". Please add questions to this label first.`);

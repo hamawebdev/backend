@@ -8,3 +8,8 @@
 !prisma/migrations/
 !src/
 !scripts/docker-entrypoint.sh
+# Commit detection for source builds (Dockerfile "version" stage): commit ids and ref
+# names only, never .git/config (it can hold credentials)
+!.git/HEAD
+!.git/refs/heads/
+!.git/packed-refs

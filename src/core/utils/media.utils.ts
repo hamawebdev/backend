@@ -20,6 +20,9 @@ export enum FileType {
   STUDY_PACK = "study-packs"
 }
 
+/** Content-Security-Policy of served media files (see getFile) */
+export const MEDIA_CONTENT_SECURITY_POLICY = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox";
+
 export interface FileUploadOptions {
   fileType: FileType;
   maxSize?: number; // in bytes
@@ -187,9 +190,14 @@ export default class MediaHandler {
 
       // Set appropriate headers based on file type
       const ext = path.extname(filename).toLowerCase();
+      res.setHeader('X-Content-Type-Options', 'nosniff');
       if (ext === '.pdf') {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      } else {
+        // Uploaded images (SVG included) opened directly can never run script or load
+        // anything; PDFs keep the default policy so browsers' viewers can render them
+        res.setHeader('Content-Security-Policy', MEDIA_CONTENT_SECURITY_POLICY);
       }
 
       // Send the file as response
@@ -205,6 +213,9 @@ export default class MediaHandler {
 
   // Legacy method for backward compatibility
   public getImage = this.getFile;
+
+  /** Directory where files of the given type are stored */
+  public getDirectory = (fileType: FileType): string => this.subDirectories[fileType];
 
   public deleteFiles = async (files: Prisma.JsonValue | null, fileType?: FileType) => {
     if (!Array.isArray(files) || files.length === 0) return;

@@ -6,6 +6,21 @@ import { RequestWithUser } from "../../types/types";
 import { ActivationCodeService } from "./services/activation-code.service";
 import { normalizeResidencyPart } from "./validations/admin.validation";
 
+/** Page number from the query string: a positive integer, 1 otherwise */
+function pageParam(value: unknown): number {
+  const page = parseInt(String(value ?? ''), 10);
+  return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
+/**
+ * Page size from the query string for the university / specialty lists (also
+ * served publicly for registration): 1 to 100, 10 by default
+ */
+function listLimitParam(value: unknown): number {
+  const limit = parseInt(String(value ?? ''), 10);
+  return Number.isInteger(limit) && limit > 0 ? Math.min(limit, 100) : 10;
+}
+
 @injectable()
 export default class AdminController {
   constructor(
@@ -546,7 +561,9 @@ export default class AdminController {
         yearLevel: req.query.yearLevel as string | undefined,
         examYear: req.query.examYear ? parseInt(req.query.examYear as string) : undefined,
         sourceId: req.query.sourceId ? parseInt(req.query.sourceId as string) : undefined,
-        search: req.query.search as string | undefined
+        search: req.query.search as string | undefined,
+        // isPublished=false lists the questions hidden from students
+        isPublished: req.query.isPublished === 'true' ? true : req.query.isPublished === 'false' ? false : undefined
       };
 
       const result = await this.adminService.getAllQuestions(page, limit, filters);
@@ -706,8 +723,8 @@ export default class AdminController {
   async getAllUniversities(req: RequestWithUser, res: Response, next: NextFunction): Promise<void> {
     try {
       const filters = {
-        page: req.query.page ? parseInt(req.query.page as string) : 1,
-        limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
+        page: pageParam(req.query.page),
+        limit: listLimitParam(req.query.limit),
         search: req.query.search as string | undefined,
         country: req.query.country as string | undefined
       };
@@ -787,8 +804,8 @@ export default class AdminController {
   async getAllSpecialties(req: RequestWithUser, res: Response, next: NextFunction): Promise<void> {
     try {
       const filters = {
-        page: req.query.page ? parseInt(req.query.page as string) : 1,
-        limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
+        page: pageParam(req.query.page),
+        limit: listLimitParam(req.query.limit),
         search: req.query.search as string | undefined
       };
 

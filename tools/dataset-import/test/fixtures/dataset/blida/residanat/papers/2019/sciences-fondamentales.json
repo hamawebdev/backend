@@ -1,0 +1,29 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "derived": true,
+ "note": "rebuilt from the question tags (part, sitting and question number); the export had no paper files",
+ "university": "blida",
+ "universityName": "Blida",
+ "kind": "residanat",
+ "name": "Résidanat Blida 2019 - sciences-fondamentales",
+ "examYear": 2019,
+ "part": "sciences-fondamentales",
+ "origin": {
+  "platform": "mbset",
+  "source": "Résidanat Blida"
+ },
+ "counts": {
+  "entries": 5,
+  "referenced": 5
+ },
+ "questions": [
+  {
+   "n": null,
+   "ref": "q_b14306b0f18cc79e",
+   "in": "blida/residanat/by-course/year-3/immunologie-3-eme/_no-course/2019.json",
+   "module": "immunologie-3-eme",
+   "course": null
+  }
+ ]
+}

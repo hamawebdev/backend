@@ -1,0 +1,83 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "externat",
+ "studyYear": 6,
+ "module": {
+  "name": "ORL",
+  "slug": "orl"
+ },
+ "course": {
+  "name": "Otites Moyennes Chroniques",
+  "slug": "otites-moyennes-chroniques"
+ },
+ "examYear": 2023,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Externat Sétif",
+  "files": [
+   "mbset/courses/year-6/orl-Setif28/otites-moyennes-chroniques/otites-moyennes-chroniques-2023-1.json"
+  ],
+  "moduleIds": [
+   "Setif28"
+  ],
+  "courseIds": [
+   "Setif_ORL13"
+  ]
+ },
+ "counts": {
+  "questions": 21,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_f1354a7c153a68c3",
+   "questionText": "Le malade n’a bénéficié d’aucune prise en charge, et il reconsulte 8 ans après pour otorrhées fétides et aggravation de sa surdité.\n\nA quel diagnostic pensez-vous ?",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "OMCS",
+     "isCorrect": false
+    },
+    {
+     "answerText": "OMCC",
+     "isCorrect": true
+    },
+    {
+     "answerText": "OSM",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Cancer du cavum",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Otomycose",
+     "isCorrect": false
+    }
+   ],
+   "questionTags": [
+    "Externat Setif",
+    "P1 2023",
+    "Corrigé Type"
+   ],
+   "repetitionCount": 0,
+   "session": "P1",
+   "answerKey": "official",
+   "case": {
+    "id": "121977",
+    "position": "1/4"
+   },
+   "originType": "qcs",
+   "origin": {
+    "file": "mbset/courses/year-6/orl-Setif28/otites-moyennes-chroniques/otites-moyennes-chroniques-2023-1.json",
+    "index": 17,
+    "id": "121977"
+   }
+  }
+ ]
+}

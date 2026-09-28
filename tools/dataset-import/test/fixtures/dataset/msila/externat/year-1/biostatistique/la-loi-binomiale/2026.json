@@ -1,0 +1,78 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "msila",
+ "universityName": "Msila",
+ "kind": "externat",
+ "studyYear": 1,
+ "module": {
+  "name": "Biostatistique",
+  "slug": "biostatistique"
+ },
+ "course": {
+  "name": "La loi binomiale",
+  "slug": "la-loi-binomiale"
+ },
+ "examYear": 2026,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Externat Msila",
+  "files": [
+   "mbset/courses/year-1/biostatistique-Setif5/la-loi-binomiale/la-loi-binomiale-2026-3.json"
+  ],
+  "moduleIds": [
+   "Setif5"
+  ],
+  "courseIds": [
+   "Setif_Biostatistique4"
+  ]
+ },
+ "counts": {
+  "questions": 1,
+  "duplicatesRemoved": 0,
+  "needsReview": 1
+ },
+ "questions": [
+  {
+   "uid": "q_c40394e45afb9263",
+   "questionText": "Avoir un poids élevé (> 4,0 kg):",
+   "questionType": "UNKNOWN",
+   "answers": [
+    {
+     "answerText": "0.984",
+     "isCorrect": false
+    },
+    {
+     "answerText": "0.884",
+     "isCorrect": false
+    },
+    {
+     "answerText": "0.115",
+     "isCorrect": false
+    },
+    {
+     "answerText": "0.010",
+     "isCorrect": false
+    }
+   ],
+   "questionTags": [
+    "Externat Msila",
+    "No. 18",
+    "EMD1 2026"
+   ],
+   "repetitionCount": 0,
+   "session": "EMD1",
+   "number": 18,
+   "originType": "qcs",
+   "review": [
+    "no-correct-answer"
+   ],
+   "origin": {
+    "file": "mbset/courses/year-1/biostatistique-Setif5/la-loi-binomiale/la-loi-binomiale-2026-3.json",
+    "index": 0,
+    "id": "303946"
+   }
+  }
+ ]
+}

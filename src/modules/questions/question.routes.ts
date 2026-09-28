@@ -91,6 +91,8 @@ const updateQuestionSchema = z.object({
   universityId: z.number().int().positive().optional(),
   yearLevel: z.nativeEnum(YearLevel).optional(),
   metadata: z.string().max(5000, "Metadata cannot exceed 5000 characters").optional(),
+  // false hides the question from students (it stays visible to admins)
+  isPublished: z.boolean().optional(),
   answers: z.array(z.object({
     id: z.number().int().positive().optional(),
     answerText: z.string().min(1).optional(),
@@ -148,6 +150,13 @@ const bulkCreateQuestionsSchema = z.object({
     universityId: z.number().int().positive().optional(),
     yearLevel: z.nativeEnum(YearLevel).optional(),
     examYear: z.number().int().min(2000).max(2100).optional(),
+    // Stored on every created question: a JSON string, or an object stored as JSON
+    metadata: z.union([
+      z.string().max(5000, "Metadata cannot exceed 5000 characters"),
+      z.record(z.unknown())
+    ]).optional(),
+    // Rotation R1-R4 of the import screens: sets the year level when yearLevel is not sent
+    rotation: z.enum(['R1', 'R2', 'R3', 'R4']).optional(),
   }),
   questions: z.array(z.object({
     questionText: z.string().min(2, "Question text must be at least 3 characters"),

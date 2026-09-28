@@ -1,0 +1,80 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "blida",
+ "universityName": "Blida",
+ "kind": "residanat",
+ "studyYear": 3,
+ "module": {
+  "name": "Immunologie (3 ème)",
+  "slug": "immunologie-3-eme"
+ },
+ "examYear": 2019,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Résidanat Blida",
+  "files": [
+   "mbset/courses/year-3/immunologie-3-eme-Setif51/unknown-subcategory/unknown-subcategory-2019-unknown-source.json"
+  ],
+  "moduleIds": [
+   "Setif51"
+  ],
+  "courseIds": []
+ },
+ "counts": {
+  "questions": 5,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_b14306b0f18cc79e",
+   "questionText": "Les autos anticorps anti-muscles lisses sont rencontrés dans : (Cocher la réponse ju",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "La cirrhose biliaire primitive",
+     "isCorrect": false,
+     "explanation": "La **cirrhose biliaire primitive** est classiquement associée aux **anticorps anti-mitochondries**, pas aux **anti-muscles lisses**."
+    },
+    {
+     "answerText": "L'hépatite autoimmune de type I",
+     "isCorrect": true,
+     "explanation": "C’est l’association classique : les **anti-muscles lisses** sont typiques de l’**hépatite auto-immune de type I**."
+    },
+    {
+     "answerText": "L'hépatite autoimmune de type II",
+     "isCorrect": false,
+     "explanation": "L’**hépatite auto-immune de type II** est surtout liée aux **anticorps anti-LKM1**."
+    },
+    {
+     "answerText": "Les myosites",
+     "isCorrect": false,
+     "explanation": "Les **myosites** concernent le muscle strié et s’associent à d’autres auto-anticorps, pas aux **anti-muscles lisses**."
+    },
+    {
+     "answerText": "Myocardite",
+     "isCorrect": false,
+     "explanation": "La **myocardite** n’est pas une indication classique de recherche des **anti-muscles lisses**."
+    }
+   ],
+   "explanation": "### Définition\nLes **anticorps anti-muscles lisses (ASMA / SMA)** sont des **auto-anticorps** dirigés contre des composants du cytosquelette, notamment l’**actine**. Ils sont surtout recherchés dans le bilan des **hépatopathies auto-immunes**.\n\n### Point clé à retenir\nL’association classique est :\n- **Hépatite auto-immune de type I** → **anti-muscles lisses** souvent positifs\n- **Hépatite auto-immune de type II** → plutôt **anti-LKM1**\n- **Cirrhose biliaire primitive** (aujourd’hui : **cholangite biliaire primitive**) → surtout **anticorps anti-mitochondries**\n\n### Importance clinique\nChez un patient avec **cytolyse hépatique**, hypergammaglobulinémie et contexte auto-immun, la positivité des **anti-muscles lisses** oriente fortement vers une **hépatite auto-immune de type I**.\n\n| Affection | Auto-anticorps typiques |\n|---|---|\n| Hépatite auto-immune type I | **Anti-muscles lisses**, ANA |\n| Hépatite auto-immune type II | **Anti-LKM1** |\n| Cholangite biliaire primitive | **Anti-mitochondries (AMA)** |",
+   "questionTags": [
+    "Résidanat Blida",
+    "Sciences fondamentales 2019"
+   ],
+   "repetitionCount": 0,
+   "part": "sciences-fondamentales",
+   "originType": "qcm",
+   "origin": {
+    "file": "mbset/courses/year-3/immunologie-3-eme-Setif51/unknown-subcategory/unknown-subcategory-2019-unknown-source.json",
+    "index": 2,
+    "id": "356038"
+   },
+   "papers": [
+    "blida/residanat/papers/2019/sciences-fondamentales.json"
+   ]
+  }
+ ]
+}

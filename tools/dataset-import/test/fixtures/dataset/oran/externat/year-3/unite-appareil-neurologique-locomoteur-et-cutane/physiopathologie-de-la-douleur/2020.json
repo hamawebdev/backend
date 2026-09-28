@@ -1,0 +1,75 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "oran",
+ "universityName": "Oran",
+ "kind": "externat",
+ "studyYear": 3,
+ "module": {
+  "name": "Unité Appareil Neurologique, Locomoteur et Cutané",
+  "slug": "unite-appareil-neurologique-locomoteur-et-cutane"
+ },
+ "course": {
+  "name": "Physiopathologie de la douleur",
+  "slug": "physiopathologie-de-la-douleur"
+ },
+ "examYear": 2020,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Oran",
+  "files": [
+   "mystedia/courses/year-3/unite-appareil-neurologique-locomoteur-et-cutane-16/physiopathologie-de-la-douleur-304/physiopathologie-de-la-douleur-2020-6.json"
+  ],
+  "moduleIds": [
+   "16"
+  ],
+  "courseIds": [
+   "304"
+  ]
+ },
+ "counts": {
+  "questions": 12,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_86f6a929c4d494fb",
+   "questionText": "La stimulation des terminaisons nociceptives se fait généralement par : (Cocher la ou les réponses justes)",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Les opioïdes",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Dégranulation mastocytaire",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Les prostaglandines",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Les corticoïdes",
+     "isCorrect": false
+    },
+    {
+     "answerText": "L’agrégation plaquettaire",
+     "isCorrect": true
+    }
+   ],
+   "explanation": "corrigé type",
+   "questionTags": [
+    "Externat Oran"
+   ],
+   "repetitionCount": 0,
+   "originType": "qcm",
+   "origin": {
+    "file": "mystedia/courses/year-3/unite-appareil-neurologique-locomoteur-et-cutane-16/physiopathologie-de-la-douleur-304/physiopathologie-de-la-douleur-2020-6.json",
+    "index": 6
+   }
+  }
+ ]
+}

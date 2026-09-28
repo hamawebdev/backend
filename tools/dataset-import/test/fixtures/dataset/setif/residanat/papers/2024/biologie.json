@@ -1,0 +1,29 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "derived": true,
+ "note": "rebuilt from the question tags (part, sitting and question number); the export had no paper files",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "residanat",
+ "name": "Résidanat Sétif 2024 - biologie",
+ "examYear": 2024,
+ "part": "biologie",
+ "origin": {
+  "platform": "mbset",
+  "source": "Résidanat Sétif"
+ },
+ "counts": {
+  "entries": 50,
+  "referenced": 50
+ },
+ "questions": [
+  {
+   "n": 8,
+   "ref": "q_ee39ca0535f60fc0",
+   "in": "setif/residanat/by-course/year-3/parasitologie/paludisme/2024.json",
+   "module": "parasitologie",
+   "course": "paludisme"
+  }
+ ]
+}

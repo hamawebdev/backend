@@ -241,8 +241,12 @@ export interface QuizSessionQuestion {
 export interface QuestionAnswerOption {
   id: number;
   answerText: string;
+  /** English translation, null until translated */
+  answerTextEn?: string | null;
   isCorrect: boolean;
   explanation?: string;
+  /** English translation of the explanation, null until translated */
+  explanationEn?: string | null;
   explanationImages: ExplanationImageInfo[];
 }
 
@@ -277,8 +281,12 @@ export interface SingleChoiceSubmissionDto {
 export interface QuizSessionQuestion {
   id: number;
   questionText: string;
+  /** English translation, null until translated (clients fall back to French) */
+  questionTextEn?: string | null;
   questionType?: QuestionType;
   explanation?: string;
+  /** English translation of the explanation, null until translated */
+  explanationEn?: string | null;
   tags?: string[];
   yearLevel?: YearLevel;
   examYear?: number;
@@ -288,7 +296,8 @@ export interface QuizSessionQuestion {
   university?: EnhancedUniversity;
   course?: EnhancedCourse;
   source?: EnhancedQuestionSource;
-  questionAnswers: QuizSessionAnswer[];
+  /** Answer options, ordered by position then id */
+  questionAnswers: QuestionAnswerOption[];
   repetitionCount: number;
   repetitionYears: number[];
   createdAt: Date;
@@ -572,7 +581,8 @@ export interface BulkCreateQuestionsDto {
     examYear?: number;
     examId?: number;
     sourceId?: number;
-    metadata?: string;
+    metadata?: string | Record<string, unknown>; // stored as a JSON string
+    rotation?: 'R1' | 'R2' | 'R3' | 'R4'; // year level ONE-FOUR when yearLevel is not sent
   };
   questions: {
     questionText: string;
@@ -609,6 +619,7 @@ export interface BulkCreateQuestionsResponse {
   success: true;
   data: {
     created: number;
+    totalCreated: number; // same as created (name read by the admin import screens)
     failed: number;
     questionIds: (number | null)[]; // ID at index n corresponds to request.questions[n], null if failed
     errors: { index: number; error: string }[];

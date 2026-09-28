@@ -1,0 +1,70 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "batna",
+ "universityName": "Batna",
+ "kind": "externat",
+ "studyYear": 3,
+ "module": {
+  "name": "Parasitologie Mycologie",
+  "slug": "parasitologie-mycologie"
+ },
+ "course": {
+  "name": "Autres",
+  "slug": "autres"
+ },
+ "examYear": 2017,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Batna",
+  "files": [
+   "mystedia/courses/year-3/parasitologie-mycologie-22/autres-615/autres-2017-5.json"
+  ],
+  "moduleIds": [
+   "22"
+  ],
+  "courseIds": [
+   "615"
+  ]
+ },
+ "counts": {
+  "questions": 268,
+  "duplicatesRemoved": 2,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_b2831f6c2b1c7e16",
+   "questionText": "Ces atteintes cutaneo-muqueuses :",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "les glossites.",
+     "isCorrect": true
+    },
+    {
+     "answerText": "l’elephantiasis.",
+     "isCorrect": false
+    },
+    {
+     "answerText": "les dermatophytoses.",
+     "isCorrect": true
+    },
+    {
+     "answerText": "La cryptococcose cutanée",
+     "isCorrect": true
+    }
+   ],
+   "questionTags": [
+    "Externat Batna"
+   ],
+   "repetitionCount": 0,
+   "originType": "qcm",
+   "origin": {
+    "file": "mystedia/courses/year-3/parasitologie-mycologie-22/autres-615/autres-2017-5.json",
+    "index": 105
+   }
+  }
+ ]
+}

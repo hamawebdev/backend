@@ -6,6 +6,7 @@ import ResponseUtils from "../../core/utils/response.utils";
 import { RequestWithUser } from "../../types/types";
 import { SessionType, YearLevel } from "@prisma/client";
 import { sanitizeString, sanitizeId } from "../../middleware/validation.middleware";
+import { RESIDENCY_PARTS, normalizeResidencyPart } from "../admin/validations/admin.validation";
 
 @injectable()
 export default class QuizController {
@@ -495,15 +496,17 @@ export default class QuizController {
         this.responseUtils.sendBadRequestResponse(res, "parts must be an array");
         return;
       }
-      const validParts = ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"];
-      if (parts && parts.some((p: string) => !validParts.includes(p))) {
+      // Canonical parts; older labels and accented forms ('Médicale') are mapped
+      const validParts: readonly string[] = RESIDENCY_PARTS;
+      const normalizedParts = parts ? parts.map((p: unknown) => normalizeResidencyPart(p)) : undefined;
+      if (normalizedParts && normalizedParts.some((p: unknown) => typeof p !== 'string' || !validParts.includes(p))) {
         this.responseUtils.sendBadRequestResponse(res, `parts must contain only ${validParts.join(', ')}`);
         return;
       }
 
       const result = await this.quizService.createResidencySessionCanonical(
         req.user!,
-        { title, examYear, universityId, parts }
+        { title, examYear, universityId, parts: normalizedParts }
       );
 
       this.responseUtils.sendSuccessResponse(res, result, 201);

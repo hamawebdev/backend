@@ -13,14 +13,14 @@ import {
 import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
 import { QuizSessionFilters } from "../../types/quiz.types";
+import { ANSWER_ORDER, PUBLISHED_QUESTION } from "../questions/question-visibility";
+import { RESIDENCY_PARTS } from "../admin/validations/admin.validation";
 
 /** Upper bound on the questions one session can hold (matches the request schemas) */
 export const MAX_SESSION_QUESTIONS = 1000;
 
 /** Upper bound on the rows GET /quizzes/questions-by-unite-or-module returns per page */
 export const MAX_QUESTIONS_PAGE_SIZE = 5000;
-
-const RESIDENCY_PARTS = ["Sciences_fondamentales", "Pathologie_medico_chirurgical", "Dossier_clinique"];
 
 /**
  * Residency content: questions with a university and exam year that either sit
@@ -37,6 +37,11 @@ export function residencyQuestionWhere(): Prisma.QuestionWhereInput {
       { course: { module: { unite: { studyPack: { type: 'RESIDENCY' } } } } }
     ]
   };
+}
+
+/** Residency questions students can be served: residency content that is published */
+export function publishedResidencyQuestionWhere(): Prisma.QuestionWhereInput {
+  return { AND: [residencyQuestionWhere(), PUBLISHED_QUESTION] };
 }
 
 /** An answer that has been validated against its question and scored */
@@ -72,7 +77,7 @@ export default class QuizRepository {
     accessibleStudyPackIds: number[],
     questionCount: number
   ): Promise<Question[]> {
-    const whereConditions: any = {};
+    const whereConditions: any = { ...PUBLISHED_QUESTION };
 
     // Apply filters
     if (filters.yearLevels && filters.yearLevels.length > 0) {
@@ -151,7 +156,8 @@ export default class QuizRepository {
         questionAnswers: {
           include: {
             explanationImages: true
-          }
+          },
+          orderBy: ANSWER_ORDER
         },
         course: {
           include: {
@@ -258,10 +264,11 @@ export default class QuizRepository {
                 questionAnswers: {
                   include: {
                     explanationImages: true
-                  }
+                  },
+                  orderBy: ANSWER_ORDER
                 },
-                questionImages: true,
-                questionExplanationImages: true,
+                questionImages: { orderBy: { id: 'asc' } },
+                questionExplanationImages: { orderBy: { id: 'asc' } },
                 university: {
                   select: {
                     id: true,
@@ -516,6 +523,7 @@ export default class QuizRepository {
     // Get all available years from accessible content
     const yearLevels = await this.prisma.question.findMany({
       where: {
+        ...PUBLISHED_QUESTION,
         course: {
           module: {
             OR: [
@@ -535,6 +543,7 @@ export default class QuizRepository {
 
     // Get question counts by type, filtered by accessible year levels
     const questionTypeCountsWhere: any = {
+      ...PUBLISHED_QUESTION,
       course: {
         module: {
           OR: [
@@ -574,7 +583,7 @@ export default class QuizRepository {
             courses: {
               include: {
                 _count: {
-                  select: { questions: true }
+                  select: { questions: { where: PUBLISHED_QUESTION } }
                 }
               }
             }
@@ -585,6 +594,7 @@ export default class QuizRepository {
 
     // Get question type counts by course, filtered by accessible year levels
     const courseQuestionTypeCountsWhere: any = {
+      ...PUBLISHED_QUESTION,
       course: {
         module: {
           OR: [
@@ -641,6 +651,7 @@ export default class QuizRepository {
         JOIN modules m ON c.module_id = m.id
         JOIN unites u ON m.unite_id = u.id
         WHERE u.study_pack_id IN (${Prisma.join(accessibleStudyPackIds)})
+          AND q.is_published = true
         GROUP BY qs.id, qs.name
         ORDER BY qs.name
       ` as any[];
@@ -695,7 +706,7 @@ export default class QuizRepository {
    * Get universities with their distinct exam years for residency session creation
    */
   async getResidencyUniversities(): Promise<Array<{ id: number; name: string; examYears: number[] }>> {
-    const residencyQuestionFilter = residencyQuestionWhere();
+    const residencyQuestionFilter = publishedResidencyQuestionWhere();
 
     const universitiesData = await this.prisma.university.findMany({
       where: {
@@ -735,7 +746,7 @@ export default class QuizRepository {
     assertId(examYear, 'examYear');
     const questions = await this.prisma.question.findMany({
       where: {
-        AND: [residencyQuestionWhere(), { universityId, examYear }]
+        AND: [publishedResidencyQuestionWhere(), { universityId, examYear }]
       },
       select: { id: true, metadata: true }
     });
@@ -755,7 +766,7 @@ export default class QuizRepository {
     }
 
     // Define canonical order for parts
-    const canonicalOrder = RESIDENCY_PARTS;
+    const canonicalOrder: readonly string[] = RESIDENCY_PARTS;
 
     // Sort parts in canonical order, unknown parts go at the end
     const parts = Array.from(partsSet).sort((a, b) => {
@@ -805,6 +816,7 @@ export default class QuizRepository {
     const groups = await this.prisma.question.groupBy({
       by: ['courseId', 'universityId', 'examYear', 'questionType'],
       where: {
+        ...PUBLISHED_QUESTION,
         course: {
           module: {
             OR: [
@@ -1243,10 +1255,11 @@ export default class QuizRepository {
     invalidIds: number[];
     inaccessibleIds: number[];
   }> {
-    // Get all questions with the provided IDs
+    // Get all questions with the provided IDs; unpublished questions count as missing
     const existingQuestions = await this.prisma.question.findMany({
       where: {
-        id: { in: questionIds }
+        id: { in: questionIds },
+        ...PUBLISHED_QUESTION
       },
       include: {
         course: {
@@ -1289,6 +1302,19 @@ export default class QuizRepository {
       invalidIds,
       inaccessibleIds
     };
+  }
+
+  /** The given question ids that are published, in the given order */
+  async filterPublishedQuestionIds(questionIds: number[]): Promise<number[]> {
+    if (questionIds.length === 0) {
+      return [];
+    }
+    const published = await this.prisma.question.findMany({
+      where: { id: { in: questionIds }, ...PUBLISHED_QUESTION },
+      select: { id: true }
+    });
+    const publishedIds = new Set(published.map(q => q.id));
+    return questionIds.filter(id => publishedIds.has(id));
   }
 
   /**
@@ -1347,6 +1373,7 @@ export default class QuizRepository {
     // Build the where clause based on filters
     // Handle both modules with a unite (study pack access) and independent modules (no unite)
     const whereClause: any = {
+      ...PUBLISHED_QUESTION,
       course: {
         module: {
           OR: [
@@ -1422,6 +1449,7 @@ export default class QuizRepository {
   }> {
     // Build baseWhere with optional uniteId/moduleId constraints for cascading filters
     const baseWhere: any = {
+      ...PUBLISHED_QUESTION,
       course: {
         module: {
           OR: [
@@ -1542,7 +1570,7 @@ export default class QuizRepository {
             courses: {
               include: {
                 _count: {
-                  select: { questions: true }
+                  select: { questions: { where: PUBLISHED_QUESTION } }
                 }
               }
             }
@@ -1606,6 +1634,7 @@ export default class QuizRepository {
     }
   ): Promise<{ totalQuestionCount: number; accessibleQuestionCount: number }> {
     const whereClause: any = {
+      ...PUBLISHED_QUESTION,
       courseId: { in: filters.courseIds }
     };
 
@@ -1645,7 +1674,7 @@ export default class QuizRepository {
     const rawTotal = await this.prisma.question.count();
     // Count with just courseId filter (no universityId etc)
     const courseOnly = await this.prisma.question.count({
-      where: { courseId: { in: filters.courseIds } }
+      where: { courseId: { in: filters.courseIds }, ...PUBLISHED_QUESTION }
     });
     console.log("[DIAG question-count] whereClause:", JSON.stringify(whereClause));
     console.log("[DIAG question-count] rawTotal (all questions in DB):", rawTotal);
@@ -1697,6 +1726,7 @@ export default class QuizRepository {
     pagination: { page: number; limit: number; total: number; totalPages: number; hasMore: boolean };
   }> {
     const whereClause: any = {
+      ...PUBLISHED_QUESTION,
       course: {
         module: {
           OR: [
@@ -1799,6 +1829,7 @@ export default class QuizRepository {
     questionCount: number = MAX_SESSION_QUESTIONS
   ): Promise<Array<{ id: number }>> {
     const whereClause: any = {
+      ...PUBLISHED_QUESTION,
       courseId: { in: filters.courseIds },
       course: {
         module: {
@@ -1917,7 +1948,7 @@ export default class QuizRepository {
         status: session.status,
         examYear: examYear || null,
         university: university ? { id: university.id, name: university.name } : null,
-        parts: RESIDENCY_PARTS, // Default parts
+        parts: RESIDENCY_PARTS.slice(0, 3), // Default parts (the three national parts)
         // The stored percentage counts every answer type and partial credit
         score: session.status === 'COMPLETED' ? Math.round(session.percentage) : null,
         createdAt: session.createdAt.toISOString(),
@@ -1940,7 +1971,7 @@ export default class QuizRepository {
     assertId(examYear, 'examYear');
     const questions = await this.prisma.question.findMany({
       where: {
-        AND: [residencyQuestionWhere(), { universityId, examYear }]
+        AND: [publishedResidencyQuestionWhere(), { universityId, examYear }]
       },
       select: { id: true, metadata: true },
       orderBy: { id: 'asc' }

@@ -1,0 +1,84 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "residanat",
+ "studyYear": 4,
+ "module": {
+  "name": "Cardiologie",
+  "slug": "cardiologie"
+ },
+ "course": {
+  "name": "Hypertension artérielle (HTA)",
+  "slug": "hypertension-arterielle-hta"
+ },
+ "examYear": 2017,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Résidanat Sétif",
+  "files": [
+   "mbset/courses/year-4/cardiologie-Setif6/hypertension-arterielle-hta/hypertension-arterielle-hta-2017-2.json"
+  ],
+  "moduleIds": [
+   "Setif6"
+  ],
+  "courseIds": [
+   "Setif_Cardiologie13"
+  ]
+ },
+ "counts": {
+  "questions": 1,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_a95a5009f08a093a",
+   "questionText": "Un œdème aigu pulmonaire cardiogénique peut être traité par.",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Furosémide",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Inhibiteur Calcique",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Nitroglycérine",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Propanolol",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Amiodarone.",
+     "isCorrect": false
+    }
+   ],
+   "questionTags": [
+    "Résidanat Setif",
+    "Médicale 2017",
+    "No. 193",
+    "Corrigé Proposé"
+   ],
+   "repetitionCount": 0,
+   "part": "medicale",
+   "number": 193,
+   "answerKey": "proposed",
+   "originType": "qcm",
+   "origin": {
+    "file": "mbset/courses/year-4/cardiologie-Setif6/hypertension-arterielle-hta/hypertension-arterielle-hta-2017-2.json",
+    "index": 0,
+    "id": "219078"
+   },
+   "papers": [
+    "setif/residanat/papers/2017/medicale.json"
+   ]
+  }
+ ]
+}

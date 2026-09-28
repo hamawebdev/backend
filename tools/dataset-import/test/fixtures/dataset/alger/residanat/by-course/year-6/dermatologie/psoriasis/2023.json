@@ -1,0 +1,62 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "residanat",
+ "studyYear": 6,
+ "module": {
+  "name": "Dermatologie",
+  "slug": "dermatologie"
+ },
+ "course": {
+  "name": "Psoriasis",
+  "slug": "psoriasis"
+ },
+ "examYear": 2023,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Résidanat Alger",
+  "files": [
+   "mystedia/courses/year-6/dermatologie-50/psoriasis-1281/psoriasis-2023-2.json"
+  ],
+  "moduleIds": [
+   "50"
+  ],
+  "courseIds": [
+   "1281"
+  ]
+ },
+ "counts": {
+  "questions": 1,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_08c84c30e248d044",
+   "questionText": "Question ouverte sur 8 points : Aspects cliniques et évolutifs du psoriasis vulgaire (forme classique)",
+   "questionType": "QROC",
+   "expectedAnswer": "Consulter vos supports officiels",
+   "questionTags": [
+    "P1 2024"
+   ],
+   "repetitionCount": 0,
+   "session": "P1",
+   "originType": "qroc",
+   "answers": [],
+   "origin": {
+    "file": "mystedia/courses/year-6/dermatologie-50/psoriasis-1281/psoriasis-2023-2.json",
+    "index": 0
+   },
+   "en": {
+    "questionText": "Open-ended question worth 8 points: Clinical and evolutive features of plaque psoriasis (classic form)",
+    "answers": [],
+    "expectedAnswer": "Refer to your official course materials",
+    "model": "claude-sonnet-5",
+    "translatedAt": "2026-09-27T00:00:00Z"
+   }
+  }
+ ]
+}

@@ -1,0 +1,59 @@
+{
+ "file": "alger/externat/year-6/maladies-de-systeme/la-maladie-de-behcet/2026.json",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "externat",
+ "studyYear": 6,
+ "module": {
+  "name": "Maladies de système",
+  "slug": "maladies-de-systeme"
+ },
+ "course": {
+  "name": "La maladie de Behçet.",
+  "slug": "la-maladie-de-behcet"
+ },
+ "examYear": 2026,
+ "question": {
+  "uid": "q_50ffa7c9aabd608c",
+  "questionText": "Associez",
+  "questionType": "QROC",
+  "expectedAnswer": "1 ––> A,B\n2––> C\n3––> G.\n4. -–> D.\n5-> E.\n6-> F.\n7 -> H.\n8-> pas de réponse",
+  "explanation": "<p><strong><em>Rappels</em></strong> : </p><p><em style=\"background-color: rgb(204, 232, 204);\"><u>Maladie de behcet</u></em> : </p><ul><li>Maladie inflammatoire systémique de cause inconnue (VASCULARITE),</li><li>vaisseaux de tout calibre</li><li> Triade clinique classique: aphtose buccale, aphtose génitale, uvéite (pseudofolliculites + aphtoses) </li><li>Autres localisations viscérales: possibles.</li><li>Évolution: poussées inflammatoires aiguës récurrentes</li><li>Pas de traitement spécifique</li></ul><p></p><p><br></p><p>2/ <em style=\"background-color: rgb(204, 232, 204);\">Sclerodermie systémique</em>: </p><p>Le terme sclérodermie signifie littéralement &lt;peau indurée&gt;, du grec: skleros, dur, et derma: peau. La sclérose cutanée est définie par</p><p> • un épaississement cutané œedémateux définissant le doigt boudiné, </p><p>• un aspect scléreux où la peau est adhérante aux tissus sous jacents définissant la sclérodactylie. </p><p>• un aspect d'atrophie cutanée.</p><p></p><p><br></p><p>3/ <em style=\"background-color: rgb(204, 232, 204);\">sarcoïdose, lupus pernio </em></p><p><em>Le lupus pernio est une lésion indurée, chronique de la peau souvent de couleur violacée. Cette affection est décrite pour la première fois en 1889 par Ernest Besnie</em><em style=\"background-color: rgb(204, 232, 204);\"><span class=\"ql-cursor\"> oreilles, des joues, des lèvres, du nez, des mains des doigts ou du front.﻿</span></em></p><p><br></p><p></p><p><br></p><p>4/ <em style=\"background-color: rgb(204, 232, 204);\">Lupus: Vespertilio </em></p><p><em>érythème ou éruption maculo- papuleuse, finement squameuse du visage en aile de papillon touchant la racine du nez s'étendant vers les pommettes</em></p><p></p><p><br></p><p>5/ <span style=\"background-color: rgb(204, 232, 204);\">SAPL</span>: </p><p>Livedo racemosa surtout associé au LES et fréquent lors du SAPL laire</p><p> ○ Erythème violacé </p><p>○ Grosses mailles ouvertes </p><p>○ Non infiltré</p><p> ○ Touchant le tronc et les membres </p><p>○ Lié a une désoxygénation et une stase vasculaire</p><p> ○ Syndrome de Sneddon : AVC et livedo</p><p></p><p><br></p><p>6/ maladie de Fabry </p><p>lésions cutanées caractéristiques (angiokératomes) sur la partie inférieure du tronc </p><p></p><p><br></p><p><span style=\"background-color: rgb(204, 232, 204);\">7/Dermatomyosites</span> </p><p></p>",
+  "questionTags": [
+   "P2 2026"
+  ],
+  "questionImages": [
+   "images/f1/f16fae3e548a457666729e5eb964cc5b0a1f82d2.jpg"
+  ],
+  "explanationImages": [
+   "images/b5/b5dfdd761a81bbff9361cc498eea49bebe46a55f.jpg",
+   "images/18/18a35b03bf026a644833ba2cdde418d8b39685fb.jpg",
+   "images/d4/d41d5cd04bcda1131e7cc8c5247201992b5591c4.jpg",
+   "images/c3/c3daf34dd4e8e5f45fb34cb3b32b0e524b335aa3.jpg",
+   "images/d5/d5e8c235b2a8d86b5e833a3c13cdff7c3dcc609f.jpg",
+   "images/10/103c83963bcd99226479b8c0a25dfa62e4e264d2.jpg",
+   "images/b0/b0f24d3865c45b5c376628c887eac8d43f81ddea.jpg",
+   "images/d1/d1511a097882c5846afec84360b267d8d1e9adce.jpg",
+   "images/61/61bff70501ecd6a6a48269268fcd4c9dddaf054e.jpg",
+   "images/73/73295b0091f695272c822f0b205015ff8cd95d46.jpg",
+   "images/ed/ed3045add6007340475c2ad663b11a800e78a279.jpg"
+  ],
+  "repetitionCount": 3,
+  "repetitionYears": [
+   2019,
+   2024,
+   2025
+  ],
+  "session": "P2",
+  "originType": "qroc",
+  "answers": [],
+  "origin": {
+   "file": "mystedia/courses/year-6/maladies-de-systeme-54/la-maladie-de-behcet-1312/la-maladie-de-behcet-2026-1.json",
+   "index": 0
+  },
+  "number": 29,
+  "papers": [
+   "alger/exams/year-6/maladies-de-systeme/2026-p2.json"
+  ]
+ }
+}

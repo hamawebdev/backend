@@ -1,0 +1,67 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "residanat",
+ "name": "Résidanat 2021",
+ "examYear": 2021,
+ "part": "pathologie-medico-chirurgicale",
+ "partName": "Pathologie medico-chirurgical",
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Résidanat Alger",
+  "file": "mystedia/residanat/pathologie-medico-chirurgical/exams/2021-residanat-2021.json",
+  "id": "26"
+ },
+ "counts": {
+  "entries": 100,
+  "duplicatesRemoved": 40,
+  "referenced": 40,
+  "referencedOtherYear": 0,
+  "embedded": 20,
+  "missingFromExport": 0,
+  "declaredTotal": 44
+ },
+ "questions": [
+  {
+   "n": 54,
+   "uid": "q_ef62f5da3cc08307",
+   "questionText": "Un patient de 65 ans est opéré pour une tumeur prostatique, la pièce opératoire doit être adressée au service d'anatomie pathologique\n\nUne étude immunohistochimique est réalisée: quel est l'anticorps utile au diagnostic? (Cochez la réponse juste)",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "Chromogranine A",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Cocktail P504s/P63",
+     "isCorrect": true
+    },
+    {
+     "answerText": "PSA",
+     "isCorrect": false
+    },
+    {
+     "answerText": "P40",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Cytokératine 7",
+     "isCorrect": false
+    }
+   ],
+   "explanation": "<p><br></p>",
+   "questionTags": [
+    "Résidanat Alger  2021"
+   ],
+   "repetitionCount": 0,
+   "originType": "qcs",
+   "origin": {
+    "file": "mystedia/residanat/pathologie-medico-chirurgical/exams/2021-residanat-2021.json",
+    "index": 93
+   }
+  }
+ ]
+}

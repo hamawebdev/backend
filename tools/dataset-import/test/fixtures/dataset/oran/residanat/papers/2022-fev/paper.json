@@ -1,0 +1,64 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "university": "oran",
+ "universityName": "Oran",
+ "kind": "residanat",
+ "name": "Résidanat Oran Fev 2022",
+ "examYear": 2022,
+ "month": "fev",
+ "textFormat": "text",
+ "origin": {
+  "platform": "cramqcm",
+  "source": "Résidanat Oran",
+  "file": "cramqcm/residanat/exams/2022-residanat-oran-fev-2022.json",
+  "id": "2"
+ },
+ "counts": {
+  "entries": 120,
+  "duplicatesRemoved": 0,
+  "referenced": 0,
+  "referencedOtherYear": 0,
+  "embedded": 120,
+  "missingFromExport": 0
+ },
+ "questions": [
+  {
+   "n": 92,
+   "uid": "q_dfc86203ae2f20d0",
+   "questionType": "MULTIPLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "A l'état de base, il existe un trouble ventilatoire restrictif TVR.",
+     "isCorrect": false
+    },
+    {
+     "answerText": "A l'état de base, il existe un trouble ventilatoire obstructif TVO.",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Le trouble ventilatoire est complètement réversible.",
+     "isCorrect": false
+    },
+    {
+     "answerText": "Le trouble ventilatoire est significativement réversible.",
+     "isCorrect": true
+    },
+    {
+     "answerText": "Une plethysmographie a été nécessaire pour l'obtention de ces valeurs.",
+     "isCorrect": false
+    }
+   ],
+   "explanation": "Reply •\nTranslate",
+   "repetitionCount": 0,
+   "originType": "qcm",
+   "review": [
+    "empty-question"
+   ],
+   "origin": {
+    "file": "cramqcm/residanat/exams/2022-residanat-oran-fev-2022.json",
+    "index": 91
+   }
+  }
+ ]
+}

@@ -1,0 +1,29 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "paper",
+ "derived": true,
+ "note": "rebuilt from the question tags (part, sitting and question number); the export had no paper files",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "residanat",
+ "name": "Résidanat Sétif 2016 - chirurgie",
+ "examYear": 2016,
+ "part": "chirurgie",
+ "origin": {
+  "platform": "mbset",
+  "source": "Résidanat Sétif"
+ },
+ "counts": {
+  "entries": 100,
+  "referenced": 100
+ },
+ "questions": [
+  {
+   "n": 290,
+   "ref": "q_a4e176669ca34897",
+   "in": "setif/residanat/by-course/year-5/gynecologie-et-obstetrique/contraception/2016.json",
+   "module": "gynecologie-et-obstetrique",
+   "course": "contraception"
+  }
+ ]
+}

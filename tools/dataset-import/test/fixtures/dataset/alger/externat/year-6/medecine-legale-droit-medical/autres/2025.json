@@ -1,0 +1,50 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "alger",
+ "universityName": "Alger",
+ "kind": "externat",
+ "studyYear": 6,
+ "module": {
+  "name": "Médecine Légale & droit médical",
+  "slug": "medecine-legale-droit-medical"
+ },
+ "course": {
+  "name": "Autres",
+  "slug": "autres"
+ },
+ "examYear": 2025,
+ "textFormat": "html",
+ "origin": {
+  "platform": "mystedia",
+  "source": "Externat Alger",
+  "files": [
+   "mystedia/courses/year-6/medecine-legale-droit-medical-34/autres-1364/autres-2025-1.json"
+  ],
+  "moduleIds": [
+   "34"
+  ],
+  "courseIds": [
+   "1364"
+  ]
+ },
+ "counts": {
+  "questions": 1,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_c049818164ebe670",
+   "questionText": "P2 2025\nQuelle sera votre attitude devant une situation de refus de soins ?",
+   "questionType": "QROC",
+   "repetitionCount": 0,
+   "originType": "qroc",
+   "answers": [],
+   "origin": {
+    "file": "mystedia/courses/year-6/medecine-legale-droit-medical-34/autres-1364/autres-2025-1.json",
+    "index": 0
+   }
+  }
+ ]
+}

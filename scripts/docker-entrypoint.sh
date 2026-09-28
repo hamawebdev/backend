@@ -10,6 +10,12 @@
 # - Set RUN_MIGRATIONS=false to skip this step.
 set -eu
 
+# Commit reported by /health: the image's build commit unless GIT_SHA is set
+if [ -z "${GIT_SHA:-}" ] || [ "${GIT_SHA}" = "unknown" ]; then
+  GIT_SHA="$(cat /app/.git-sha 2>/dev/null || true)"
+  export GIT_SHA="${GIT_SHA:-unknown}"
+fi
+
 PRISMA=./node_modules/.bin/prisma
 SCHEMA=prisma/schema.prisma
 

@@ -1,0 +1,83 @@
+{
+ "schema": "medadn-dataset/1",
+ "view": "course",
+ "university": "setif",
+ "universityName": "Sétif",
+ "kind": "externat",
+ "studyYear": 5,
+ "module": {
+  "name": "Endocrinologie",
+  "slug": "endocrinologie"
+ },
+ "course": {
+  "name": "CAT devant un nodule thyroïdien",
+  "slug": "cat-devant-un-nodule-thyroidien"
+ },
+ "examYear": 2018,
+ "textFormat": "markdown+html",
+ "origin": {
+  "platform": "mbset",
+  "source": "Externat Sétif",
+  "files": [
+   "mbset/courses/year-5/endocrinologie-Setif11/cat-devant-un-nodule-thyroidien/cat-devant-un-nodule-thyroidien-2018-1.json"
+  ],
+  "moduleIds": [
+   "Setif11"
+  ],
+  "courseIds": [
+   "Setif_Endocrinologie6"
+  ]
+ },
+ "counts": {
+  "questions": 2,
+  "duplicatesRemoved": 0,
+  "needsReview": 0
+ },
+ "questions": [
+  {
+   "uid": "q_3a82e6c5701d3235",
+   "questionText": "Il s’agit de :",
+   "questionType": "SINGLE_CHOICE",
+   "answers": [
+    {
+     "answerText": "nodule hyperfixant",
+     "isCorrect": true,
+     "explanation": "Un nodule n’est **pas** « par défaut » **hyperfixant** : l’**autonomie** (nodule chaud) est moins fréquente."
+    },
+    {
+     "answerText": "nodule hypofixant",
+     "isCorrect": false,
+     "explanation": "Le nodule thyroïdien est le plus souvent **hypofixant** en scintigraphie (nodule « froid »)."
+    },
+    {
+     "answerText": "maladie de Basdow",
+     "isCorrect": false,
+     "explanation": "La maladie de **Basedow** donne une **hyperfixation diffuse** de la glande, pas un nodule isolé."
+    },
+    {
+     "answerText": "………",
+     "isCorrect": false,
+     "explanation": "Option **non renseignée**, ne peut pas être validée."
+    }
+   ],
+   "explanation": "### Scintigraphie d’un nodule thyroïdien : de quoi parle-t-on ?\nUn **nodule thyroïdien** correspond le plus souvent, en scintigraphie, à une zone **non autonome** qui capte **moins** le traceur que le parenchyme adjacent : c’est un **nodule hypofixant** (dit « froid »).\n\n### Pourquoi c’est important en CAT (conduite à tenir) ?\n- La scintigraphie est surtout indiquée si **TSH basse** (suspicion d’**autonomie**).\n- Un **nodule hyperfixant** (« chaud ») est en général une **autonomie fonctionnelle** : <span style=\"color:#0B6E4F\"><b>risque de cancer très faible</b></span> → la priorité est la **prise en charge de l’hyperthyroïdie**.\n- Un **nodule hypofixant** (« froid ») ne préjuge pas du diagnostic mais concentre l’évaluation morphologique : **échographie** puis **cytoponction (FNA)** selon le risque échographique.\n- La **maladie de Basedow** donne une **hyperfixation diffuse** (glande “chaude” homogène), pas un nodule isolé.\n\n| Aspect scintigraphique | Aspect de fixation | Contexte typique | Implication pratique |\n|---|---|---|---|\n| <b>Nodule hypofixant</b> | <span style=\"color:#B00020\"><b>↓</b></span> (« froid ») | Nodule fréquent, TSH souvent N | Écho ± FNA selon score de risque |\n| <b>Nodule hyperfixant</b> | <span style=\"color:#0B6E4F\"><b>↑</b></span> (« chaud ») | <b>TSH basse</b>, autonomie | Cancer rare → traiter hyperthyroïdie |\n| <b>Basedow</b> | <span style=\"color:#0B6E4F\"><b>↑ diffuse</b></span> | Hyperthyroïdie auto-immune | Pas un nodule isolé (fixation homogène) |",
+   "questionTags": [
+    "Externat Setif",
+    "P1 2018",
+    "Corrigé Proposé"
+   ],
+   "questionImages": [
+    "images/99/99001da5c5ef404baad37da80ef75f42bfa4311d.jpg"
+   ],
+   "repetitionCount": 0,
+   "session": "P1",
+   "answerKey": "proposed",
+   "originType": "qcs",
+   "origin": {
+    "file": "mbset/courses/year-5/endocrinologie-Setif11/cat-devant-un-nodule-thyroidien/cat-devant-un-nodule-thyroidien-2018-1.json",
+    "index": 1,
+    "id": "109207"
+   }
+  }
+ ]
+}
