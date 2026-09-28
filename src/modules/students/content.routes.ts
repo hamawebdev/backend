@@ -54,6 +54,11 @@ router.get("/courses/:id/resources",
   (req, res) => studentController.getCourseResources(req, res)
 );
 
+// Every resource of a course, unpaginated (session "open course" panel)
+router.get("/courses/:id/resources/all",
+  (req, res) => studentController.getAllCourseResources(req, res)
+);
+
 // Independent resources hierarchy (modules → subModules → courses/books)
 router.get("/content/independent-resources",
   (req, res) => studentController.getIndependentResources(req, res)

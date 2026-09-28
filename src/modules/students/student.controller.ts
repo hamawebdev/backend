@@ -291,6 +291,24 @@ export default class StudentController {
     }
   }
 
+  // GET /api/v1/courses/:id/resources/all
+  async getAllCourseResources(req: RequestWithUser, res: Response): Promise<void> {
+    try {
+      const id = parseInt(req.params.id);
+      if (!id || isNaN(id)) {
+        this.responseUtils.sendBadRequestResponse(res, "Valid course ID is required");
+        return;
+      }
+
+      const result = await this.studentService.getAllCourseResources(id, req.user!);
+      // { course, yearCourse, total, items }
+      this.responseUtils.sendSuccessResponse(res, result);
+    } catch (error) {
+      console.error("Error getting all course resources:", error);
+      this.responseUtils.sendErrorResponse(res, error);
+    }
+  }
+
   // GET /api/v1/students/courses/by-module
   async getCoursesByModule(req: RequestWithUser, res: Response): Promise<void> {
     try {

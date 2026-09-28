@@ -655,6 +655,55 @@ export default class StudentService {
   }
 
   /**
+   * GET /courses/:courseId/resources/all - every resource of a course, unpaginated, for
+   * the session "open course" panel. A course of the RESIDENCY pack also gets the
+   * resources of its year-pack twin (see findYearTwinCourse), listed after its own.
+   */
+  async getAllCourseResources(courseId: number, user: TJwtPayload): Promise<{
+    course: { id: number; name: string };
+    yearCourse: { id: number; name: string; studyPack: { id: number; name: string } } | null;
+    total: number;
+    items: any[];
+  }> {
+    const course = await this.studentRepository.getCourseWithStudyPack(courseId);
+    if (!course) {
+      throw new NotFoundError('Course', String(courseId));
+    }
+    const accessControl = new AccessControlService();
+    if (!accessControl.canAccessPackContent(user, course.module.unite?.studyPack.id ?? null)) {
+      throw new ForbiddenError('You do not have access to this course');
+    }
+
+    const twin = await this.studentRepository.findYearTwinCourse(course);
+    const yearCourse = twin && accessControl.canAccessPackContent(user, twin.module.unite?.studyPack.id ?? null) ? twin : null;
+    const courseIds = yearCourse ? [course.id, yearCourse.id] : [course.id];
+    const resources = await this.studentRepository.getResourcesOfCourses(courseIds);
+    const ordered = courseIds.flatMap(id => resources.filter(resource => resource.courseId === id));
+
+    return {
+      course: { id: course.id, name: course.name },
+      yearCourse: yearCourse ? {
+        id: yearCourse.id,
+        name: yearCourse.name,
+        studyPack: { id: yearCourse.module.unite!.studyPack.id, name: yearCourse.module.unite!.studyPack.name }
+      } : null,
+      total: ordered.length,
+      items: ordered.map(resource => ({
+        id: resource.id,
+        courseId: resource.courseId,
+        type: resource.type,
+        title: resource.title,
+        tag: resource.tag,
+        description: resource.description,
+        filePath: resource.filePath,
+        externalUrl: resource.externalUrl,
+        youtubeVideoId: resource.youtubeVideoId,
+        createdAt: resource.createdAt
+      }))
+    };
+  }
+
+  /**
    * GET /students/courses/by-module - Courses by moduleId or uniteId
    * Canonical spec: { courses: [...] }
    */

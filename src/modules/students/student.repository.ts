@@ -1,7 +1,8 @@
 import {
   QuizSession,
   SessionType,
-  PrismaClient
+  PrismaClient,
+  Prisma
 } from "@prisma/client";
 import { inject, injectable } from "tsyringe";
 import PrismaService from "../../config/db";
@@ -14,6 +15,23 @@ import {
   OverallStats,
   StudentSessionResultsFilters
 } from "../../types/quiz.types";
+
+const COURSE_WITH_STUDY_PACK = {
+  id: true,
+  name: true,
+  sourceKey: true,
+  module: {
+    select: {
+      name: true,
+      unite: { select: { sourceKey: true, studyPack: { select: { id: true, name: true, type: true } } } }
+    }
+  }
+} satisfies Prisma.CourseSelect;
+
+export type CourseWithStudyPack = Prisma.CourseGetPayload<{ select: typeof COURSE_WITH_STUDY_PACK }>;
+
+// Study pack yearNumber of study years 1-6
+const YEAR_NUMBERS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX'];
 
 @injectable()
 export default class StudentRepository {
@@ -977,6 +995,62 @@ export default class StudentRepository {
     ]);
 
     return { resources, total };
+  }
+
+  /**
+   * A course with the study pack it sits in (null pack: independent module), and the
+   * keys needed to find its year-pack twin.
+   */
+  async getCourseWithStudyPack(courseId: number): Promise<CourseWithStudyPack | null> {
+    return await this.prisma.course.findUnique({ where: { id: courseId }, select: COURSE_WITH_STUDY_PACK });
+  }
+
+  /**
+   * Year-pack twin of a course of the RESIDENCY pack. Résidanat questions sit on copies
+   * of the year courses (course:module:residanat:year-3:<module>:<course>), while course
+   * resources are added to the year courses. The twin is the course with the same key
+   * without "residanat:"; failing that, the only course of that study year's pack with
+   * the same module and course name. Null when there is none.
+   */
+  async findYearTwinCourse(course: CourseWithStudyPack): Promise<CourseWithStudyPack | null> {
+    if (course.module.unite?.studyPack.type !== 'RESIDENCY') {
+      return null;
+    }
+    const keyMatch = /^course:module:residanat:(year-(\d+):.+)$/.exec(course.sourceKey ?? '');
+    if (keyMatch) {
+      const twin = await this.prisma.course.findUnique({
+        where: { sourceKey: `course:module:${keyMatch[1]}` },
+        select: COURSE_WITH_STUDY_PACK
+      });
+      if (twin && twin.module.unite?.studyPack.type === 'YEAR') {
+        return twin;
+      }
+    }
+    const year = Number(keyMatch?.[2] ?? /^unite:residanat:year-(\d+)$/.exec(course.module.unite.sourceKey ?? '')?.[1]);
+    const yearNumber = YEAR_NUMBERS[year - 1];
+    if (!yearNumber) {
+      return null;
+    }
+    const sameName = await this.prisma.course.findMany({
+      where: {
+        name: { equals: course.name, mode: 'insensitive' },
+        module: {
+          name: { equals: course.module.name, mode: 'insensitive' },
+          unite: { studyPack: { type: 'YEAR', yearNumber } }
+        }
+      },
+      select: COURSE_WITH_STUDY_PACK,
+      take: 2
+    });
+    return sameName.length === 1 ? sameName[0] : null;
+  }
+
+  /** Every resource of the given courses, oldest first (the order they were added in) */
+  async getResourcesOfCourses(courseIds: number[]): Promise<any[]> {
+    return await this.prisma.courseResource.findMany({
+      where: { courseId: { in: courseIds } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+    });
   }
 
   // Legacy method kept for backward compatibility
