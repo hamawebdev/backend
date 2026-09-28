@@ -17,6 +17,9 @@ import { ANSWER_ORDER, PUBLISHED_QUESTION } from "../questions/question-visibili
 import { RESIDENCY_PARTS } from "../admin/validations/admin.validation";
 import { getQuestionCatalog, QuestionFilters, YEAR_LEVELS } from "./question-catalog";
 import { addServerTiming, timed } from "../../core/middlewares/server-timing";
+import { SessionStats, loadQuestionOutcomes, loadSessionStats } from "./session-stats";
+
+export type { SessionStats } from "./session-stats";
 
 /** Upper bound on the questions one session can hold (matches the request schemas) */
 export const MAX_SESSION_QUESTIONS = 1000;
@@ -57,14 +60,6 @@ export type PreparedAnswer =
   | { kind: 'SINGLE'; questionId: number; selectedAnswerId: number; isCorrect: boolean }
   | { kind: 'TEXT'; questionId: number; textAnswer: string; isCorrect: boolean; userManualCorrection: boolean }
   | { kind: 'MULTIPLE'; questionId: number; selectedAnswerIds: number[]; isCorrect: boolean; partialScore: number };
-
-export type SessionStats = {
-  totalQuestions: number;
-  answeredCount: number;
-  correctCount: number;
-  score: number;
-  percentage: number;
-};
 
 function assertId(value: unknown, name: string): asserts value is number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
@@ -475,83 +470,47 @@ export default class QuizRepository {
   }
 
   /**
-   * Score a session from its stored attempts. A question counts at most once
-   * (its best attempt), and rows without an answer are ignored.
+   * Score a session from its stored attempts (see computeSessionStats): a
+   * question counts at most once (its best attempt), and rows without an answer
+   * are ignored.
    */
   async getSessionStats(sessionId: number): Promise<SessionStats> {
-    const [totalQuestions, singleAttempts, multipleAttempts] = await Promise.all([
-      this.prisma.quizSessionQuestion.count({ where: { sessionId } }),
-      this.prisma.quizAttempt.findMany({
-        where: {
-          sessionId,
-          OR: [{ selectedAnswerId: { not: null } }, { textAnswer: { not: null } }]
-        },
-        select: { questionId: true, isCorrect: true }
-      }),
-      this.prisma.multipleChoiceAttempt.findMany({
-        where: { sessionId },
-        select: { questionId: true, isCorrect: true, partialScore: true, selectedAnswerIds: true }
-      })
-    ]);
-
-    const best = new Map<number, { points: number; correct: boolean }>();
-    const record = (questionId: number, points: number, correct: boolean) => {
-      const current = best.get(questionId);
-      if (!current || points > current.points || (points === current.points && correct && !current.correct)) {
-        best.set(questionId, { points, correct });
-      }
-    };
-
-    for (const attempt of singleAttempts) {
-      record(attempt.questionId, attempt.isCorrect ? 1 : 0, attempt.isCorrect === true);
-    }
-    for (const attempt of multipleAttempts) {
-      if (!attempt.selectedAnswerIds || attempt.selectedAnswerIds === '[]') {
-        continue;
-      }
-      const points = attempt.isCorrect
-        ? 1
-        : (attempt.partialScore && attempt.partialScore > 0 ? attempt.partialScore : 0);
-      record(attempt.questionId, points, attempt.isCorrect === true);
-    }
-
-    let score = 0;
-    let correctCount = 0;
-    for (const entry of best.values()) {
-      score += entry.points;
-      if (entry.correct) correctCount++;
-    }
-    const answeredCount = Math.min(best.size, totalQuestions);
-    const percentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100 * 100) / 100 : 0;
-
-    return { totalQuestions, answeredCount, correctCount, score, percentage };
+    assertId(sessionId, 'sessionId');
+    return (await loadSessionStats(this.prisma, [sessionId])).get(sessionId)!;
   }
 
+  /** Stats of several sessions at once, keyed by session id */
+  async getSessionStatsMany(sessionIds: number[]): Promise<Map<number, SessionStats>> {
+    return await loadSessionStats(this.prisma, sessionIds);
+  }
+
+  /**
+   * Store a session's score after its answers changed. Answering never completes
+   * a session: it stays in progress until the student finishes it (status update
+   * to COMPLETED), so answers can still be given after every question has one.
+   * A session that is already completed keeps its status.
+   */
   private async updateSessionScore(sessionId: number): Promise<SessionStats> {
-    const [stats, session] = await Promise.all([
-      this.getSessionStats(sessionId),
-      this.prisma.quizSession.findUnique({
-        where: { id: sessionId },
-        select: { startedAt: true }
-      })
-    ]);
+    const stats = await this.getSessionStats(sessionId);
     if (stats.totalQuestions === 0) {
       return stats; // No questions in session, nothing to calculate
     }
 
     const now = new Date();
-    const completed = stats.answeredCount >= stats.totalQuestions;
-
-    await this.prisma.quizSession.update({
-      where: { id: sessionId },
-      data: {
-        score: stats.score,
-        percentage: stats.percentage,
-        status: completed ? SessionStatus.COMPLETED : SessionStatus.IN_PROGRESS,
-        ...(completed ? { completedAt: now } : {}),
-        ...(!session?.startedAt ? { startedAt: now } : {})
-      }
-    });
+    await this.prisma.$transaction([
+      this.prisma.quizSession.update({
+        where: { id: sessionId },
+        data: { score: stats.score, percentage: stats.percentage }
+      }),
+      this.prisma.quizSession.updateMany({
+        where: { id: sessionId, startedAt: null },
+        data: { startedAt: now }
+      }),
+      this.prisma.quizSession.updateMany({
+        where: { id: sessionId, status: SessionStatus.NOT_STARTED },
+        data: { status: SessionStatus.IN_PROGRESS }
+      })
+    ]);
 
     return stats;
   }
@@ -1139,35 +1098,14 @@ export default class QuizRepository {
   }
 
   /**
-   * Per-question outcome of a session, from both attempt tables. A question
-   * with an answer in either table counts as answered; it counts as correct
-   * when any of its answered attempts is correct.
+   * Per-question outcome of a session, from both attempt tables, with the same
+   * rules as the session's results: a question with an answer in either table
+   * counts as answered; it counts as correct when its best answer is correct.
    */
   private async getAnsweredOutcomes(sessionId: number): Promise<Map<number, boolean>> {
     assertId(sessionId, 'sessionId');
-    const [singleAttempts, multipleAttempts] = await Promise.all([
-      this.prisma.quizAttempt.findMany({
-        where: {
-          sessionId,
-          OR: [{ selectedAnswerId: { not: null } }, { textAnswer: { not: null } }]
-        },
-        select: { questionId: true, isCorrect: true }
-      }),
-      this.prisma.multipleChoiceAttempt.findMany({
-        where: { sessionId },
-        select: { questionId: true, isCorrect: true, selectedAnswerIds: true }
-      })
-    ]);
-
-    const outcomes = new Map<number, boolean>();
-    const record = (questionId: number, isCorrect: boolean | null) => {
-      outcomes.set(questionId, (outcomes.get(questionId) ?? false) || isCorrect === true);
-    };
-    singleAttempts.forEach(attempt => record(attempt.questionId, attempt.isCorrect));
-    multipleAttempts
-      .filter(attempt => attempt.selectedAnswerIds && attempt.selectedAnswerIds !== '[]')
-      .forEach(attempt => record(attempt.questionId, attempt.isCorrect));
-    return outcomes;
+    const outcomes = await loadQuestionOutcomes(this.prisma, sessionId);
+    return new Map(Array.from(outcomes, ([questionId, outcome]) => [questionId, outcome.correct]));
   }
 
   /** Session questions answered incorrectly (single choice, multiple choice and QROC) */
@@ -1259,6 +1197,11 @@ export default class QuizRepository {
       if (!existingSession?.startedAt) {
         updateData.startedAt = new Date();
       }
+
+      // Store the final score with the completion, from the answers stored now
+      const stats = await this.getSessionStats(sessionId);
+      updateData.score = stats.score;
+      updateData.percentage = stats.percentage;
     }
 
     return await this.prisma.quizSession.update({
@@ -1752,6 +1695,9 @@ export default class QuizRepository {
       }
     });
 
+    // Same score as the session's results screen, computed from its answers
+    const stats = await this.getSessionStatsMany(sessions.map(session => session.id));
+
     // Transform to canonical format
     return sessions.map(session => {
       const firstQuestion = session.sessionQuestions[0]?.question;
@@ -1765,8 +1711,7 @@ export default class QuizRepository {
         examYear: examYear || null,
         university: university ? { id: university.id, name: university.name } : null,
         parts: RESIDENCY_PARTS.slice(0, 3), // Default parts (the three national parts)
-        // The stored percentage counts every answer type and partial credit
-        score: session.status === 'COMPLETED' ? Math.round(session.percentage) : null,
+        score: session.status === 'COMPLETED' ? stats.get(session.id)!.percentage : null,
         createdAt: session.createdAt.toISOString(),
         completedAt: session.completedAt?.toISOString() || null
       };

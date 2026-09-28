@@ -222,6 +222,10 @@ describe('Quiz access, scoring and integrity regressions', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ correctAnswersCount: 1000, unansweredCount: 0, score: 100 });
     expect(ms).toBeLessThan(15000);
+    // Answering every question does not finish the session; the student does
+    expect((await prisma.quizSession.findUnique({ where: { id } }))!.status).toBe('IN_PROGRESS');
+    const done = await api().patch(`/api/v1/students/quiz-sessions/${id}/status`).set('Authorization', tokenFor(A)).send({ status: 'COMPLETED' });
+    expect(done.status).toBe(200);
     expect((await prisma.quizSession.findUnique({ where: { id } }))!.status).toBe('COMPLETED');
   }, 60000);
 
@@ -241,10 +245,12 @@ describe('Quiz access, scoring and integrity regressions', () => {
     const dossier = await api().post('/api/v1/quizzes/residency-sessions').set('Authorization', tokenFor(R)).send({ title: 'Res dossier', examYear: 2019, universityId: U2, parts: ['Dossier_clinique'] });
     expect(dossier.body.data.questionCount).toBe(1);
 
-    // Answer the dossier session fully correctly (multiple choice)
+    // Answer the dossier session fully correctly (multiple choice), then finish it
     const sub = await api().post(`/api/v1/quiz-sessions/${dossier.body.data.sessionId}/submit-answer`).set('Authorization', tokenFor(R))
       .send({ answers: [{ questionId: qR2, selectedAnswerIds: qR2Correct }] });
     expect(sub.status).toBe(200);
+    const done = await api().patch(`/api/v1/students/quiz-sessions/${dossier.body.data.sessionId}/status`).set('Authorization', tokenFor(R)).send({ status: 'COMPLETED' });
+    expect(done.status).toBe(200);
 
     // An ordinary session with an externat question (university + exam year) is not a residency session
     const ordinary = await api().post('/api/v1/quizzes/create-session-by-questions').set('Authorization', tokenFor(R))

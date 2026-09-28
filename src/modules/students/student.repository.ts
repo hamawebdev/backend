@@ -9,6 +9,7 @@ import PrismaService from "../../config/db";
 import { NotFoundError } from "../../core/errors/AppError";
 import { ANSWER_ORDER, PUBLISHED_QUESTION } from "../questions/question-visibility";
 import { getQuestionCatalog, packMatchesYearLevel, YEAR_LEVELS } from "../quizzes/question-catalog";
+import { loadSessionStats } from "../quizzes/session-stats";
 import {
   CourseProgress,
   QuizScore,
@@ -3258,19 +3259,11 @@ export default class StudentRepository {
       take: limit
     });
 
-    // Calculate scores for each session
-    const items = await Promise.all(sessions.map(async (session) => {
-      // Get attempts for this session to calculate score
-      const attempts = await this.prisma.quizAttempt.findMany({
-        where: { sessionId: session.id }
-      });
-
-      let score: number | null = null;
-      if (attempts.length > 0) {
-        const correctCount = attempts.filter(a => a.isCorrect).length;
-        score = Math.round((correctCount / attempts.length) * 100);
-      }
-
+    // Same score as each session's results screen (every question type, partial
+    // credit, unanswered questions count); null until something is answered
+    const stats = await loadSessionStats(this.prisma, sessions.map(session => session.id));
+    const items = sessions.map(session => {
+      const sessionStats = stats.get(session.id)!;
       return {
         id: session.id,
         title: session.title,
@@ -3278,9 +3271,9 @@ export default class StudentRepository {
         type: session.type,
         createdAt: session.createdAt.toISOString(),
         completedAt: session.completedAt?.toISOString() || null,
-        score
+        score: sessionStats.answeredCount > 0 || session.status === 'COMPLETED' ? sessionStats.percentage : null
       };
-    }));
+    });
 
     return {
       items,

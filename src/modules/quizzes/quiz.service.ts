@@ -1,6 +1,7 @@
 import { inject, injectable, container } from "tsyringe";
 import { SessionType, PackType, SessionStatus, RetakeType, YearLevel, QuestionType } from "@prisma/client";
 import QuizRepository, { MAX_SESSION_QUESTIONS, MAX_EXAM_SESSION_QUESTIONS, PreparedAnswer, SessionStats } from "./quiz.repository";
+import { formatSessionStats } from "./session-stats";
 import QuestionService from "../questions/question.service";
 import { AccessControlService } from "../../services/access-control.service";
 import {
@@ -283,20 +284,21 @@ export default class QuizService {
 
     // Combine single choice and multiple choice attempts. Rows without an
     // answer (placeholders written by older versions) are not answers.
+    // isCorrect is always a boolean, the verdict the results count.
     const singleChoiceAnswers: QuizSessionAnswer[] = sessionWithIncludes.quizAttempts
       .filter((attempt: any) => attempt.selectedAnswerId !== null || attempt.textAnswer !== null)
       .map((attempt: any) => ({
       questionId: attempt.questionId,
       selectedAnswerId: attempt.selectedAnswerId || undefined,
       textAnswer: attempt.textAnswer || undefined,
-      isCorrect: attempt.isCorrect || undefined,
+      isCorrect: attempt.isCorrect === true,
       answeredAt: attempt.answeredAt || undefined
     }));
 
     const multipleChoiceAnswers: QuizSessionAnswer[] = (sessionWithIncludes.multipleChoiceAttempts || []).map((attempt: any) => ({
       questionId: attempt.questionId,
       selectedAnswerIds: attempt.selectedAnswerIds ? JSON.parse(attempt.selectedAnswerIds) : undefined,
-      isCorrect: attempt.isCorrect || undefined,
+      isCorrect: attempt.isCorrect === true,
       partialScore: attempt.partialScore || undefined,
       answeredAt: attempt.answeredAt || undefined
     }));
@@ -341,7 +343,7 @@ export default class QuizService {
     return {
       message: "Answers submitted successfully",
       results,
-      ...this.formatSessionStats(stats)
+      ...formatSessionStats(stats)
     };
   }
 
@@ -459,25 +461,6 @@ export default class QuizService {
   }
 
   /**
-   * Response statistics shared by submit-answer and results: score is the
-   * percentage, totalScore20 the score out of 20
-   */
-  private formatSessionStats(stats: SessionStats) {
-    const totalScore20 = stats.totalQuestions > 0
-      ? Number(((stats.score / stats.totalQuestions) * 20).toFixed(2))
-      : 0;
-
-    return {
-      score: stats.percentage,
-      totalScore20,
-      correctAnswersCount: stats.correctCount,
-      incorrectAnswersCount: stats.answeredCount - stats.correctCount,
-      unansweredCount: stats.totalQuestions - stats.answeredCount,
-      totalQuestions: stats.totalQuestions
-    };
-  }
-
-  /**
    * GET /quiz-sessions/:sessionId/results
    * Returns computed session results with statistics
    * This is similar to the response from submitAnswers but can be called at any time
@@ -514,7 +497,7 @@ export default class QuizService {
       title: session.title,
       type: session.type,
       status: session.status,
-      ...this.formatSessionStats(stats),
+      ...formatSessionStats(stats),
       completedAt: session.completedAt || undefined
     };
   }
@@ -543,17 +526,21 @@ export default class QuizService {
 
     const totalPages = Math.ceil(total / limit);
 
+    // Same numbers as each session's results screen, computed from its answers
+    const statsBySession = await this.quizRepository.getSessionStatsMany(sessions.map(session => session.id));
+
     const formattedSessions = sessions.map(session => {
       const sessionWithIncludes = session as any;
+      const stats = statsBySession.get(session.id)!;
       return {
         id: session.id,
         title: session.title,
         type: session.type,
         status: session.status,
-        score: session.score,
-        percentage: session.percentage,
-        questionsCount: sessionWithIncludes._count.sessionQuestions,
-        answersCount: sessionWithIncludes._count.quizAttempts,
+        score: stats.score,
+        percentage: stats.percentage,
+        questionsCount: stats.totalQuestions,
+        answersCount: stats.answeredCount,
         startedAt: session.startedAt,
         completedAt: session.completedAt,
         createdAt: session.createdAt,
@@ -584,7 +571,8 @@ export default class QuizService {
 
   /**
    * GET /quiz-sessions/type/:sessionType - Canonical spec
-   * Returns flat array (no pagination)
+   * Returns flat array (no pagination). Each session carries the same results
+   * fields as GET /quiz-sessions/:sessionId/results (score is the percentage).
    */
   async getQuizSessionsByTypeCanonical(
     user: TJwtPayload,
@@ -597,6 +585,11 @@ export default class QuizService {
     createdAt: string;
     completedAt: string | null;
     score: number;
+    totalScore20: number;
+    correctAnswersCount: number;
+    incorrectAnswersCount: number;
+    unansweredCount: number;
+    totalQuestions: number;
   }>> {
     // Get all sessions without pagination for canonical spec
     const { sessions } = await this.quizRepository.getUserQuizSessionsByType(
@@ -606,6 +599,8 @@ export default class QuizService {
       0
     );
 
+    const statsBySession = await this.quizRepository.getSessionStatsMany(sessions.map((session: any) => session.id));
+
     return sessions.map((session: any) => ({
       id: session.id,
       title: session.title,
@@ -613,7 +608,7 @@ export default class QuizService {
       status: session.status,
       createdAt: session.createdAt.toISOString(),
       completedAt: session.completedAt?.toISOString() || null,
-      score: session.percentage || 0
+      ...formatSessionStats(statsBySession.get(session.id)!)
     }));
   }
 
