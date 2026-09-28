@@ -8,20 +8,15 @@ export class AccessControlService {
   }
 
   /**
-   * Check if user has residency access (can access all year levels)
-   * Residency access is granted if:
-   * - pack_type is 'RESIDENCY' OR
-   * - yearNumber is 'SEVEN' (Year 7 = Residency year)
+   * Check if user has residency access (can access all year levels): an
+   * access-granting subscription to a RESIDENCY pack. A YEAR pack never grants
+   * it, whatever its year (a year-7 pack is an ordinary year pack).
    */
   hasResidencyAccess(user: TJwtPayload): boolean {
     if (!user.subscriptions || !Array.isArray(user.subscriptions)) {
       return false;
     }
-    return user.subscriptions.some((sub: any) => {
-      const packType = String(sub.pack_type || '').toUpperCase();
-      const yearNumber = String(sub.year_number || sub.yearNumber || '').toUpperCase();
-      return packType === 'RESIDENCY' || yearNumber === 'SEVEN';
-    });
+    return user.subscriptions.some((sub: any) => String(sub.pack_type || '').toUpperCase() === 'RESIDENCY');
   }
 
   /**
