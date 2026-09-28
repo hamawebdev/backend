@@ -53,6 +53,9 @@ describe('Activation code redemption', () => {
     const created = await createCode({});
     expect(created.status).toBe(201);
     expect(created.body.maxUses).toBe(1); // single-use unless the admin says otherwise
+    // Packs are sold by the year: a code with no duration lasts 12 months
+    const bare = await api().post('/api/v1/admin/activation-codes').set('Authorization', tokenFor(admin)).send({ studyPackIds: [pack] });
+    expect(bare.body).toMatchObject({ maxUses: 1, durationType: 'MONTHS', durationMonths: 12 });
     const code = created.body.code;
 
     const ok = await redeem(first, code.toLowerCase());

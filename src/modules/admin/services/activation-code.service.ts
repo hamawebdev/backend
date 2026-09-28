@@ -138,14 +138,15 @@ export class ActivationCodeService implements IActivationCodeService {
 
     // Handle duration based on type - store both fields correctly
     const durationType = data.durationType || 'MONTHS';
-    let durationMonths = 1; // Default for MONTHS type
+    let durationMonths = 1; // The column is required, DAYS codes keep this placeholder
     let durationDays: number | null = null;
 
     if (durationType === 'DAYS' && data.durationDays) {
       durationDays = data.durationDays;
       durationMonths = 1; // Minimum value to satisfy schema, not used for DAYS type
     } else if (durationType === 'MONTHS') {
-      durationMonths = data.durationMonths || 1;
+      // Packs are sold by the year: a code lasts 12 months unless the admin says otherwise
+      durationMonths = data.durationMonths ?? 12;
     }
 
     // Get expiry date - support both field names
