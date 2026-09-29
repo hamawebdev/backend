@@ -1190,8 +1190,9 @@ export default class QuizService {
       repetitionCountMin?: number;
       repetitionYears?: number[];
     },
-    user: TJwtPayload
-  ): Promise<{ sessionId: number; questionCount: number }> {
+    user: TJwtPayload,
+    options?: { includeSession?: boolean }
+  ): Promise<{ sessionId: number; questionCount: number; session?: QuizSessionResponse }> {
     if (!user.has_active_subscription) {
       throw new SubscriptionRequiredError("quiz sessions");
     }
@@ -1238,6 +1239,11 @@ export default class QuizService {
       questions.map(q => q.id)
     );
 
+    // ?include=session: the session as GET /quiz-sessions/:id returns it, so the web
+    // can open it without another request
+    if (options?.includeSession) {
+      return { sessionId: session.id, questionCount: session.questionCount, session: await this.getQuizSession(session.id, user) };
+    }
     return { sessionId: session.id, questionCount: session.questionCount };
   }
 

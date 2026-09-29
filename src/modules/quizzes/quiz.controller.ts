@@ -206,7 +206,8 @@ export default class QuizController {
 
       const result = await this.quizService.createQuizSessionCanonical(
         sanitizedData,
-        req.user!
+        req.user!,
+        { includeSession: req.query.include === 'session' }
       );
 
       this.responseUtils.sendSuccessResponse(res, result, 201);

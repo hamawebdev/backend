@@ -163,6 +163,20 @@ describe('Session setup for year-pack and résidanat students', () => {
     expect(q.questionAnswers.map((a: any) => a.answerText)).toEqual(['ok', 'no']);
   });
 
+  it('?include=session returns the new session as GET /quiz-sessions/:id does', async () => {
+    const created = await api().post('/api/v1/quizzes/sessions?include=session').set('Authorization', tokenFor(Y))
+      .send({ title: 'With payload', courseIds: [course1a], sessionType: 'PRACTISE', questionCount: 3 });
+    expect(created.status).toBe(201);
+    const read = await api().get(`/api/v1/quiz-sessions/${created.body.data.sessionId}`).set('Authorization', tokenFor(Y));
+    const { updatedAt: _a, ...fromCreate } = created.body.data.session;
+    const { updatedAt: _b, ...fromRead } = read.body.data;
+    expect(fromCreate).toEqual(fromRead);
+    expect(created.body.data.session.questions).toHaveLength(created.body.data.questionCount);
+    const plain = await api().post('/api/v1/quizzes/sessions').set('Authorization', tokenFor(Y))
+      .send({ title: 'Without payload', courseIds: [course1a], sessionType: 'PRACTISE', questionCount: 3 });
+    expect(plain.body.data.session).toBeUndefined();
+  });
+
   it('a résidanat student starts practice sessions from any year and from résidanat modules', async () => {
     for (const courseIds of [[course2], [courseR], [course1a]]) {
       const res = await api().post('/api/v1/quizzes/sessions').set('Authorization', tokenFor(R)).send({ title: 'Practice', courseIds, sessionType: 'PRACTISE', questionCount: 2 });
