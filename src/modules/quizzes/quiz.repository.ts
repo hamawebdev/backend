@@ -16,6 +16,7 @@ import { QuizSessionFilters } from "../../types/quiz.types";
 import { ANSWER_ORDER, PUBLISHED_QUESTION } from "../questions/question-visibility";
 import { RESIDENCY_PARTS } from "../admin/validations/admin.validation";
 import { getQuestionCatalog, QuestionFilters, YEAR_LEVELS } from "./question-catalog";
+import { addServerTiming, timed } from "../../core/middlewares/server-timing";
 
 /** Upper bound on the questions one session can hold (matches the request schemas) */
 export const MAX_SESSION_QUESTIONS = 1000;
@@ -286,18 +287,21 @@ export default class QuizRepository {
     // nothing waits for another query (each database round trip is slow on the
     // production host). The parts are only used when the session is the caller's.
     const inSession = { sessionQuestions: { some: { sessionId } } };
+    const loadStart = performance.now();
     const [session, links, quizAttempts, multipleChoiceAttempts, questions, answers, explanationImages, questionImages, questionExplanationImages, catalog] = await Promise.all([
       this.prisma.quizSession.findFirst({ where: whereCondition }),
       this.prisma.quizSessionQuestion.findMany({ where: { sessionId }, select: { questionId: true }, orderBy: { id: 'asc' } }),
       this.prisma.quizAttempt.findMany({ where: { sessionId } }),
       this.prisma.multipleChoiceAttempt.findMany({ where: { sessionId } }),
-      this.prisma.question.findMany({ where: inSession }),
-      this.prisma.questionAnswer.findMany({ where: { question: inSession }, orderBy: ANSWER_ORDER }),
+      timed('questions', this.prisma.question.findMany({ where: inSession })),
+      timed('answers', this.prisma.questionAnswer.findMany({ where: { question: inSession }, orderBy: ANSWER_ORDER })),
       this.prisma.explanationImage.findMany({ where: { answer: { question: inSession } }, orderBy: { id: 'asc' } }),
       this.prisma.questionImage.findMany({ where: { question: inSession }, orderBy: { id: 'asc' } }),
       this.prisma.questionExplanationImage.findMany({ where: { question: inSession }, orderBy: { id: 'asc' } }),
       getQuestionCatalog(this.prisma)
     ]);
+    addServerTiming('load', performance.now() - loadStart);
+    const buildStart = performance.now();
     if (!session) {
       return null;
     }
@@ -365,6 +369,7 @@ export default class QuizRepository {
         };
       });
 
+    addServerTiming('build', performance.now() - buildStart);
     return { ...session, sessionQuestions, quizAttempts, multipleChoiceAttempts } as any;
   }
 

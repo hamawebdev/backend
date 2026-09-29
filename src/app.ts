@@ -14,6 +14,7 @@ import { TFindInput } from "./types/types";
 import parseQueryParams from "./core/middlewares/parseQueryParams.middleware";
 import { invalidateQuestionCatalog, warmQuestionCatalog } from "./modules/quizzes/question-catalog";
 import { clearAuthUserCache } from "./core/middlewares/auth-user-cache";
+import { serverTiming } from "./core/middlewares/server-timing";
 // Extend Express Request type to include queryParams
 declare module "express-serve-static-core" {
   interface Request {
@@ -111,6 +112,10 @@ app.use(express.json({ limit: "1mb", verify: keepRawBody }));
 
 // Logging middleware
 app.use(morgan(isProduction ? "combined" : "dev"));
+
+// Server-Timing header (API time and recorded phases); after the body parsers so
+// the request context carries into the handlers
+app.use(serverTiming);
 
 // Apply query parameter parsing middleware
 app.use(parseQueryParams);
