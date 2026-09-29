@@ -365,15 +365,20 @@ export default class QuizService {
       seen.add(answer.questionId);
     }
 
+    // The session's questions and every submitted question's type and options, read
+    // side by side
+    const [sessionQuestionIdList, questions] = await Promise.all([
+      this.quizRepository.getSessionQuestionIds(sessionId),
+      this.quizRepository.getQuestionsForScoring(Array.from(seen))
+    ]);
+
     // Validate answers belong to session questions
-    const sessionQuestionIds = new Set(await this.quizRepository.getSessionQuestionIds(sessionId));
+    const sessionQuestionIds = new Set(sessionQuestionIdList);
     const invalidQuestion = answers.find(answer => !sessionQuestionIds.has(answer.questionId));
     if (invalidQuestion) {
       throw new QuestionNotInSessionError(invalidQuestion.questionId, sessionId);
     }
 
-    // One query for every question's type and answer options
-    const questions = await this.quizRepository.getQuestionsForScoring(Array.from(seen));
     const questionById = new Map(questions.map(question => [question.id, question]));
 
     const prepared = answers.map(answer => {

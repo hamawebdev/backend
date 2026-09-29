@@ -280,28 +280,26 @@ export default class QuizRepository {
       whereCondition.userId = userId;
     }
 
-    const session = await this.prisma.quizSession.findFirst({
-      where: whereCondition,
-      include: {
-        sessionQuestions: { select: { questionId: true }, orderBy: { id: 'asc' } },
-        quizAttempts: true,
-        multipleChoiceAttempts: true
-      }
-    });
+    // One round of queries: every part is selected by "belongs to this session", so
+    // nothing waits for another query (each database round trip is slow on the
+    // production host). The parts are only used when the session is the caller's.
+    const inSession = { sessionQuestions: { some: { sessionId } } };
+    const [session, links, quizAttempts, multipleChoiceAttempts, questions, answers, explanationImages, questionImages, questionExplanationImages, catalog] = await Promise.all([
+      this.prisma.quizSession.findFirst({ where: whereCondition }),
+      this.prisma.quizSessionQuestion.findMany({ where: { sessionId }, select: { questionId: true }, orderBy: { id: 'asc' } }),
+      this.prisma.quizAttempt.findMany({ where: { sessionId } }),
+      this.prisma.multipleChoiceAttempt.findMany({ where: { sessionId } }),
+      this.prisma.question.findMany({ where: inSession }),
+      this.prisma.questionAnswer.findMany({ where: { question: inSession }, orderBy: ANSWER_ORDER }),
+      this.prisma.explanationImage.findMany({ where: { answer: { question: inSession } }, orderBy: { id: 'asc' } }),
+      this.prisma.questionImage.findMany({ where: { question: inSession }, orderBy: { id: 'asc' } }),
+      this.prisma.questionExplanationImage.findMany({ where: { question: inSession }, orderBy: { id: 'asc' } }),
+      getQuestionCatalog(this.prisma)
+    ]);
     if (!session) {
       return null;
     }
-
-    // Load the questions and their parts side by side instead of one nested query per level
-    const ids = session.sessionQuestions.map(link => link.questionId);
-    const [questions, answers, explanationImages, questionImages, questionExplanationImages, catalog] = await Promise.all([
-      this.prisma.question.findMany({ where: { id: { in: ids } } }),
-      this.prisma.questionAnswer.findMany({ where: { questionId: { in: ids } }, orderBy: ANSWER_ORDER }),
-      this.prisma.explanationImage.findMany({ where: { answer: { questionId: { in: ids } } }, orderBy: { id: 'asc' } }),
-      this.prisma.questionImage.findMany({ where: { questionId: { in: ids } }, orderBy: { id: 'asc' } }),
-      this.prisma.questionExplanationImage.findMany({ where: { questionId: { in: ids } }, orderBy: { id: 'asc' } }),
-      getQuestionCatalog(this.prisma)
-    ]);
+    const ids = links.map(link => link.questionId);
 
     // Courses, modules, universities and sources come from the catalog; anything it
     // does not know yet (created since it was loaded) is read from the database
@@ -365,7 +363,7 @@ export default class QuizRepository {
         };
       });
 
-    return { ...session, sessionQuestions } as any;
+    return { ...session, sessionQuestions, quizAttempts, multipleChoiceAttempts } as any;
   }
 
   /** Status and owner of a session, without its questions */
