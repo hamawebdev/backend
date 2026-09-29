@@ -82,6 +82,12 @@ authRouter.get("/google/callback", (req, res, next) => {
     authController.googleFailure(res, "unavailable");
     return;
   }
+  // Google always returns ?code= or ?error=. Without either, passport would treat
+  // this as a new sign-in and redirect to Google again: send it to the login page
+  if (!req.query.code && !req.query.error) {
+    authController.googleFailure(res);
+    return;
+  }
   // Custom callback: errors (refused sign-in, deactivated account, bad or reused
   // code) and failures (consent cancelled, missing or wrong state) redirect to the
   // web login page instead of reaching the JSON error handler on the API host

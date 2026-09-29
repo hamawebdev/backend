@@ -57,14 +57,33 @@ function cookieDomain(req: Request): string | undefined {
   return undefined;
 }
 
-function cookieOptions(req: Request) {
+/**
+ * Domain the state cookie was set with, carried as the last field of its value
+ * (base64url, empty for a host-only cookie). verify() runs on the callback host,
+ * where cookieDomain() cannot know which host started the flow, and a cookie is
+ * only cleared by a Set-Cookie with the same Domain attribute. Values without the
+ * field, or naming a domain this host is not part of, fall back to cookieDomain().
+ */
+function encodeDomain(domain: string | undefined): string {
+  return domain ? Buffer.from(domain).toString("base64url") : "";
+}
+
+function storedDomain(req: Request, encoded: string | undefined): string | undefined {
+  if (encoded === undefined) return cookieDomain(req);
+  if (encoded === "") return undefined;
+  const domain = Buffer.from(encoded, "base64url").toString().toLowerCase();
+  const host = (req.hostname || "").toLowerCase();
+  return host === domain || host.endsWith(`.${domain}`) ? domain : cookieDomain(req);
+}
+
+function cookieOptions(req: Request, domain: string | undefined) {
   return {
     httpOnly: true,
     secure: req.secure || process.env.NODE_ENV === "production",
     sameSite: "lax" as const, // sent on the top-level redirect back from Google
     // Covers both /auth/google and /auth/google/callback under the router mount
     path: `${req.baseUrl || ""}/google`,
-    domain: cookieDomain(req),
+    domain,
   };
 }
 
@@ -99,8 +118,9 @@ export class GoogleOAuthCookieStateStore {
     }
     const nonce = crypto.randomBytes(32).toString("base64url");
     const expiresAt = Date.now() + MAX_AGE_MS;
-    res.cookie(COOKIE_NAME, `${nonce}.${expiresAt}.${sign(nonce, expiresAt)}`, {
-      ...cookieOptions(req),
+    const domain = cookieDomain(req);
+    res.cookie(COOKIE_NAME, `${nonce}.${expiresAt}.${sign(nonce, expiresAt)}.${encodeDomain(domain)}`, {
+      ...cookieOptions(req, domain),
       maxAge: MAX_AGE_MS,
     });
     callback(null, nonce);
@@ -108,15 +128,15 @@ export class GoogleOAuthCookieStateStore {
 
   verify(req: Request, providedState: string, callback: VerifyCallback): void {
     const cookieValue = readCookie(req, COOKIE_NAME);
-    // Single use: clear it whatever the outcome
-    req.res?.clearCookie(COOKIE_NAME, cookieOptions(req));
+    const [nonce, expiresAtRaw, signature, encodedDomain] = (cookieValue ?? "").split(".");
+    // Single use: clear it whatever the outcome, with the domain it was set with
+    req.res?.clearCookie(COOKIE_NAME, cookieOptions(req, storedDomain(req, encodedDomain)));
 
     const reject = (message: string) => callback(null, false, { message });
 
     if (!cookieValue || typeof providedState !== "string" || !providedState) {
       return reject("Missing OAuth state");
     }
-    const [nonce, expiresAtRaw, signature] = cookieValue.split(".");
     const expiresAt = Number(expiresAtRaw);
     if (!nonce || !signature || !Number.isFinite(expiresAt)) {
       return reject("Malformed OAuth state");
