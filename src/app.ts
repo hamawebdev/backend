@@ -141,6 +141,10 @@ if (require.main === module) {
     // Load the question catalog before the first student asks for it
     warmQuestionCatalog(container.resolve(PrismaService).getClient());
   });
+  // Keep idle connections open longer than the proxy (Traefik: 90 s) does, so Node never
+  // closes one the proxy is reusing, which the browser sees as a 502 under load
+  server.keepAliveTimeout = 95000;
+  server.headersTimeout = 96000;
 
   // Graceful shutdown: finish in-flight requests, then close the DB pool
   const shutdown = (signal: string) => {

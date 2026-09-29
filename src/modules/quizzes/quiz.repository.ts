@@ -248,7 +248,9 @@ export default class QuizRepository {
           JOIN questions q ON q.id = x.question_id AND q.is_published
          ORDER BY x.ord`;
       return { ...session, questionCount };
-    }, { timeout: 30000 });
+      // Under load every pooled connection can be busy for a few seconds: wait for one
+      // instead of failing after Prisma's default 2 s
+    }, { maxWait: 15000, timeout: 30000 });
   }
 
   /**
