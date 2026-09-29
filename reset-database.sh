@@ -2,13 +2,23 @@
 
 # Reset Database and Apply Updated Question Model Changes
 # This script will reset the database, apply migrations, and run the updated seeder
+# Development only: it drops every table of the DATABASE_URL database (from the
+# environment, else .env). Step 0 refuses a non-local database or one that already
+# holds real data; ALLOW_PRODUCTION_SEED=true overrides it.
+
+set -e
+cd "$(dirname "$0")"
 
 echo "🚀 Starting Database Reset and Migration Process..."
 echo "=================================================="
 
+# Step 0: Refuse to wipe anything but a local development database
+echo "🛡️  Checking the target database..."
+npx ts-node --project prisma/dev-seed/tsconfig.json prisma/dev-seed/seed-guard.ts
+
 # Step 1: Reset the database
 echo "🗑️  Resetting database..."
-npx prisma migrate reset --force
+npx prisma migrate reset --force --skip-seed
 
 # Step 2: Generate Prisma client
 echo "🔧 Generating Prisma client..."
@@ -20,7 +30,7 @@ npx prisma migrate deploy
 
 # Step 4: Run the updated seeder
 echo "🌱 Running updated seeder..."
-npx prisma db seed
+npm run prisma:seed
 
 # Step 5: Verify the database state
 echo "🔍 Verifying database state..."

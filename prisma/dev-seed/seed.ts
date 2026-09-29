@@ -1,13 +1,12 @@
-// Development seed (npx prisma db seed). Not part of the build or the Docker image.
+// Development seed (npm run prisma:seed). Not part of the build or the Docker image.
 import { PrismaClient, YearLevel, PackType, QuestionType } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import { assertLocalDatabase, assertNoRealData } from './seed-guard';
 
 // Seeding clears and rewrites tables: never run it against production by accident
-if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
-  console.error('Refusing to seed: NODE_ENV is production (set ALLOW_PRODUCTION_SEED=true to override)');
-  process.exit(1);
-}
+// (NODE_ENV, then the DATABASE_URL host here; existing data before clearing, in main)
+assertLocalDatabase();
 
 // The seeded admin's password comes from the environment, never from the source
 const adminPassword = process.env.SEED_ADMIN_PASSWORD;
@@ -34,6 +33,7 @@ async function safeDeleteMany(tableName: string, deleteFunction: () => Promise<a
 }
 
 async function main() {
+  await assertNoRealData(prisma);
   console.log('🌱 Starting comprehensive database seeding...');
 
   try {

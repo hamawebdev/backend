@@ -17,9 +17,6 @@
     "prisma:verify-data": "node scripts/verify-performance-data.js",
     "test:payments": "node build/scripts/test-chargily-payments.js"
   },
-  "prisma": {
-    "seed": "ts-node --project prisma/dev-seed/tsconfig.json prisma/dev-seed/seed.ts"
-  },
   "keywords": [],
   "author": "",
   "license": "ISC",

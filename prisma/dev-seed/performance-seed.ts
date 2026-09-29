@@ -2,12 +2,11 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import { assertLocalDatabase, assertNoRealData } from './seed-guard';
 
-// Seeding clears and rewrites tables: never run it against production by accident
-if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
-  console.error('Refusing to seed: NODE_ENV is production (set ALLOW_PRODUCTION_SEED=true to override)');
-  process.exit(1);
-}
+// Seeding adds thousands of fake users and questions: never run it against production
+// by accident (NODE_ENV, then the DATABASE_URL host here; existing data in createPerformanceData)
+assertLocalDatabase();
 
 // Passwords come from the environment, never from the source: SEED_ADMIN_PASSWORD for
 // the admin it may create, SEED_USER_PASSWORD (random when unset) for the generated users
@@ -90,6 +89,7 @@ function generateQuestionText(template: string, topic: string): string {
 }
 
 async function createPerformanceData() {
+  await assertNoRealData(prisma);
   console.log('🚀 Starting performance database seeding...');
   console.log('⚠️  This will create 5,000 users and 10,000 questions for performance testing');
 
