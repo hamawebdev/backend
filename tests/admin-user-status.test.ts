@@ -105,6 +105,39 @@ describe('Admin users: status from subscriptions, stats and re-activation', () =
     expect(bad.status).toBe(400);
   });
 
+  it('dashboard and subscription stats count only subscriptions that give access now', async () => {
+    const [row] = await prisma.$queryRaw<{ granting: bigint; status_active: bigint; expired: bigint }[]>`
+      SELECT count(*) FILTER (WHERE status = 'ACTIVE' AND end_date > now()) AS granting,
+        count(*) FILTER (WHERE status = 'ACTIVE') AS status_active,
+        count(*) FILTER (WHERE status = 'EXPIRED' OR (status = 'ACTIVE' AND end_date <= now())) AS expired
+      FROM subscriptions`;
+    const direct = await directCounts();
+
+    const dashboard = await api().get('/api/v1/admin/dashboard/stats').set('Authorization', tokenFor(admin));
+    expect(dashboard.status).toBe(200);
+    expect(dashboard.body.data.activeSubscriptions).toBe(Number(row.granting));
+    // The lapsed fixture is still stored ACTIVE, so a status-only count would be higher
+    expect(dashboard.body.data.activeSubscriptions).toBeLessThan(Number(row.status_active));
+    expect(dashboard.body.data).toMatchObject({
+      activeUsers: direct.activeUsers,
+      totalUsers: direct.totalUsers,
+      totalStudents: await prisma.user.count({ where: { role: 'STUDENT' } }),
+      totalEmployees: await prisma.user.count({ where: { role: 'EMPLOYEE' } }),
+      totalAdmins: await prisma.user.count({ where: { role: 'ADMIN' } }),
+      totalQuizzes: await prisma.quiz.count(),
+      totalExams: await prisma.exam.count(),
+      totalSessions: await prisma.quizSession.count()
+    });
+    // This file's users were all created just now, so they count as new this month
+    expect(dashboard.body.data.newUsersThisMonth).toBeGreaterThanOrEqual(Object.keys(users).length);
+    expect(dashboard.body.data.sessionsToday).toBeGreaterThanOrEqual(0);
+
+    const stats = await api().get('/api/v1/admin/subscriptions/stats').set('Authorization', tokenFor(admin));
+    expect(stats.status).toBe(200);
+    expect(stats.body.data.activeSubscriptions).toBe(Number(row.granting));
+    expect(stats.body.data.expiredSubscriptions).toBe(Number(row.expired));
+  });
+
   it('activation refuses dates that give no access and subscriptions that still give access', async () => {
     const past = await activate(subs.expired, { startDate: new Date(Date.now() - 30 * DAY).toISOString(), endDate: new Date(Date.now() - DAY).toISOString() });
     expect(past.status).toBe(400);

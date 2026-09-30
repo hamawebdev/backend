@@ -31,8 +31,22 @@ import { ANSWER_ORDER } from "../questions/question-visibility";
 import { residencyQuestionWhere } from "../quizzes/quiz.repository";
 import { RESIDENCY_PARTS } from "./validations/admin.validation";
 import { QuestionType } from "../../types/quiz.types";
-import { isAccessGrantingSubscription } from "../auth/jwt-payload.builder";
+import { accessGrantingSubscriptionWhere, isAccessGrantingSubscription } from "../auth/jwt-payload.builder";
 import { UserStatusFilter, userStatus, userStatusWhere } from "./user-status";
+
+/** Algeria is UTC+1 all year (no daylight saving time) */
+const ALGIERS_UTC_OFFSET_MS = 60 * 60 * 1000;
+
+/** Start of the current day and month in Algiers, as UTC instants */
+function algiersDayAndMonthStart(now: Date): { startOfToday: Date; startOfMonth: Date } {
+  const local = new Date(now.getTime() + ALGIERS_UTC_OFFSET_MS);
+  const year = local.getUTCFullYear();
+  const month = local.getUTCMonth();
+  return {
+    startOfToday: new Date(Date.UTC(year, month, local.getUTCDate()) - ALGIERS_UTC_OFFSET_MS),
+    startOfMonth: new Date(Date.UTC(year, month, 1) - ALGIERS_UTC_OFFSET_MS)
+  };
+}
 
 interface UserFilters {
   page: number;
@@ -200,15 +214,26 @@ export default class AdminService {
 
   async getDashboardStats() {
     try {
+      const now = new Date();
+      const { startOfToday, startOfMonth } = algiersDayAndMonthStart(now);
       const [
         totalUsers,
         activeSubscriptions,
         totalQuestions,
         totalQuizSessions,
-        recentActivity
+        recentActivity,
+        totalStudents,
+        totalEmployees,
+        totalAdmins,
+        newUsersThisMonth,
+        activeUsers,
+        totalQuizzes,
+        totalExams,
+        sessionsToday
       ] = await Promise.all([
         this.prisma.user.count(),
-        this.prisma.subscription.count({ where: { status: 'ACTIVE' } }),
+        // Subscriptions that grant access now: ACTIVE rows past their end date don't count
+        this.prisma.subscription.count({ where: accessGrantingSubscriptionWhere(now) }),
         this.prisma.question.count(),
         this.prisma.quizSession.count(),
         this.prisma.employeeActivity.findMany({
@@ -219,7 +244,16 @@ export default class AdminService {
               select: { fullName: true, email: true }
             }
           }
-        })
+        }),
+        this.prisma.user.count({ where: { role: UserRole.STUDENT } }),
+        this.prisma.user.count({ where: { role: UserRole.EMPLOYEE } }),
+        this.prisma.user.count({ where: { role: UserRole.ADMIN } }),
+        this.prisma.user.count({ where: { createdAt: { gte: startOfMonth } } }),
+        // Same definition as the Active status on the admin users page
+        this.prisma.user.count({ where: userStatusWhere('active', now) }),
+        this.prisma.quiz.count(),
+        this.prisma.exam.count(),
+        this.prisma.quizSession.count({ where: { createdAt: { gte: startOfToday } } })
       ]);
 
       // Transform recentActivity to canonical format
@@ -229,13 +263,22 @@ export default class AdminService {
         timestamp: activity.createdAt
       }));
 
-      // Canonical format: only 5 key fields
       return {
         totalUsers,
         activeSubscriptions,
         totalQuestions,
         totalQuizSessions,
-        recentActivity: formattedActivity
+        recentActivity: formattedActivity,
+        // Fields the admin dashboard cards read (they showed 0 while missing)
+        totalStudents,
+        totalEmployees,
+        totalAdmins,
+        newUsersThisMonth,
+        activeUsers,
+        totalQuizzes,
+        totalExams,
+        totalSessions: totalQuizSessions,
+        sessionsToday
       };
     } catch (error) {
       throw new InternalServerError("Failed to fetch dashboard stats");
@@ -921,13 +964,12 @@ export default class AdminService {
         }
       });
 
-      await this.prisma.employeeActivity.create({
-        data: {
-          employeeId: createdById,
-          activityType: 'RESOURCE_ADDED',
-          description: `Added resource: ${resource.title} to course`,
-          relatedId: resource.id
-        }
+      // The resource is saved: a failed activity log must not turn this into a 500 (callers retry and duplicate it)
+      await this.logActivityBestEffort({
+        employeeId: createdById,
+        activityType: 'RESOURCE_ADDED',
+        description: `Added resource: ${resource.title} to course`,
+        relatedId: resource.id
       });
 
       return resource;
@@ -2544,6 +2586,7 @@ export default class AdminService {
 
   async getSubscriptionStats() {
     try {
+      const now = new Date();
       const [
         totalSubscriptions,
         activeSubscriptions,
@@ -2553,8 +2596,11 @@ export default class AdminService {
         subscriptionsByPack
       ] = await Promise.all([
         this.prisma.subscription.count(),
-        this.prisma.subscription.count({ where: { status: 'ACTIVE' } }),
-        this.prisma.subscription.count({ where: { status: 'EXPIRED' } }),
+        this.prisma.subscription.count({ where: accessGrantingSubscriptionWhere(now) }),
+        // Nothing flips a subscription to EXPIRED when its end date passes, so lapsed ACTIVE rows are expired too
+        this.prisma.subscription.count({
+          where: { OR: [{ status: 'EXPIRED' }, { status: 'ACTIVE', endDate: { lte: now } }] }
+        }),
         this.prisma.subscription.count({ where: { status: 'CANCELLED' } }),
         this.prisma.subscription.aggregate({
           _sum: { amountPaid: true },
@@ -4030,6 +4076,7 @@ export default class AdminService {
 
     return {
       books: books.map(book => ({
+        id: book.id,
         name: book.name,
         cover_path: book.coverPath,
         view: book.viewUrl,
@@ -4074,20 +4121,19 @@ export default class AdminService {
       }
 
       return results;
-    });
+    }, { maxWait: 10000, timeout: 60000 }); // one insert per book: a large batch outlasts the 5 s default on a busy database
 
-    // Log activity
-    await this.prisma.employeeActivity.create({
-      data: {
-        employeeId: createdById,
-        activityType: 'RESOURCE_ADDED',
-        description: `Added ${createdBooks.length} books to module: ${module.name}`,
-        relatedId: moduleId
-      }
+    // The books are saved: a failed activity log must not turn this into a 500
+    await this.logActivityBestEffort({
+      employeeId: createdById,
+      activityType: 'RESOURCE_ADDED',
+      description: `Added ${createdBooks.length} books to module: ${module.name}`,
+      relatedId: moduleId
     });
 
     return {
       books: createdBooks.map(book => ({
+        id: book.id,
         name: book.name,
         cover_path: book.coverPath,
         view: book.viewUrl,
@@ -4134,20 +4180,19 @@ export default class AdminService {
       }
 
       return results;
-    });
+    }, { maxWait: 10000, timeout: 60000 }); // one insert per book: a large batch outlasts the 5 s default on a busy database
 
-    // Log activity
-    await this.prisma.employeeActivity.create({
-      data: {
-        employeeId: createdById,
-        activityType: 'RESOURCE_ADDED',
-        description: `Added ${createdBooks.length} books to sub-module: ${subModule.name}`,
-        relatedId: subModuleId
-      }
+    // The books are saved: a failed activity log must not turn this into a 500
+    await this.logActivityBestEffort({
+      employeeId: createdById,
+      activityType: 'RESOURCE_ADDED',
+      description: `Added ${createdBooks.length} books to sub-module: ${subModule.name}`,
+      relatedId: subModuleId
     });
 
     return {
       books: createdBooks.map(book => ({
+        id: book.id,
         name: book.name,
         cover_path: book.coverPath,
         view: book.viewUrl,
@@ -4158,4 +4203,12 @@ export default class AdminService {
     };
   }
 
+  /** Record an employee activity without failing the write it describes */
+  private async logActivityBestEffort(data: Prisma.EmployeeActivityUncheckedCreateInput) {
+    try {
+      await this.prisma.employeeActivity.create({ data });
+    } catch (error) {
+      console.error('Activity log failed:', error instanceof Error ? error.message : error);
+    }
+  }
 }

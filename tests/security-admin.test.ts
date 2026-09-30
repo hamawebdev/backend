@@ -3,6 +3,9 @@ import request from 'supertest';
 import * as jwt from 'jsonwebtoken';
 import app from '../src/app';
 import { PrismaClient, YearLevel } from '@prisma/client';
+import { jest } from '@jest/globals';
+import { container } from '../src/config/container';
+import PrismaService from '../src/config/db';
 
 const prisma = new PrismaClient();
 const tag = `adm${Date.now()}`;
@@ -47,6 +50,37 @@ describe('Admin security and integrity regressions', () => {
     const goodBook = await api().post(`/api/v1/admin/modules/${emptyModule}/books`).set('Authorization', tokenFor(admin))
       .send({ books: [{ name: 'B', viewUrl: 'https://drive.google.com/x', coverPath: '/api/v1/media/images/c.png' }] });
     expect(goodBook.status).toBe(201);
+    await prisma.moduleBook.deleteMany({ where: { moduleId: emptyModule } });
+  });
+
+  it('a saved resource or book is reported as saved even when the activity log fails', async () => {
+    const appClient = container.resolve(PrismaService).getClient();
+    const logSpy = jest.spyOn(appClient.employeeActivity, 'create');
+    const quiet = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      logSpy.mockRejectedValueOnce(new Error('pool timeout') as never);
+      const resource = await api().post('/api/v1/admin/content/resources').set('Authorization', tokenFor(admin))
+        .send({ type: 'OTHER', title: `${tag} logged`, courseId: course, externalUrl: 'https://example.com/r' });
+      expect(resource.status).toBe(201);
+      expect(await prisma.courseResource.count({ where: { title: `${tag} logged` } })).toBe(1);
+
+      logSpy.mockRejectedValueOnce(new Error('pool timeout') as never);
+      const books = await api().post(`/api/v1/admin/modules/${emptyModule}/books`).set('Authorization', tokenFor(admin))
+        .send({ books: [{ name: `${tag} B1`, viewUrl: 'https://drive.google.com/1' }, { name: `${tag} B2`, viewUrl: 'https://drive.google.com/2' }] });
+      expect(books.status).toBe(201);
+      expect(books.body.totalCreated).toBe(2);
+      expect(await prisma.moduleBook.count({ where: { moduleId: emptyModule } })).toBe(2);
+      expect(quiet).toHaveBeenCalledWith('Activity log failed:', 'pool timeout');
+    } finally {
+      logSpy.mockRestore();
+      quiet.mockRestore();
+    }
+
+    // Each book carries its id, in the create answer and in the admin list
+    const listed = await api().get(`/api/v1/admin/modules/${emptyModule}/books`).set('Authorization', tokenFor(admin));
+    expect(listed.status).toBe(200);
+    const ids = (await prisma.moduleBook.findMany({ where: { moduleId: emptyModule }, select: { id: true } })).map(b => b.id).sort();
+    expect(listed.body.books.map((b: any) => b.id).sort()).toEqual(ids);
     await prisma.moduleBook.deleteMany({ where: { moduleId: emptyModule } });
   });
 
