@@ -181,7 +181,7 @@ export default class QuizService {
     // Check if user has residency access
     const accessControlService = new AccessControlService();
     if (!accessControlService.hasResidencyAccess(user)) {
-      throw new Error("Access denied. This endpoint is only available for users with active residency subscriptions.");
+      throw new ForbiddenError("Access denied. This endpoint is only available for users with active residency subscriptions.");
     }
 
     // Get universities with their exam years
@@ -210,7 +210,7 @@ export default class QuizService {
 
     const accessControlService = new AccessControlService();
     if (!accessControlService.hasResidencyAccess(user)) {
-      throw new Error("Access denied. This endpoint is only available for users with active residency subscriptions.");
+      throw new ForbiddenError("Access denied. This endpoint is only available for users with active residency subscriptions.");
     }
 
     return await this.quizRepository.getResidencyAvailableParts(universityId, examYear);

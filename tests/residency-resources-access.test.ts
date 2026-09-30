@@ -227,6 +227,14 @@ describe('Resources page: subscriptions that grant nothing', () => {
     }
   });
 
+  it('answers 403, not 500, when a non-résidanat student asks for the résidanat session filters', async () => {
+    for (const key of ['year3', 'year7', 'lapsedResidencyWithYear3']) {
+      expect((await get('/quizzes/session-residency-filters', users[key])).status).toBe(403);
+      expect((await get('/quizzes/residency-available-parts?universityId=1&examYear=2024', users[key])).status).toBe(403);
+    }
+    expect((await get('/quizzes/session-residency-filters', users.residency)).status).toBe(200);
+  });
+
   it('refuses a deactivated account even with an active residency subscription', async () => {
     expect((await filters(users.deactivatedResidency, 'THREE')).status).toBe(401);
     expect(await openModule(users.deactivatedResidency, content.THREE)).toEqual(all(401));
